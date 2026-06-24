@@ -381,6 +381,14 @@ const importLocalPlaylist = document.getElementById('importLocalPlaylist');
 const playlistDetailBack = document.getElementById('playlistDetailBack');
 const playlistDetailContent = document.getElementById('playlistDetailContent');
 const KEY = 'kairos-music-sidebar';
+  const kairosConfirmAlert=({title:t,description:d,action='Delete',cancel='Cancel'}={})=>new Promise(resolve=>{
+    let dialog=document.getElementById('kairosAlertDialog');
+    if(!dialog){dialog=document.createElement('dialog');dialog.id='kairosAlertDialog';dialog.className='kairos-alert-dialog';dialog.setAttribute('role','alertdialog');dialog.innerHTML='<form method="dialog" class="kairos-alert-content"><div class="kairos-alert-header"><div class="kairos-alert-media"><span class="material-symbols-outlined">warning</span></div><div><h2 class="kairos-alert-title"></h2><p class="kairos-alert-description"></p></div></div><footer class="kairos-alert-footer"><button class="kairos-alert-cancel" value="cancel" type="submit"></button><button class="kairos-alert-action" value="confirm" type="submit"></button></footer></form>';document.body.append(dialog)}
+    dialog.querySelector('.kairos-alert-title').textContent=t||'Are you sure?';dialog.querySelector('.kairos-alert-description').textContent=d||'This action cannot be undone.';dialog.querySelector('.kairos-alert-cancel').textContent=cancel;dialog.querySelector('.kairos-alert-action').textContent=action;
+    const done=value=>{dialog.removeEventListener('close',onClose);resolve(value)};const onClose=()=>done(dialog.returnValue==='confirm');
+    dialog.addEventListener('close',onClose,{once:true});dialog.showModal();dialog.querySelector('.kairos-alert-cancel')?.focus();
+  });
+
 let musicState = { tracks: [] };
 let currentPlaylistId = null;
 const getDesktopMusic = () => {
@@ -482,7 +490,8 @@ const renderPlaylistDetail = playlistId => {
   const deleteBtn = hero.querySelector('.playlist-delete');
   if (deleteBtn) {
     deleteBtn.addEventListener('click', async () => {
-      if (!window.confirm(`Delete "${title}" playlist and remove from library?`)) return;
+      const ok=await kairosConfirmAlert({title:"Delete playlist?",description:title+" will be removed from your library. This cannot be undone.",action:"Delete",cancel:"Cancel"});
+      if(!ok)return;
       const desktopMusic = getDesktopMusic();
       if (desktopMusic) {
         try {

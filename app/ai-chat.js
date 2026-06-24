@@ -53,6 +53,13 @@
   };
   const aiComboboxSync=[ui.session,ui.provider,ui.model].map(enhanceAiCombobox);
   document.addEventListener('click',event=>{if(event.target.closest('#aiPanel .kairos-combobox'))return;document.querySelectorAll('#aiPanel .kairos-combobox-content').forEach(node=>node.hidden=true)},true);
+  const kairosConfirmAlert=({title,description,action='Continue',cancel='Cancel',tone='danger'}={})=>new Promise(resolve=>{
+    let dialog=document.getElementById('kairosAlertDialog');
+    if(!dialog){dialog=document.createElement('dialog');dialog.id='kairosAlertDialog';dialog.className='kairos-alert-dialog';dialog.setAttribute('role','alertdialog');dialog.innerHTML='<form method="dialog" class="kairos-alert-content"><div class="kairos-alert-header"><div class="kairos-alert-media"><span class="material-symbols-outlined">warning</span></div><div><h2 class="kairos-alert-title"></h2><p class="kairos-alert-description"></p></div></div><footer class="kairos-alert-footer"><button class="kairos-alert-cancel" value="cancel" type="submit"></button><button class="kairos-alert-action" value="confirm" type="submit"></button></footer></form>';document.body.append(dialog)}
+    dialog.dataset.tone=tone;dialog.querySelector('.kairos-alert-title').textContent=title||'Are you sure?';dialog.querySelector('.kairos-alert-description').textContent=description||'This action cannot be undone.';dialog.querySelector('.kairos-alert-cancel').textContent=cancel;dialog.querySelector('.kairos-alert-action').textContent=action;
+    const done=value=>{dialog.removeEventListener('close',onClose);resolve(value)};const onClose=()=>done(dialog.returnValue==='confirm');
+    dialog.addEventListener('close',onClose,{once:true});dialog.showModal();dialog.querySelector('.kairos-alert-cancel')?.focus();
+  });
 
   const avatarKey = 'kairos-ai-avatar';
   const setAvatar = value => value
@@ -265,11 +272,11 @@
   send.addEventListener('click', submit);
   ui.attach?.addEventListener('click', () => ui.files.click());
   ui.files?.addEventListener('change', async () => { await addFiles([...ui.files.files]); ui.files.value = ''; });
-  ui.retain?.addEventListener('change', () => {
-    const label = $('aiRetainLabel');
-    if (label) label.textContent = ui.retain.checked ? '保留附件' : '临时附件';
-    ui.retain.closest('label')?.setAttribute('title', ui.retain.checked ? '附件将保留在当前会话中' : '附件将在处理完成或重启后清理');
-  });
+    ui.retain?.addEventListener('change', () => {
+      const label = $('aiRetainLabel');
+      if (label) label.textContent = ui.retain.checked ? 'Retain attachments' : 'Attachments';
+      ui.retain.closest('label')?.setAttribute('title', ui.retain.checked ? 'Files will persist across sessions' : 'Files will be cleaned up after processing');
+    });
   ui.rename?.addEventListener('click', () => {
     if (!ui.name || ui.name.parentElement.querySelector('.ai-assistant-name-editor')) return;
     const editor = document.createElement('input'); editor.className = 'ai-assistant-name-editor'; editor.value = getAssistantName(); editor.maxLength = 32; editor.setAttribute('aria-label', 'AI 助手名称');
@@ -282,7 +289,8 @@
   ui.create?.addEventListener('click', runAction(createConversation));
   ui.remove?.addEventListener('click', runAction(async () => {
     if (!initialized || !active) throw new Error('会话尚未加载完成');
-    if (!window.confirm(`确定删除会话“${active.title || '新对话'}”及其关联附件吗？`)) return;
+    const ok=await kairosConfirmAlert({title:'Delete conversation?',description:`Conversation "${active.title || 'New chat'}" and its related attachments will be removed. This action cannot be undone.`,action:'Delete',cancel:'Cancel'});
+    if (!ok) return;
     const id = active.id; await desktop.conversations.delete(id); sessions = sessions.filter(item => item.id !== id);
     if (!sessions.length) await createConversation(); else await loadConversation(sessions[0].id);
   }));
