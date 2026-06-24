@@ -249,11 +249,11 @@
 </div>
 </section>
 <!-- Right Side: Today's Schedule & Habits -->
-<section class="w-[360px] flex flex-col gap-gutter">
+<section class="w-[360px] flex flex-col gap-2">
 <!-- Habit table, adapted from tweakcn CardsPayments -->
 <section class="habit-payments-card" aria-labelledby="habitCardTitle">
 <header class="habit-payments-header">
-<h4 id="habitCardTitle">Habits</h4>
+<h4 class="mb-1" id="habitCardTitle">Habits</h4>
 <p>Build a little momentum every day.</p>
 </header>
 <div class="habit-table-frame">
@@ -265,12 +265,12 @@
 </footer>
 </section>
 <!-- Today's Schedule -->
-<div class="flex-1 bg-surface-container-high p-6 rounded-xl border border-ink-bold/10 flex flex-col overflow-hidden">
-<h4 class="font-title-md text-ink-bold mb-6">Today's Schedule</h4>
-<div class="flex-1 overflow-y-auto pr-2 space-y-6" id="scheduleTodayList">
+<div class="flex-1 bg-surface-container-high pt-5 px-6 pb-2 rounded-xl border border-ink-bold/10 flex flex-col overflow-hidden">
+<h4 class="font-title-md text-ink-bold mb-3">Today's Schedule</h4>
+<div class="flex-1 overflow-y-auto space-y-6" id="scheduleTodayList" style="scrollbar-width:none;-ms-overflow-style:none">
 <div class="schedule-empty">No schedules for this day.</div>
 </div>
-<button class="mt-6 w-full py-3 border border-dashed border-outline-variant text-outline rounded-lg font-label-sm hover:bg-canvas-bone transition-colors flex items-center justify-center gap-2" id="scheduleAddSlot" type="button">
+<button class="mt-2 w-full py-2 border border-dashed border-outline-variant text-outline rounded-lg font-label-sm hover:bg-canvas-bone transition-colors flex items-center justify-center gap-2" id="scheduleAddSlot" type="button">
 <span class="material-symbols-outlined text-sm">add</span>
 Add slot
 </button>
@@ -314,7 +314,7 @@ Add slot
 
 
 
-<link href="stitch-shell.css?v=7" rel="stylesheet"><link href="stitch-layout.css?v=24" rel="stylesheet"><link href="tweakcn-theme.css?v=6" rel="stylesheet"><link href="ai-chat.css?v=11" rel="stylesheet"><script src="ai-chat.js?v=13"></script><script src="stitch-shell.js?v=48"></script>
+<link href="stitch-shell.css?v=7" rel="stylesheet"><link href="stitch-layout.css?v=24" rel="stylesheet"><link href="tweakcn-theme.css?v=9" rel="stylesheet"><link href="ai-chat.css?v=11" rel="stylesheet"><script src="ai-chat.js?v=13"></script><script src="stitch-shell.js?v=48"></script>
 
 <script>
         // Electron standalone pet window communication
