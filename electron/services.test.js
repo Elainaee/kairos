@@ -1,0 +1,38 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { AiDataStore } from "./data-store.js";
+import { AttachmentService } from "./attachments.js";
+import { ToolRuntime } from "./tool-runtime.js";
+import { AppStateStore, createAppAdapters } from "./app-state.js";
+import { ContextManager } from "./context-manager.js";
+import { parseDocument } from "./document-parser.js";
+import { MusicLibrary } from "./music-library.js";
+
+async function fixture() { const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-test-"));const store=new AiDataStore(path.join(dir,"data.json"));return{dir,store}; }
+
+test("conversation and messages persist",async()=>{const{dir,store}=await fixture();const c=await store.createConversation({title:"test"});await store.addMessage({conversationId:c.id,role:"user",content:"hello"});const loaded=await store.getConversation(c.id);assert.equal(loaded.title,"test");assert.equal(loaded.messages[0].content,"hello");await fs.rm(dir,{recursive:true,force:true});});
+
+test("message attachment labels persist with the conversation",async()=>{const{dir,store}=await fixture();const c=await store.createConversation({title:"files"});await store.addMessage({conversationId:c.id,role:"user",content:"整理日程",attachmentIds:["a1"],attachmentNames:["课程表.png"]});const loaded=await store.getConversation(c.id);assert.deepEqual(loaded.messages[0].attachmentIds,["a1"]);assert.deepEqual(loaded.messages[0].attachmentNames,["课程表.png"]);await fs.rm(dir,{recursive:true,force:true});});
+
+test("write proposal requires permission and explicit decision",async()=>{const{dir,store}=await fixture();const tools=new ToolRuntime(store);await assert.rejects(()=>tools.propose({conversationId:"c",domain:"tasks",operation:"create",payload:{title:"x"}}),/permission_denied/);await tools.setPermissions({tasks:"write"});const proposal=await tools.propose({conversationId:"c",domain:"tasks",operation:"create",payload:{title:"x"}});let calls=0;const result=await tools.decide({id:proposal.id,approved:true},{tasks:{create:async payload=>{calls++;return{id:"1",...payload};}}});assert.equal(calls,1);assert.equal(result.status,"committed");await fs.rm(dir,{recursive:true,force:true});});
+
+test("temporary attachments are cleaned",async()=>{const{dir,store}=await fixture();const service=new AttachmentService({rootDir:path.join(dir,"kept"),tempDir:path.join(dir,"temp"),store});const item=await service.save({conversationId:"c",name:"note.txt",mimeType:"text/plain",bytes:new TextEncoder().encode("ok"),retain:false});assert.equal(item.retain,false);await service.cleanupTemporary();assert.equal((await store.read()).attachments.length,0);await fs.rm(dir,{recursive:true,force:true});});
+
+test("legacy localStorage state migrates only once",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-app-"));const store=new AppStateStore(path.join(dir,"app.json"));await store.initialize({schedules:[{id:"old",title:"legacy"}],theme:"dark"});await store.initialize({schedules:[{id:"overwrite"}]});const state=await store.read();assert.equal(state.schedules[0].id,"old");assert.equal(state.theme,"dark");await fs.rm(dir,{recursive:true,force:true});});
+
+test("confirmed task proposal writes into real schedule state",async()=>{const{dir,store:aiStore}=await fixture();const appStore=new AppStateStore(path.join(dir,"app-state.json"));await appStore.initialize({schedules:[]});const adapters=createAppAdapters(appStore);const tools=new ToolRuntime(aiStore);await tools.setPermissions({tasks:"write"});const proposal=await tools.propose({conversationId:"c",domain:"tasks",operation:"create",payload:{title:"概率论作业",date:"2026-06-21",type:"task"}});await tools.decide({id:proposal.id,approved:true},adapters);const state=await appStore.read();assert.equal(state.schedules.length,1);assert.equal(state.schedules[0].title,"概率论作业");await fs.rm(dir,{recursive:true,force:true});});
+
+test("context limit requires an explicit decision",async()=>{const{dir,store}=await fixture();const manager=new ContextManager(store);const result=manager.assess({provider:"openai",limit:100,messages:[{role:"user",content:"很长的上下文".repeat(100)}]});assert.equal(result.requiresDecision,true);assert.deepEqual(result.options,["summarize","new_conversation"]);await fs.rm(dir,{recursive:true,force:true});});
+
+test("new conversation can carry confirmed summary",async()=>{const{dir,store}=await fixture();const source=await store.createConversation({title:"原会话",provider:"openai",summary:"已确认摘要"});const next=await new ContextManager(store).createContinuation(source.id,{carrySummary:true});assert.equal(next.summary,"已确认摘要");assert.match(next.title,/继续/);await fs.rm(dir,{recursive:true,force:true});});
+
+test("plain text attachment keeps source location",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-doc-"));const file=path.join(dir,"note.txt");await fs.writeFile(file,"第一行\n第二行","utf8");const parsed=await parseDocument(file,"note.txt","text/plain");assert.equal(parsed.sections[0].location,"全文");assert.match(parsed.text,/第二行/);await fs.rm(dir,{recursive:true,force:true});});
+
+test("deleting a conversation returns every related attachment for cleanup",async()=>{const{dir,store}=await fixture();const c=await store.createConversation();await store.mutate(data=>{data.attachments.push({id:"a",conversationId:c.id,path:path.join(dir,"a")},{id:"b",conversationId:c.id,path:path.join(dir,"b")});});const files=await store.deleteConversation(c.id);assert.equal(files.length,2);assert.equal((await store.read()).attachments.length,0);await fs.rm(dir,{recursive:true,force:true});});
+
+test("music library imports supported local files and persists playback state",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-music-"));const audio=path.join(dir,"focus.wav");const note=path.join(dir,"note.txt");await fs.writeFile(audio,Buffer.from("RIFF....WAVEfmt "));await fs.writeFile(note,"nope","utf8");const library=new MusicLibrary({statePath:path.join(dir,"music.json"),coverDir:path.join(dir,"covers")});const result=await library.addFiles([audio,note,audio]);assert.equal(result.state.tracks.length,1);assert.equal(result.added.length,2);assert.equal(result.rejected[0].reason,"unsupported_format");assert.equal(result.state.tracks[0].title,"focus");assert.match(result.state.tracks[0].playUrl,/^file:/);await library.updatePlayback({currentTrackId:result.state.tracks[0].id,mode:"loop",volume:42,muted:true,position:{trackId:result.state.tracks[0].id,seconds:12}});const state=await library.publicState();assert.equal(state.mode,"loop");assert.equal(state.volume,42);assert.equal(state.muted,true);assert.equal(state.positions[result.state.tracks[0].id],12);await fs.rm(dir,{recursive:true,force:true});});
+
+test("music library imports a folder as a playlist",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-music-folder-"));const folder=path.join(dir,"LoFi Set");await fs.mkdir(path.join(folder,"disc1"),{recursive:true});await fs.writeFile(path.join(folder,"disc1","a.wav"),Buffer.from("RIFF....WAVEfmt "));await fs.writeFile(path.join(folder,"b.mp3"),Buffer.from("ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000"));await fs.writeFile(path.join(folder,"cover.txt"),"skip","utf8");const library=new MusicLibrary({statePath:path.join(dir,"music.json"),coverDir:path.join(dir,"covers")});const result=await library.addFolder(folder);assert.equal(result.tracks.length,2);assert.equal(result.playlists.length,1);assert.equal(result.playlists[0].name,"LoFi Set");assert.equal(result.playlists[0].trackIds.length,2);await fs.rm(dir,{recursive:true,force:true});});

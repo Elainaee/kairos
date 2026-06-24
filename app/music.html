@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html class="light kairos-boot" lang="en">
+<head>
+<style>html.kairos-boot{visibility:hidden;background:#f5f4f1}</style><script>setTimeout(()=>document.documentElement.classList.remove('kairos-boot'),3000)</script>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Kairos | Music</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "canvas-bone": "#F9F7F0",
+        primary: "#9e3d19",
+        "accent-terracotta": "#D1633C",
+        "ink-bold": "#3D3B2E",
+        "on-surface": "#1b1c18"
+      },
+      fontFamily: {
+        "body-md": ["Outfit", "system-ui", "sans-serif"]
+      }
+    }
+  }
+}
+</script>
+<style>
+:root {
+  --sidebar-width: 15rem;
+  --sidebar-bg: #f5f4ed;
+  --sidebar-fg: #3D3B2E;
+  --sidebar-muted: #676556;
+  --sidebar-accent: rgba(209,99,60,.12);
+  --sidebar-accent-fg: #D1633C;
+  --sidebar-border: rgba(61,59,46,.1);
+}
+
+body {
+  background: #F9F7F0;
+  color: #1b1c18;
+  font-family: Outfit, system-ui, sans-serif;
+  overflow: hidden;
+  padding-bottom: 80px;
+}
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Wrapper 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-root { display: flex; height: 100vh; width: 100%; }
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar group 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-sidebar-group { display: none; }
+@media (min-width: 768px) { .music-sidebar-group { display: block; } }
+
+.music-sidebar-spacer {
+  width: var(--sidebar-width);
+  background: transparent;
+  transition: width .22s cubic-bezier(.2,.8,.2,1);
+}
+[data-state="collapsed"] .music-sidebar-spacer { width: 0; }
+
+.music-sidebar-panel {
+  position: fixed; inset: 0 auto 0 0; z-index: 10;
+  display: flex; width: var(--sidebar-width); height: 100vh;
+  transition: left .22s cubic-bezier(.2,.8,.2,1);
+}
+[data-state="collapsed"] .music-sidebar-panel { left: calc(var(--sidebar-width) * -1); }
+
+.music-sidebar {
+  display: flex; flex-direction: column; width: 100%; height: 100%;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+}
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar header 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-sidebar-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px; min-height: 52px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+.music-sidebar-brand {
+  font-weight: 700; font-size: 15px; color: var(--sidebar-accent-fg);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar content 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-sidebar-content {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px; overflow-y: auto; overflow-x: hidden;
+}
+.music-group-label {
+  padding: 8px 10px 4px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--sidebar-muted);
+}
+.music-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 36px; padding: 0 10px;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--sidebar-fg);
+  font: 600 13px/1 Outfit, system-ui, sans-serif;
+  cursor: pointer; white-space: nowrap;
+  transition: background .16s, color .16s;
+}
+.music-item:hover { background: rgba(27,28,24,.06); }
+.music-item[aria-checked="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-fg); }
+
+/* Submenu */
+.music-submenu-trigger { position: relative; padding-right: 28px; }
+.music-submenu-chevron {
+  position: absolute; right: 10px; top: 50%; translate: 0 -50%;
+  font-size: 14px;
+  transition: transform .2s ease;
+  color: var(--sidebar-muted);
+}
+.music-submenu[data-state="open"] .music-submenu-chevron { transform: rotate(90deg); }
+.music-submenu-list {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .3s cubic-bezier(.2,.8,.2,1);
+}
+.music-submenu[data-state="open"] .music-submenu-list {
+  max-height: 120px;
+}
+.music-sub-item {
+  padding-left: 38px;
+  font-weight: 500;
+}
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar footer 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-sidebar-footer {
+  padding: 8px; border-top: 1px solid var(--sidebar-border);
+}
+.music-sidebar-footer .music-item { color: var(--sidebar-muted); font-weight: 500; }
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar rail 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-sidebar-rail {
+  position: absolute; inset: 0 0 0 auto;
+  width: 8px; translate: 50% 0; cursor: col-resize;
+}
+.music-sidebar-rail::after {
+  content: ""; position: absolute;
+  inset: 0 0 0 50%; width: 2px;
+  transition: background .16s;
+}
+.music-sidebar-rail:hover::after { background: var(--sidebar-border); }
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Main 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+.music-main {
+  position: relative; flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  background: #fbf9f2;
+}
+.music-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--sidebar-fg);
+  cursor: pointer; margin: 12px 0 0 12px;
+  font-size: 16px; transition: background .16s;
+}
+.music-trigger:hover { background: rgba(27,28,24,.06); }
+.music-main-body {
+  flex: 1; display: block;
+  padding: 28px 36px 128px; color: var(--sidebar-muted);
+  overflow: auto;
+}
+.music-placeholder { text-align: center; margin-top: min(22vh, 180px); }
+.music-placeholder h2 { font-size: 20px; font-weight: 650; color: var(--sidebar-fg); margin: 0 0 6px; }
+.music-placeholder p { font-size: 13px; margin: 0; }
+.music-view[hidden]{display:none!important}
+.music-view-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.music-view-title{margin:0;color:var(--sidebar-fg);font-size:22px;line-height:1.2;font-weight:750}
+.music-view-subtitle{margin:5px 0 0;color:var(--sidebar-muted);font-size:13px}
+.music-import-button{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:0;border-radius:9px;background:#1b1c18;color:#fff;font:700 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 18px rgba(27,28,24,.14);transition:transform .16s ease,opacity .16s ease}
+.music-import-button:hover{transform:translateY(-1px);opacity:.92}
+.music-import-button:active{transform:translateY(0)}
+.local-playlist-card{max-width:960px;border:0;background:transparent;box-shadow:none;overflow:visible}
+.local-playlist-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,220px));gap:18px;align-items:start;overflow:visible;padding:2px 2px 18px}
+.local-playlist-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:60px;padding:10px 14px;border-bottom:1px solid rgba(61,59,46,.08)}
+.local-playlist-row:last-child{border-bottom:0}
+.local-playlist-row:hover{background:rgba(27,28,24,.035)}
+.local-playlist-cover{width:38px;height:38px;border-radius:8px;overflow:hidden;display:grid;place-items:center;background:#ECE7D9;color:#676556;border:1px solid rgba(61,59,46,.08)}
+.local-playlist-cover img{width:100%;height:100%;object-fit:cover}
+.local-playlist-main{min-width:0}
+.local-playlist-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sidebar-fg);font-size:14px;font-weight:750}
+.local-playlist-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;color:var(--sidebar-muted);font-size:12px;font-weight:600}
+.local-playlist-format{color:var(--sidebar-muted);font-size:11px;font-weight:700}
+.local-playlist-empty{padding:28px 18px;color:var(--sidebar-muted);font-size:13px;text-align:center}
+.music-status-line{min-height:18px;margin-top:12px;color:var(--sidebar-muted);font-size:12px;font-weight:600}
+.playlist-tilted-card{position:relative;width:100%;height:220px;perspective:800px;border:0;background:transparent;padding:0;text-align:left;cursor:pointer}
+.playlist-tilted-inner{position:relative;display:block;width:100%;height:100%;transform-style:preserve-3d;transition:transform .18s ease,box-shadow .18s ease;border-radius:13px;background:#d8d4c9;box-shadow:0 14px 34px rgba(61,59,46,.12);overflow:hidden}
+.playlist-tilted-card:hover .playlist-tilted-inner{box-shadow:0 20px 44px rgba(61,59,46,.18)}
+.playlist-card-cover{position:absolute;inset:0;background:#ECE7D9;overflow:hidden}
+.playlist-card-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.playlist-card-cover-placeholder{width:100%;height:100%;display:grid;place-items:center;color:rgba(255,255,255,.78);background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.22),transparent 30%),linear-gradient(135deg,#1b1c18,#68645a)}
+.playlist-card-cover-placeholder .music-icon{font-size:58px;width:auto;opacity:.72}
+.playlist-card-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.18),transparent 36%,rgba(0,0,0,.16));pointer-events:none}
+.playlist-card-info{position:absolute;top:22px;left:28px;max-width:calc(100% - 56px);padding:10px 16px;border-radius:12px;background:rgba(86,86,86,.64);backdrop-filter:blur(10px);transform:translateZ(30px);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.playlist-card-title{display:block;margin:0;color:#fff;font-size:14px;line-height:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.playlist-card-meta{display:none}
+.playlist-card-badge{position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.78);color:var(--sidebar-fg);font-size:11px;font-weight:800;backdrop-filter:blur(8px)}
+.playlist-detail{max-width:980px}
+.playlist-detail-back{display:inline-flex;align-items:center;gap:6px;height:32px;margin-bottom:18px;padding:0 10px;border:0;border-radius:8px;background:rgba(27,28,24,.06);color:var(--sidebar-fg);font:700 12px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.playlist-detail-back:hover{background:rgba(27,28,24,.1)}
+.playlist-detail-hero{display:grid;grid-template-columns:168px minmax(0,1fr);gap:24px;align-items:end;margin-bottom:26px}
+.playlist-detail-cover{width:168px;height:168px;border-radius:13px;overflow:hidden;background:#ECE7D9;box-shadow:0 16px 34px rgba(61,59,46,.12)}
+.playlist-detail-cover img{width:100%;height:100%;object-fit:cover}
+.playlist-detail-cover-placeholder{width:100%;height:100%;display:grid;place-items:center;color:rgba(255,255,255,.78);background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.22),transparent 30%),linear-gradient(135deg,#1b1c18,#68645a)}
+.playlist-detail-cover-placeholder .music-icon{font-size:54px;width:auto;opacity:.74}
+.playlist-detail-kicker{margin:0 0 6px;color:var(--sidebar-muted);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.playlist-detail-title{margin:0;color:var(--sidebar-fg);font-size:28px;line-height:1.1;font-weight:850}
+.playlist-detail-meta{margin:10px 0 0;color:var(--sidebar-muted);font-size:13px;font-weight:600}
+.playlist-detail-actions{display:flex;align-items:center;gap:10px;margin-top:22px}
+.playlist-play-all{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:0;border-radius:9px;background:#ff4761;color:#fff;font:800 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:0 10px 22px rgba(255,71,97,.2)}
+.playlist-play-all:hover{transform:translateY(-1px)}
+.playlist-delete{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:1px solid rgba(61,59,46,.14);border-radius:9px;background:transparent;color:var(--sidebar-muted);font:800 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;transition:background .16s,color .16s}.playlist-delete:hover{background:rgba(186,26,26,.08);color:#ba1a1a}
+.playlist-detail-tabs{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:10px;border-bottom:1px solid rgba(61,59,46,.08)}
+.playlist-detail-tab{position:relative;height:38px;display:inline-flex;align-items:center;color:var(--sidebar-fg);font-size:14px;font-weight:850}
+.playlist-detail-tab::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:#ff4761}
+.playlist-input-group{display:flex;align-items:center;width:260px;height:34px;border:0;border-radius:0;background:transparent;color:var(--sidebar-muted);box-shadow:none}
+.playlist-input-group:focus-within{box-shadow:none}
+.playlist-input-addon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:100%;color:var(--sidebar-muted);flex:0 0 32px}
+.playlist-input-addon .music-icon{font-size:16px;width:16px}
+.playlist-input-group input{min-width:0;flex:1;height:100%;border:1px solid rgba(61,59,46,.26);border-radius:999px;outline:0;background:rgba(255,255,255,.86);padding:0 14px;color:var(--sidebar-fg);font:500 14px/1 Outfit,system-ui,sans-serif;box-shadow:0 1px 2px rgba(61,59,46,.04);transition:border-color .16s ease,box-shadow .16s ease}
+.playlist-input-group input:focus{border-color:rgba(27,28,24,.36);box-shadow:0 0 0 3px rgba(27,28,24,.06)}
+.playlist-input-group input::placeholder{color:#6f6a5f}
+.playlist-input-results{display:inline-flex;align-items:center;align-self:stretch;padding:0 10px;color:#6f6a5f;font-size:13px;font-weight:650;white-space:nowrap}
+.playlist-detail-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.playlist-detail-table th{height:38px;padding:0 10px;text-align:left;color:var(--sidebar-muted);font-weight:650;border-bottom:1px solid rgba(61,59,46,.08)}
+.playlist-detail-table td{height:56px;padding:8px 10px;border-bottom:1px solid rgba(61,59,46,.055);vertical-align:middle}
+.playlist-detail-table tbody tr{transition:background .14s ease}
+.playlist-detail-table tbody tr:hover{background:rgba(27,28,24,.035)}
+.track-index{width:44px;text-align:center!important;color:#8f8a7d}
+.track-title-cell{display:flex;align-items:center;gap:10px;min-width:0}
+.track-cover{width:38px;height:38px;border-radius:6px;overflow:hidden;display:grid;place-items:center;background:#ECE7D9;color:#676556;flex:0 0 38px}
+.track-cover img{width:100%;height:100%;object-fit:cover}
+.track-main{min-width:0}
+.track-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sidebar-fg);font-weight:750}
+.track-artist{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;color:var(--sidebar-muted);font-size:11px;font-weight:600}
+.track-album{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6f6a5f}
+.track-like{width:62px;text-align:center!important;color:#ff4761}
+.track-duration{width:74px;color:#8f8a7d}
+
+.music-icon {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: 400 !important;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  display: inline-block;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga' 1;
+  font-variant-ligatures: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  word-spacing: normal;
+}
+
+/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Mobile 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+@media (max-width: 767px) {
+  .music-sidebar-group { display: block; }
+  .music-sidebar-spacer { display: none; }
+  .music-sidebar-panel {
+    box-shadow: 8px 0 30px rgba(0,0,0,.18);
+  }
+  .music-trigger { margin: 12px 0 0 8px; }
+  .music-main-body{padding:22px 18px 38px}
+  .music-view-header{align-items:flex-start;flex-direction:column}
+  .local-playlist-card{max-width:none}.local-playlist-list{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}.playlist-tilted-card{height:210px}.playlist-card-info{left:18px;top:18px;max-width:calc(100% - 36px)}.playlist-detail-hero{grid-template-columns:112px minmax(0,1fr);gap:16px}.playlist-detail-cover{width:112px;height:112px}.playlist-detail-title{font-size:22px}.playlist-detail-tabs{align-items:flex-start;flex-direction:column}.playlist-input-group{width:100%}.playlist-input-group input{width:100%}.playlist-detail-table th:nth-child(3),.playlist-detail-table td:nth-child(3){display:none}
+}
+</style>
+</head>
+<body class="font-body-md text-body-md overflow-hidden" data-page="music">
+
+<div class="music-root">
+
+  <div class="music-sidebar-group" id="sidebarGroup" data-state="expanded" data-collapsible="offcanvas">
+    <div class="music-sidebar-spacer"></div>
+    <div class="music-sidebar-panel">
+      <div class="music-sidebar">
+        <div class="music-sidebar-header">
+          <div class="music-sidebar-brand"><span class="music-icon">queue_music</span> Music</div>
+        </div>
+
+        <div class="music-sidebar-content">
+          <div class="music-group-label">Source</div>
+
+          <!-- Local with submenu -->
+          <div class="music-submenu" data-state="open">
+            <button class="music-item music-submenu-trigger" data-source="local" aria-checked="true" aria-expanded="true">
+              <span class="music-icon">folder</span>
+              <span>Local</span>
+              <span class="music-submenu-chevron">&#8250;</span>
+            </button>
+            <div class="music-submenu-list">
+              <button class="music-item music-sub-item" data-view="playlist" aria-checked="true">
+                <span class="music-icon">queue_music</span>
+                <span>Playlist</span>
+              </button>
+              <button class="music-item music-sub-item" data-view="history" aria-checked="false">
+                <span class="music-icon">history</span>
+                <span>History</span>
+              </button>
+            </div>
+          </div>
+
+          <button class="music-item" data-source="netease" aria-checked="false">
+            <span class="music-icon">cloud</span>
+            <span>NetEase Cloud</span>
+          </button>
+        </div>
+
+        <div class="music-sidebar-footer">
+          <button class="music-item" style="width:100%">
+            <span class="music-icon">settings</span>
+            <span>Settings</span>
+          </button>
+        </div>
+      </div>
+      <div class="music-sidebar-rail"></div>
+    </div>
+  </div>
+
+  <main class="music-main">
+    <button class="music-trigger" id="sidebarTrigger" title="Toggle Sidebar">&#9776;</button>
+    <div class="music-main-body">
+      <section class="music-view" data-music-view="playlist">
+        <header class="music-view-header">
+          <div>
+            <h1 class="music-view-title">Local Playlist</h1>
+            <p class="music-view-subtitle">Import local playlist folders and display them as cards.</p>
+          </div>
+          <button class="music-import-button" id="importLocalPlaylist" type="button">
+            <span class="music-icon">library_add</span>
+            <span>Import Playlist Folder</span>
+          </button>
+        </header>
+        <div class="local-playlist-card">
+          <div class="local-playlist-list" id="localPlaylistList"></div>
+        </div>
+        <p class="music-status-line" id="localPlaylistStatus" role="status"></p>
+      </section>
+
+      <section class="music-view" data-music-view="history" hidden>
+        <div class="music-placeholder">
+          <span class="music-icon" style="font-size:48px;opacity:.35;width:auto">history</span>
+          <h2>History</h2>
+          <p></p>
+        </div>
+      </section>
+
+      <section class="music-view playlist-detail" data-music-view="playlist-detail" hidden>
+        <button class="playlist-detail-back" id="playlistDetailBack" type="button"><span class="music-icon">arrow_back</span><span>Back</span></button>
+        <div id="playlistDetailContent"></div>
+      </section>
+
+      <section class="music-view" data-music-view="netease" hidden>
+        <div class="music-placeholder">
+          <span class="music-icon" style="font-size:48px;opacity:.35;width:auto">cloud</span>
+          <h2>NetEase Cloud</h2>
+          <p></p>
+        </div>
+      </section>
+
+      <section class="music-view" data-music-view="empty" hidden>
+        <div class="music-placeholder">
+        <span class="music-icon" style="font-size:48px;opacity:.35;width:auto">headphones</span>
+        <h2>Ready to play</h2>
+        <p>Select a source to start listening.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+</div>
+
+<link href="music-player.css?v=3" rel="stylesheet"><script src="music-player.js?v=3"></script>
+
+<script>
+const group = document.getElementById('sidebarGroup');
+const trigger = document.getElementById('sidebarTrigger');
+const localPlaylistList = document.getElementById('localPlaylistList');
+const localPlaylistStatus = document.getElementById('localPlaylistStatus');
+const importLocalPlaylist = document.getElementById('importLocalPlaylist');
+const playlistDetailBack = document.getElementById('playlistDetailBack');
+const playlistDetailContent = document.getElementById('playlistDetailContent');
+const KEY = 'kairos-music-sidebar';
+let musicState = { tracks: [] };
+let currentPlaylistId = null;
+const getDesktopMusic = () => {
+  if (window.kairosDesktop?.music) return window.kairosDesktop.music;
+  try {
+    return window.parent?.kairosDesktop?.music || null;
+  } catch {
+    return null;
+  }
+};
+
+const showMusicView = view => {
+  document.querySelectorAll('[data-music-view]').forEach(section => {
+    section.hidden = section.dataset.musicView !== view;
+  });
+};
+
+const attachTiltedCard = card => {
+  const inner = card.querySelector('.playlist-tilted-inner');
+  const amplitude = 9;
+  card.addEventListener('pointermove', event => {
+    const rect = card.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left - rect.width / 2;
+    const offsetY = event.clientY - rect.top - rect.height / 2;
+    const rotateX = (offsetY / (rect.height / 2)) * -amplitude;
+    const rotateY = (offsetX / (rect.width / 2)) * amplitude;
+    inner.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.035)`;
+  });
+  card.addEventListener('pointerleave', () => {
+    inner.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1)';
+  });
+};
+
+const formatTrackDuration = seconds => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '--:--';
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+};
+
+const cleanMusicText = value => String(value || '').split('').filter(ch => { const code = ch.charCodeAt(0); return code >= 32 && code !== 127 && code !== 65533 && ch !== '□' && ch !== '▯' && ch !== '�'; }).join('').trim();
+
+const getPlaylistModel = playlistId => {
+  const tracks = Array.isArray(musicState.tracks) ? musicState.tracks : [];
+  const playlists = Array.isArray(musicState.playlists) ? musicState.playlists : [];
+  const playlist = playlists.find(item => item.id === playlistId) || playlists[0];
+  if (!playlist) return null;
+  const byId = new Map(tracks.map(track => [track.id, track]));
+  const playlistTracks = (playlist.trackIds || []).map(id => byId.get(id)).filter(Boolean);
+  return { playlist, tracks: playlistTracks };
+};
+
+const renderPlaylistDetail = playlistId => {
+  const model = getPlaylistModel(playlistId);
+  playlistDetailContent.replaceChildren();
+  if (!model) {
+    playlistDetailContent.innerHTML = '<div class="music-placeholder"><h2>Playlist not found</h2><p></p></div>';
+    return;
+  }
+  currentPlaylistId = model.playlist.id;
+  const firstTrack = model.tracks[0];
+  const coverUrl = model.playlist.coverUrl || firstTrack?.coverUrl || '';
+  const title = model.playlist.name || 'Local Playlist';
+  const hero = document.createElement('div');
+  hero.className = 'playlist-detail-hero';
+  hero.innerHTML = `
+    <div class="playlist-detail-cover"></div>
+    <div>
+      <p class="playlist-detail-kicker">Playlist</p>
+      <h1 class="playlist-detail-title"></h1>
+      <p class="playlist-detail-meta"></p>
+      <div class="playlist-detail-actions">
+        <button class="playlist-play-all" type="button"><span class="music-icon">play_arrow</span><span>Play All</span></button>
+        <button class="playlist-delete" id="playlistDeleteBtn" type="button"><span class="music-icon">delete</span><span>Delete Playlist</span></button>
+      </div>
+    </div>
+  `;
+  const cover = hero.querySelector('.playlist-detail-cover');
+  if (coverUrl) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = coverUrl;
+    cover.append(img);
+  } else {
+    cover.innerHTML = '<div class="playlist-detail-cover-placeholder"><span class="music-icon">album</span></div>';
+  }
+  hero.querySelector('.playlist-detail-title').textContent = title;
+  hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'}${model.playlist.folderPath ? ` 闁?${model.playlist.folderPath}` : ''}`;
+  hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
+    const first = model.tracks[0];
+    const desktopMusic = getDesktopMusic();
+    if (first && desktopMusic) {
+      await desktopMusic.updatePlayback({ currentTrackId: first.id });
+      window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+    } else if (first) {
+      window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+    }
+  });
+
+  const deleteBtn = hero.querySelector('.playlist-delete');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      if (!window.confirm(`Delete "${title}" playlist and remove from library?`)) return;
+      const desktopMusic = getDesktopMusic();
+      if (desktopMusic) {
+        try {
+          await desktopMusic.removePlaylist(model.playlist.id);
+        } catch (e) {
+          console.error('removePlaylist failed', e);
+        }
+      } else {
+        const raw = localStorage.getItem('kairos-mvp-state');
+        if (raw) {
+          const state = JSON.parse(raw);
+          if (state.playlists) state.playlists = state.playlists.filter(p => p.id !== model.playlist.id);
+          localStorage.setItem('kairos-mvp-state', JSON.stringify(state));
+        }
+      }
+      showMusicView('playlist');
+      await refreshMusicState();
+    });
+  }
+
+  const tabs = document.createElement('div');
+  tabs.className = 'playlist-detail-tabs';
+  tabs.innerHTML = `
+    <div class="playlist-detail-tab">Songs <sup>${model.tracks.length}</sup></div>
+    <label class="playlist-input-group">
+      <span class="playlist-input-addon"><span class="music-icon">search</span></span>
+      <input id="playlistDetailSearch" type="search" placeholder="Search">
+      <span class="playlist-input-results" id="playlistSearchResults">${model.tracks.length} results</span>
+    </label>
+  `;
+
+  const table = document.createElement('table');
+  table.className = 'playlist-detail-table';
+  table.innerHTML = `
+    <thead><tr><th class="track-index">#</th><th>Title</th><th>Album</th><th class="track-like">Like</th><th class="track-duration">Time</th></tr></thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector('tbody');
+  const resultsLabel = tabs.querySelector('#playlistSearchResults');
+  const renderRows = query => {
+    tbody.replaceChildren();
+    const normalized = (query || '').trim().toLowerCase();
+    const filtered = model.tracks
+      .filter(track => !normalized || `${track.title || ''} ${track.artist || ''} ${track.album || ''}`.toLowerCase().includes(normalized))
+    resultsLabel.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
+    filtered.forEach((track, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="track-index">${String(index + 1).padStart(2, '0')}</td>
+          <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div></td>
+          <td class="track-album"></td>
+          <td class="track-like"><span class="music-icon">favorite</span></td>
+          <td class="track-duration"></td>
+        `;
+        const trackCover = row.querySelector('.track-cover');
+        if (track.coverUrl) {
+          const img = document.createElement('img');
+          img.alt = '';
+          img.src = track.coverUrl;
+          trackCover.append(img);
+        } else {
+          trackCover.innerHTML = '<span class="music-icon" style="font-size:18px">music_note</span>';
+        }
+        row.querySelector('.track-name').textContent = cleanMusicText(track.title) || cleanMusicText(track.fileName) || 'Untitled';
+        row.querySelector('.track-artist').textContent = cleanMusicText(track.artist) || 'Local music';
+        row.querySelector('.track-album').textContent = cleanMusicText(track.album) || title;
+        row.querySelector('.track-duration').textContent = formatTrackDuration(track.duration);
+        tbody.append(row);
+      });
+  };
+  playlistDetailContent.append(hero, tabs, table);
+  renderRows('');
+  playlistDetailContent.querySelector('#playlistDetailSearch')?.addEventListener('input', event => renderRows(event.target.value));
+};
+
+const renderLocalPlaylist = () => {
+  localPlaylistList.replaceChildren();
+  const tracks = Array.isArray(musicState.tracks) ? musicState.tracks : [];
+  const playlists = Array.isArray(musicState.playlists) ? musicState.playlists : [];
+  if (!playlists.length) {
+    const empty = document.createElement('div');
+    empty.className = 'local-playlist-empty';
+    empty.textContent = 'No local playlist folder imported yet.';
+    localPlaylistList.append(empty);
+    localPlaylistStatus.textContent = '0 playlists';
+    return;
+  }
+
+  const byId = new Map(tracks.map(track => [track.id, track]));
+  playlists.forEach(playlist => {
+    const playlistTracks = (playlist.trackIds || []).map(id => byId.get(id)).filter(Boolean);
+    const firstTrack = playlistTracks[0];
+    const card = document.createElement('button');
+    card.className = 'playlist-tilted-card';
+    card.type = 'button';
+    card.setAttribute('aria-label', `Open ${playlist.name || 'Local Playlist'}`);
+    const openPlaylistDetail = () => {
+      renderPlaylistDetail(playlist.id);
+      showMusicView('playlist-detail');
+    };
+    card.addEventListener('click', event => {
+      event.stopPropagation();
+      openPlaylistDetail();
+    });
+    card.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openPlaylistDetail();
+    });
+    card.innerHTML = `
+      <span class="playlist-tilted-inner">
+        <span class="playlist-card-cover"></span>
+        <span class="playlist-card-overlay"></span>
+        <span class="playlist-card-badge"><span class="music-icon" style="font-size:16px;width:16px">queue_music</span>${playlistTracks.length}</span>
+        <span class="playlist-card-info">
+          <span class="playlist-card-title"></span>
+          <span class="playlist-card-meta"></span>
+        </span>
+      </span>
+    `;
+    const cover = card.querySelector('.playlist-card-cover');
+    const coverUrl = playlist.coverUrl || firstTrack?.coverUrl || "";
+    if (coverUrl) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = coverUrl;
+      cover.append(img);
+    } else {
+      cover.innerHTML = '<span class="playlist-card-cover-placeholder"><span class="music-icon">album</span></span>';
+    }
+    const title = playlist.name || 'Local Playlist';
+    card.querySelector('.playlist-card-title').textContent = title;
+    card.querySelector('.playlist-card-meta').textContent = `${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'}${firstTrack ? ` 闁?${cleanMusicText(firstTrack.title) || cleanMusicText(firstTrack.fileName) || 'Untitled'}` : ''}`;
+    card.dataset.playlistId = playlist.id;
+    attachTiltedCard(card);
+    localPlaylistList.append(card);
+  });
+  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'} 闁?${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
+  // Delegated click 闂?bypasses 3D transform interference
+  localPlaylistList.onclick = event => {
+    const card = event.target.closest('.playlist-tilted-card');
+    if (!card || !card.dataset.playlistId) return;
+    renderPlaylistDetail(card.dataset.playlistId);
+    showMusicView('playlist-detail');
+  };
+};
+
+const refreshMusicState = async () => {
+  const desktopMusic = getDesktopMusic();
+  if (!desktopMusic) {
+    renderLocalPlaylist();
+    window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+    return;
+  }
+  musicState = await desktopMusic.getState();
+  renderLocalPlaylist();
+  window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+};
+
+importLocalPlaylist.addEventListener('click', async () => {
+  const desktopMusic = getDesktopMusic();
+  if (!desktopMusic) {
+    localPlaylistStatus.textContent = 'Desktop music import is unavailable in this view.';
+    return;
+  }
+  localPlaylistStatus.textContent = 'Opening folder picker...';
+  const result = await desktopMusic.chooseFolder();
+  musicState = result.state || result;
+  renderLocalPlaylist();
+  window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+  if (result.rejected?.length) {
+    localPlaylistStatus.textContent = `${result.imported?.length || 0} imported, ${result.rejected.length} skipped`;
+  }
+});
+
+playlistDetailBack.addEventListener('click', () => {
+  showMusicView('playlist');
+});
+
+trigger.addEventListener('click', () => {
+  const next = group.dataset.state === 'expanded' ? 'collapsed' : 'expanded';
+  group.dataset.state = next;
+  localStorage.setItem(KEY, next);
+});
+
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+    e.preventDefault();
+    trigger.click();
+  }
+});
+
+const saved = localStorage.getItem(KEY);
+if (saved) group.dataset.state = saved;
+
+// Submenu toggle
+document.querySelectorAll('.music-submenu-trigger').forEach(trigger => {
+  trigger.addEventListener('click', () => {
+    const submenu = trigger.closest('.music-submenu');
+    const next = submenu.dataset.state === 'open' ? 'closed' : 'open';
+    submenu.dataset.state = next;
+    trigger.setAttribute('aria-expanded', String(next === 'open'));
+  });
+});
+
+// Sub-item selection
+document.querySelectorAll('.music-sub-item').forEach(button => {
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.music-sub-item').forEach(item =>
+      item.setAttribute('aria-checked', 'false')
+    );
+    button.setAttribute('aria-checked', 'true');
+    document.querySelectorAll('[data-source]').forEach(item =>
+      item.setAttribute('aria-checked', String(item.dataset.source === 'local'))
+    );
+    showMusicView(button.dataset.view || 'playlist');
+  });
+});
+
+// Source toggle (NetEase Cloud)
+document.querySelectorAll('[data-source]').forEach(button => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('[data-source]').forEach(item =>
+      item.setAttribute('aria-checked', String(item === button))
+    );
+    if (button.dataset.source === 'netease') {
+      document.querySelectorAll('.music-sub-item').forEach(item => item.setAttribute('aria-checked', 'false'));
+      showMusicView('netease');
+    } else {
+      showMusicView('playlist');
+      document.querySelector('[data-view="playlist"]')?.setAttribute('aria-checked', 'true');
+    }
+  });
+});
+showMusicView('playlist');
+refreshMusicState();
+</script>
+
+<link href="stitch-shell.css?v=7" rel="stylesheet">
+<link href="stitch-layout.css?v=24" rel="stylesheet">
+<link href="tweakcn-theme.css?v=6" rel="stylesheet">
+<script src="stitch-shell.js?v=49"></script>
+</body>
+</html>

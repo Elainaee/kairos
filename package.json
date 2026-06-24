@@ -1,0 +1,20 @@
+{
+  "name": "kairos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "check": "node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --test electron/*.test.js"
+  },
+  "dependencies": {
+    "@volcengine/ark-runtime": "1.0.9",
+    "dotenv": "^16.4.7",
+    "electron": "^36.0.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "openai": "^4.89.0",
+    "pdfjs-dist": "^6.0.227"
+  }
+}

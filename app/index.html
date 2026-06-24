@@ -1,0 +1,513 @@
+<!DOCTYPE html><html class="light kairos-boot" lang="en" style=""><head>
+<style>html.kairos-boot{visibility:hidden;background:#f5f4f1}</style><script>setTimeout(()=>document.documentElement.classList.remove('kairos-boot'),3000)</script>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Clarity Calendar | Intentional Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-container": "#e8e3d0",
+                    "inverse-primary": "#ffb59d",
+                    "background": "#fbf9f2",
+                    "secondary-fixed-dim": "#cbc7b5",
+                    "surface-container-low": "#f5f4ed",
+                    "primary": "#9e3d19",
+                    "on-tertiary-container": "#f6feff",
+                    "canvas-bone": "#F9F7F0",
+                    "surface-container": "#f0eee7",
+                    "surface-bright": "#fbf9f2",
+                    "primary-container": "#be552f",
+                    "surface-tint": "#a1401b",
+                    "error-container": "#ffdad6",
+                    "tertiary": "#00666f",
+                    "primary-fixed": "#ffdbd0",
+                    "surface": "#fbf9f2",
+                    "primary-fixed-dim": "#ffb59d",
+                    "tertiary-fixed": "#8af2ff",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#1b1c18",
+                    "surface-container-high": "#eae8e1",
+                    "tertiary-container": "#00818c",
+                    "on-background": "#1b1c18",
+                    "tertiary-fixed-dim": "#6bd6e3",
+                    "on-secondary-container": "#676556",
+                    "on-error-container": "#93000a",
+                    "surface-muted": "#EBE6D6",
+                    "on-error": "#ffffff",
+                    "on-tertiary-fixed": "#001f23",
+                    "outline": "#8a726a",
+                    "secondary": "#615f50",
+                    "on-tertiary": "#ffffff",
+                    "accent-terracotta": "#D1633C",
+                    "surface-dim": "#dcdad3",
+                    "on-primary-fixed-variant": "#812904",
+                    "surface-variant": "#e4e2dc",
+                    "on-tertiary-fixed-variant": "#004f56",
+                    "outline-variant": "#ddc0b7",
+                    "surface-container-lowest": "#ffffff",
+                    "secondary-fixed": "#e8e3d0",
+                    "ink-bold": "#3D3B2E",
+                    "on-primary-fixed": "#390c00",
+                    "surface-container-highest": "#e4e2dc",
+                    "on-secondary-fixed": "#1d1c11",
+                    "error": "#ba1a1a",
+                    "inverse-on-surface": "#f3f1ea",
+                    "on-surface-variant": "#57423c",
+                    "on-secondary-fixed-variant": "#494739",
+                    "inverse-surface": "#30312c",
+                    "on-primary-container": "#fffbff",
+                    "on-secondary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-margin": "32px",
+                    "stack-md": "16px",
+                    "unit": "8px",
+                    "stack-lg": "32px",
+                    "gutter": "16px",
+                    "stack-sm": "8px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Outfit"],
+                    "title-md": ["Outfit"],
+                    "headline-lg-mobile": ["Outfit"],
+                    "body-md": ["Outfit"],
+                    "label-md": ["Outfit"],
+                    "display-lg": ["Outfit"],
+                    "label-sm": ["Outfit"],
+                    "body-lg": ["Outfit"]
+            },
+            "fontSize": {
+                    "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "title-md": ["20px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "1", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .filled-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+        body {
+            background-color: #F9F7F0;
+            color: #1b1c18;
+            font-family: 'Outfit', sans-serif;
+            overflow-x: hidden;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #EBE6D6;
+            border-radius: 10px;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+        .day-cell {
+            min-height: 120px;
+            border-right: 1px solid rgba(61, 59, 46, 0.1);
+            border-bottom: 1px solid rgba(61, 59, 46, 0.1);
+        }
+        .day-cell:nth-child(7n) { border-right: none; }
+        .day-cell.inactive { opacity: 0.4; }
+    </style>
+</head>
+<body class="flex bg-canvas-bone" data-page="calendar">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-[280px] bg-surface-container border-r border-ink-bold/10 flex flex-col h-full py-stack-lg px-gutter gap-stack-md z-40">
+<div class="flex items-center gap-3 px-2">
+<div class="w-10 h-10 rounded-xl bg-accent-terracotta flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined">auto_awesome</span>
+</div>
+<div>
+<h1 class="font-headline-lg text-[22px] leading-tight text-accent-terracotta">Kairos</h1>
+<p class="font-label-sm text-on-secondary-fixed-variant">Intentional Living</p>
+</div>
+</div>
+<button class="mt-4 w-full py-3 bg-accent-terracotta text-on-primary rounded-xl font-label-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined">add</span>
+            Create New
+        </button>
+<nav class="mt-8 flex flex-col gap-2">
+<!-- Active: Calendar -->
+<a class="flex items-center gap-4 px-4 py-3 text-primary font-bold border-r-4 border-primary bg-secondary-container/30 transition-all hover:bg-surface-variant/50" href="#">
+<span class="material-symbols-outlined filled-icon">calendar_today</span>
+<span class="font-label-md">Calendar</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all" href="#">
+<span class="material-symbols-outlined">repeat</span>
+<span class="font-label-md">Habits</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all" href="#">
+<span class="material-symbols-outlined">checklist</span>
+<span class="font-label-md">Tasks</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all" href="#">
+<span class="material-symbols-outlined">queue_music</span>
+<span class="font-label-md">Music</span>
+</a>
+</nav>
+<div class="mt-auto flex flex-col gap-2">
+<a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all" href="#">
+<span class="material-symbols-outlined">archive</span>
+<span class="font-label-md">Archive</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all" href="#">
+<span class="material-symbols-outlined">help_outline</span>
+<span class="font-label-md">Help</span>
+</a>
+</div>
+</aside>
+<main class="ml-[280px] w-full flex flex-col min-h-screen">
+<!-- TopNavBar -->
+<header class="sticky top-0 z-30 bg-canvas-bone flex justify-between items-center w-full px-container-margin py-unit h-16 border-b border-ink-bold/10">
+<div class="flex items-center gap-8">
+<h2 class="font-title-md font-bold text-accent-terracotta">Dashboard</h2>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md" href="#">Monthly</a>
+<a class="text-on-surface-variant font-label-md hover:text-accent-terracotta transition-colors" href="#">Weekly</a>
+<a class="text-on-surface-variant font-label-md hover:text-accent-terracotta transition-colors" href="#">Daily</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border border-ink-bold/5 rounded-full text-sm focus:outline-none focus:border-accent-terracotta w-64" placeholder="Search events..." type="text">
+</div>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-accent-terracotta transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-accent-terracotta transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-secondary-container">
+<img class="w-full h-full object-cover" data-alt="Close-up professional portrait of a calm and focused individual in a minimalist studio environment with warm, natural sunlight casting soft shadows. High-end aesthetic, soft textures, and a sophisticated color palette of bone, charcoal, and terracota. Light-mode studio photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBv95L5ZDBHMhVGhM3e9xlST7NeR8ya5MeAibgUaFQBYPmNuMznIBALiBH3Wg_VvM_cFZRo0LO6RC6eF4p_fG01cqmIFxYKGjJs8Ek543j7lLLCGfhhwvuAOq4uki-LUv-ZY6PSPYlM1cmZAqHIqWVEG_KmICmaWLJoIecO0gINrl9iuEtaBA6PX6kR5QfGnt2oJ6zlPqOvbg0J6CI4bLX01-e9T_PoF1ay-XF91gqPQZVTFbUwPicWctHAosW3Yi6fciuMqpv_S60">
+</div>
+</div>
+</header>
+<!-- Main Content Grid -->
+<div class="flex flex-1 overflow-hidden p-container-margin gap-stack-lg">
+<!-- Left Side: Interactive Calendar -->
+<section class="flex-1 bg-surface-container-lowest rounded-xl border border-ink-bold/10 overflow-hidden flex flex-col shadow-sm">
+<div class="p-6 flex items-center justify-between border-b border-ink-bold/5">
+<div class="flex items-center gap-4">
+<h3 class="font-headline-lg text-2xl text-ink-bold calendar-shiny-heading" id="scheduleCalendarHeading">闂傚倸鍊峰ù鍥х暦閻㈢绐楅柟閭﹀枛閸ㄦ繈骞栧ǎ顒€鐏繛鍛У娣囧﹪濡堕崨顔兼缂備胶濮抽崡鎶藉蓟濞戞ǚ妲堟慨妤€鐗婇弫鎯р攽閻愬弶鍣藉┑鐐╁亾闂佸搫鐭夌徊鍊熺亽濠电偛妫欓崕鍐测枔椤撱垺鐓熼幖娣灱婢规ɑ銇勯敂鐐毈鐎殿喛顕ч埥澶愬閳哄倹娅囬梻浣瑰缁诲倸煤閵娾晜鍋傞柍褜鍓熷?/h3>
+<div class="flex gap-1">
+<button aria-label="濠电姷鏁告慨鐑藉极閹间礁纾婚柣鎰惈閸ㄥ倿鏌涢锝嗙缂佺姳鍗抽弻鐔兼⒒鐎电濡介梺鍝勬噺缁诲牓寮婚妸銉㈡斀闁糕檧鏅滄晥闂備胶绮幐鎼佸磹閸︻厽宕叉繝闈涙川缁♀偓闂佺鏈划宀勩€傚ú顏呯厽? class="p-1 hover:bg-surface-container rounded transition-colors" id="schedulePrevMonth"><span class="material-symbols-outlined">chevron_left</span></button>
+<button aria-label="濠电姷鏁告慨鐑藉极閹间礁纾婚柣鎰惈閸ㄥ倿鏌涢锝嗙缂佺姳鍗抽弻鐔兼⒒鐎垫瓕绐楅梺杞扮鐎氫即寮诲☉銏犲嵆闁靛鍎虫禒顓㈡⒑缂佹ɑ灏柛濠傛贡閹广垹鈹戦崶鈺冪槇闂佺鏈划宀勩€傚ú顏呯厽? class="p-1 hover:bg-surface-container rounded transition-colors" id="scheduleNextMonth"><span class="material-symbols-outlined">chevron_right</span></button>
+</div>
+</div>
+<button class="px-4 py-2 bg-surface-container text-ink-bold rounded-lg font-label-md hover:bg-surface-container-high transition-colors" id="scheduleTodayButton">Today</button>
+</div>
+<div class="calendar-grid bg-ink-bold/5">
+<!-- Day Headers -->
+<div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span class="font-label-md text-on-surface-variant">SUN</span></div>
+<div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span class="font-label-md text-on-surface-variant">MON</span></div>
+<div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span class="font-label-md text-on-surface-variant">TUE</span></div>
+<div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span class="font-label-md text-on-surface-variant">WED</span></div>
+<div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span class="font-label-md text-on-surface-variant">THU</span></div>
+<div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span class="font-label-md text-on-surface-variant">FRI</span></div>
+<div class="bg-surface-container py-2 text-center"><span class="font-label-md text-on-surface-variant">SAT</span></div>
+<!-- Row 1 -->
+<div class="day-cell bg-surface-container-lowest inactive p-3"><span class="font-label-sm">29</span></div>
+<div class="day-cell bg-surface-container-lowest inactive p-3"><span class="font-label-sm">30</span></div>
+<div class="day-cell bg-surface-container-lowest p-3"><span class="font-label-sm">1</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">2</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;">
+<span class="font-label-sm">3</span>
+<div class="mt-2 space-y-1">
+<div class="bg-secondary-container/40 border-l-4 border-accent-terracotta px-2 py-1 rounded text-[11px] font-medium text-ink-bold truncate">Project Kickoff</div>
+</div>
+</div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">4</span></div>
+<div class="day-cell bg-surface-container-lowest p-3"><span class="font-label-sm">5</span></div>
+<!-- Row 2 -->
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">6</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">7</span></div>
+<div class="day-cell bg-surface-container-lowest p-3"><span class="font-label-sm">8</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;">
+<span class="font-label-sm">9</span>
+<div class="mt-2 space-y-1">
+<div class="bg-tertiary-container/20 border-l-4 border-tertiary px-2 py-1 rounded text-[11px] font-medium text-ink-bold truncate">Lunch with Sam</div>
+<div class="bg-primary-container/20 border-l-4 border-primary px-2 py-1 rounded text-[11px] font-medium text-ink-bold truncate">Product Review</div>
+</div>
+</div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">10</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">11</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">12</span></div>
+<!-- Row 3 -->
+<div class="day-cell bg-surface-container-lowest p-3"><span class="font-label-sm">13</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;">
+<div class="w-7 h-7 bg-accent-terracotta text-white rounded-full flex items-center justify-center font-label-sm -mt-1 -ml-1">14</div>
+<div class="mt-2 space-y-1">
+<div class="bg-secondary-container/40 border-l-4 border-accent-terracotta px-2 py-1 rounded text-[11px] font-medium text-ink-bold truncate">Strategic Planning</div>
+<div class="bg-secondary-container/40 border-l-4 border-accent-terracotta px-2 py-1 rounded text-[11px] font-medium text-ink-bold truncate">Team Sync</div>
+</div>
+</div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">15</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">16</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">17</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">18</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">19</span></div>
+<!-- Row 4 -->
+<div class="day-cell bg-surface-container-lowest p-3"><span class="font-label-sm">20</span></div>
+<div class="day-cell bg-surface-container-lowest p-3"><span class="font-label-sm">21</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">22</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;">
+<span class="font-label-sm">23</span>
+<div class="mt-2 space-y-1">
+<div class="bg-tertiary-container/20 border-l-4 border-tertiary px-2 py-1 rounded text-[11px] font-medium text-ink-bold truncate">Design Workshop</div>
+</div>
+</div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">24</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">25</span></div>
+<div class="day-cell bg-surface-container-lowest p-3" style="transition: background-color 0.2s;"><span class="font-label-sm">26</span></div>
+</div>
+</section>
+<!-- Right Side: Today's Schedule & Habits -->
+<section class="w-[360px] flex flex-col gap-gutter">
+<!-- Habit table, adapted from tweakcn CardsPayments -->
+<section class="habit-payments-card" aria-labelledby="habitCardTitle">
+<header class="habit-payments-header">
+<h4 id="habitCardTitle">Habits</h4>
+<p>Build a little momentum every day.</p>
+</header>
+<div class="habit-table-frame">
+<div class="habit-list-heading"><input id="habitSelectAll" type="checkbox" aria-label="Complete all habits"><span>Habit</span><span>Streak</span></div>
+<div class="habit-animated-list" id="habitAnimatedList" role="list" aria-label="Habits"></div>
+</div>
+<footer class="habit-payments-footer">
+<span id="habitSelectionCount">0 of 0 habit(s) completed.</span>
+</footer>
+</section>
+<!-- Today's Schedule -->
+<div class="flex-1 bg-surface-container-high p-6 rounded-xl border border-ink-bold/10 flex flex-col overflow-hidden">
+<h4 class="font-title-md text-ink-bold mb-6">Today's Schedule</h4>
+<div class="flex-1 overflow-y-auto pr-2 space-y-6">
+<!-- Time Slot -->
+<div class="relative pl-12">
+<span class="absolute left-0 top-0 font-label-sm text-outline">09:00</span>
+<div class="bg-canvas-bone p-4 rounded-lg border border-ink-bold/5 shadow-sm">
+<div class="flex items-center gap-2 mb-1">
+<span class="w-2 h-2 rounded-full bg-accent-terracotta"></span>
+<h5 class="font-label-md text-ink-bold">Strategic Planning</h5>
+</div>
+<p class="text-xs text-on-surface-variant">Focus Block 闂?1.5h</p>
+</div>
+</div>
+<!-- Current Time Indicator -->
+<div class="relative py-2">
+<div class="absolute inset-x-0 top-1/2 h-0.5 bg-accent-terracotta/30"></div>
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent-terracotta"></div>
+</div>
+<!-- Time Slot -->
+<div class="relative pl-12">
+<span class="absolute left-0 top-0 font-label-sm text-outline">11:00</span>
+<div class="bg-secondary-container p-4 rounded-lg border border-ink-bold/5 shadow-sm">
+<div class="flex items-center gap-2 mb-1">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<h5 class="font-label-md text-ink-bold">Product Sync</h5>
+</div>
+<p class="text-xs text-on-surface-variant">Meeting Room B 闂?45m</p>
+</div>
+</div>
+<!-- Time Slot -->
+<div class="relative pl-12">
+<span class="absolute left-0 top-0 font-label-sm text-outline">12:30</span>
+<div class="bg-canvas-bone p-4 rounded-lg border border-ink-bold/5 opacity-60">
+<div class="flex items-center gap-2 mb-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<h5 class="font-label-md text-ink-bold">Deep Work: UI Refactor</h5>
+</div>
+<p class="text-xs text-on-surface-variant">Office 闂?2h</p>
+</div>
+</div>
+<!-- Time Slot -->
+<div class="relative pl-12">
+<span class="absolute left-0 top-0 font-label-sm text-outline">15:00</span>
+<div class="bg-canvas-bone p-4 rounded-lg border border-ink-bold/5 opacity-60">
+<div class="flex items-center gap-2 mb-1">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<h5 class="font-label-md text-ink-bold">Stakeholder Review</h5>
+</div>
+<p class="text-xs text-on-surface-variant">Zoom Call 闂?1h</p>
+</div>
+</div>
+</div>
+<button class="mt-6 w-full py-3 border border-dashed border-outline-variant text-outline rounded-lg font-label-sm hover:bg-canvas-bone transition-colors flex items-center justify-center gap-2" id="scheduleAddSlot" type="button">
+<span class="material-symbols-outlined text-sm">add</span>
+                        Add slot
+                    </button>
+</div>
+</section>
+</div>
+</main>
+<!-- Draggable Chibi Companion -->
+<iframe aria-label="Kairos desktop companion" id="chibiPet" src="chibi_pet.html" title="Kairos desktop companion"></iframe>
+<dialog aria-label="AI assistant" id="aiPanel">
+<header class="ai-chat-header">
+<div class="ai-chat-contact">
+<button aria-label="闂佸搫娲ら悺銊ョ暦?AI 婵犮垼鍩栧娆撳磿? class="ai-avatar ai-avatar-editor" id="aiAvatarButton" type="button"></button>
+<input accept="image/*" hidden id="aiAvatarInput" type="file">
+<div><strong id="aiAssistantName">Kairos Assistant</strong><span><i></i> Online</span></div>
+</div>
+<div class="ai-chat-header-actions">
+<button aria-label="闂備焦褰冪粔鎾箠閿熺姴瑙?AI 闂佸憡鏌￠弲婊勬櫠? id="renameAiAssistant" type="button"><span class="material-symbols-outlined">edit</span></button>
+<button aria-label="闂佸搫鍊瑰妯肩磽閹炬潙顕辨慨妯虹－濡? id="newAiSession" type="button"><span class="material-symbols-outlined">add_comment</span></button>
+<button aria-label="闂佸憡甯炴繛鈧繛鍛唉閵囨劙骞橀崘宸瀫婵炴潙鍚嬫穱娲儊? id="deleteAiSession" type="button"><span class="material-symbols-outlined">delete</span></button>
+<button aria-label="闂佺绻戞繛濠偽?AI" id="closeAiPanel" type="button"><span class="material-symbols-outlined">close</span></button>
+</div>
+<div class="ai-chat-controls">
+<label><span>Session</span><select aria-label="Switch session" id="aiSessionSelect"><option>Loading...</option></select></label>
+<label><span>Provider</span><select aria-label="Model provider" id="aiProviderSelect"><option>Loading...</option></select></label>
+<label><span>Model</span><select aria-label="Select model" id="aiModelInput"><option>Loading...</option></select></label>
+<span id="aiUsageSummary">0 requests</span>
+</div>
+</header>
+<main aria-live="polite" id="aiMessages"><div class="ai-chat-date">Today</div></main>
+<div aria-live="polite" class="ai-attachment-tray" id="aiAttachmentTray"></div>
+<footer class="ai-chat-composer">
+<button aria-label="Add attachment" class="ai-attach-button" id="aiAttachButton" type="button"><span class="material-symbols-outlined">add</span></button>
+<input accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.txt,.md" hidden id="aiAttachmentInput" multiple type="file">
+<label class="ai-retain-option"><input id="aiRetainAttachments" type="checkbox"><span id="aiRetainLabel">Temporary</span></label>
+<textarea aria-label="Message AI" id="aiInput" placeholder="Type your message..." rows="1"></textarea>
+<button aria-label="Send" id="sendAiMessage" type="button"><span class="material-symbols-outlined">arrow_upward</span></button>
+</footer>
+</dialog><style>
+#chibiPet{position:fixed;z-index:60;width:240px;height:250px;right:18px;bottom:108px;border:0;background:transparent;overflow:hidden;filter:drop-shadow(0 10px 18px rgba(61,59,46,.08));touch-action:none}
+@media(max-width:700px){#chibiPet{width:200px;height:220px}}
+#restorePetBtn:hover{transform:scale(1.1);box-shadow:0 4px 14px rgba(0,0,0,.15)}
+</style>
+
+<!-- Micro-interaction Script -->
+<script>
+        document.querySelectorAll('.day-cell:not(.inactive)').forEach(cell => {
+            cell.addEventListener('mouseenter', () => {
+                cell.classList.add('bg-surface-container-low');
+                cell.style.transition = 'background-color 0.2s ease';
+            });
+            cell.addEventListener('mouseleave', () => {
+                cell.classList.remove('bg-surface-container-low');
+            });
+        });
+
+        const chibiPet = document.getElementById('chibiPet');
+        let petDragOrigin = null;
+        const STORAGE_KEY = 'kairos-pet-hidden';
+
+        // Restore button (shown when pet is hidden)
+        const restoreBtn = document.createElement('button');
+        restoreBtn.id = 'restorePetBtn';
+        restoreBtn.title = '閺勫墽銇氬灞界枃';
+        restoreBtn.innerHTML = '<span class="material-symbols-outlined">pets</span>';
+        restoreBtn.style.cssText = 'position:fixed;z-index:65;right:20px;bottom:112px;width:42px;height:42px;border:1px solid var(--line,#ccc);border-radius:50%;background:var(--panel,#fff);color:var(--accent,#d1633c);cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,.1);align-items:center;justify-content:center;font-size:20px';
+        restoreBtn.onclick = () => {
+          restoreBtn.style.display = 'none';
+          localStorage.removeItem(STORAGE_KEY);
+          if (window.kairosDesktop?.pet) {
+            window.kairosDesktop.pet.show();
+          } else {
+            chibiPet.style.display = '';
+          }
+        };
+        document.body.appendChild(restoreBtn);
+
+        // Check saved visibility state
+        if (localStorage.getItem(STORAGE_KEY) === '1') {
+          chibiPet.style.display = 'none';
+          restoreBtn.style.display = 'flex';
+        }
+
+        // Electron desktop mode: standalone pet window replaces iframe
+        if (window.kairosDesktop?.isDesktop) {
+          // Hide iframe by default; query if standalone window is alive
+          chibiPet.style.display = 'none';
+          window.kairosDesktop.pet?.isReady?.().then(ready => {
+            if (!ready) chibiPet.style.display = ''; // fallback to iframe
+          });
+          // Listen for later hide/show events
+          window.kairosDesktop.pet?.onVisibilityChanged?.(visible => {
+            if (visible === true) {
+              chibiPet.style.display = 'none';
+            } else if (visible === false) {
+              restoreBtn.style.display = 'flex';
+            }
+          });
+          // Click pet in standalone window -> open AI panel in main window
+          window.kairosDesktop.pet?.onOpenAi?.(() => {
+            document.getElementById('aiPanel').showModal();
+          });
+        }
+
+        const clampPet = (left, top) => {
+            const playerHeight = document.getElementById('musicPlayer')?.offsetHeight || 80;
+            const maxLeft = Math.max(0, window.innerWidth - chibiPet.offsetWidth);
+            const maxTop = Math.max(0, window.innerHeight - playerHeight - chibiPet.offsetHeight);
+            chibiPet.style.left = `${Math.min(maxLeft, Math.max(0, left))}px`;
+            chibiPet.style.top = `${Math.min(maxTop, Math.max(0, top))}px`;
+            chibiPet.style.right = 'auto';
+            chibiPet.style.bottom = 'auto';
+            localStorage.setItem('kairos-pet-pos', JSON.stringify({left, top}));
+        };
+        // Restore saved position
+        try {
+          const saved = JSON.parse(localStorage.getItem('kairos-pet-pos'));
+          if (saved) clampPet(saved.left, saved.top);
+        } catch {}
+
+        window.addEventListener('message', event => {
+            if (!event.data?.type?.startsWith('kairos-pet-')) return;
+            if (event.data.type === 'kairos-pet-click') {
+                if (!petDragOrigin) document.getElementById('aiPanel').showModal();
+                return;
+            }
+            if (event.data.type === 'kairos-pet-hide') {
+                chibiPet.style.display = 'none';
+                restoreBtn.style.display = 'flex';
+                localStorage.setItem(STORAGE_KEY, '1');
+                return;
+            }
+            if (!petDragOrigin) {
+                const rect = chibiPet.getBoundingClientRect();
+                petDragOrigin = {left: rect.left, top: rect.top};
+            }
+            if (event.data.type === 'kairos-pet-drag') clampPet(petDragOrigin.left + event.data.dx, petDragOrigin.top + event.data.dy);
+            if (event.data.type === 'kairos-pet-drop') petDragOrigin = null;
+        });
+        document.getElementById('closeAiPanel').addEventListener('click', () => document.getElementById('aiPanel').close());
+        window.addEventListener('resize', () => {
+            const rect = chibiPet.getBoundingClientRect();
+            clampPet(rect.left, rect.top);
+        });
+    </script>
+
+
+<link href="stitch-shell.css?v=7" rel="stylesheet"><link href="stitch-layout.css?v=24" rel="stylesheet"><link href="tweakcn-theme.css?v=6" rel="stylesheet"><link href="ai-chat.css?v=11" rel="stylesheet"><script src="ai-chat.js?v=11"></script><script src="stitch-shell.js?v=47"></script>
+</body></html>
