@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen } from "electron";
+﻿import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -31,7 +31,7 @@ function decryptKey(entry, provider) {
 }
 function publicSettings(settings) { return { ...settings, providers: Object.fromEntries(Object.entries(settings.providers || {}).map(([id, value]) => [id, { ...value, encryptedKey: undefined, hasKey: Boolean(value.encryptedKey || sessionKeys.has(id) || (id === "openai" && process.env.OPENAI_API_KEY)) }])) }; }
 
-function createWindow() { mainWindow = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } }); let firstLoad = true; mainWindow.webContents.on("did-finish-load", () => { mainWindow?.show(); if (!firstLoad && petWindow && !petWindow.isDestroyed()) petWindow.reload(); firstLoad = false; }); mainWindow.on("closed", () => { petWindow?.close(); petWindow = null; mainWindow = null; }); mainWindow.loadFile(path.join(root, "app", "index.html")); }
+function createWindow() { mainWindow = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } }); mainWindow.webContents.on("did-finish-load", () => { mainWindow?.show(); }); mainWindow.on("closed", () => { petWindow?.close(); petWindow = null; mainWindow = null; }); mainWindow.loadFile(path.join(root, "app", "index.html")); }
 
 function createPetWindow() {
   try {
