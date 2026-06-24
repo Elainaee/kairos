@@ -46,10 +46,10 @@ body {
   padding-bottom: 80px;
 }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Wrapper 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Wrapper */
 .music-root { display: flex; height: 100vh; width: 100%; }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar group 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Sidebar group */
 .music-sidebar-group { display: none; }
 @media (min-width: 768px) { .music-sidebar-group { display: block; } }
 
@@ -73,7 +73,7 @@ body {
   border-right: 1px solid var(--sidebar-border);
 }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar header 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Sidebar header */
 .music-sidebar-header {
   display: flex; align-items: center; gap: 8px;
   padding: 14px; min-height: 52px;
@@ -84,7 +84,7 @@ body {
   display: flex; align-items: center; gap: 8px;
 }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar content 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Sidebar content */
 .music-sidebar-content {
   flex: 1; display: flex; flex-direction: column; gap: 2px;
   padding: 8px; overflow-y: auto; overflow-x: hidden;
@@ -128,13 +128,13 @@ body {
   font-weight: 500;
 }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar footer 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Sidebar footer */
 .music-sidebar-footer {
   padding: 8px; border-top: 1px solid var(--sidebar-border);
 }
 .music-sidebar-footer .music-item { color: var(--sidebar-muted); font-weight: 500; }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Sidebar rail 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Sidebar rail */
 .music-sidebar-rail {
   position: absolute; inset: 0 0 0 auto;
   width: 8px; translate: 50% 0; cursor: col-resize;
@@ -146,7 +146,7 @@ body {
 }
 .music-sidebar-rail:hover::after { background: var(--sidebar-border); }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Main 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Main */
 .music-main {
   position: relative; flex: 1; min-width: 0;
   display: flex; flex-direction: column;
@@ -261,7 +261,7 @@ body {
   word-spacing: normal;
 }
 
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Mobile 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
+/* Mobile */
 @media (max-width: 767px) {
   .music-sidebar-group { display: block; }
   .music-sidebar-spacer { display: none; }
@@ -429,7 +429,7 @@ const formatTrackDuration = seconds => {
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 };
 
-const cleanMusicText = value => String(value || '').split('').filter(ch => { const code = ch.charCodeAt(0); return code >= 32 && code !== 127 && code !== 65533 && ch !== '□' && ch !== '▯' && ch !== '�'; }).join('').trim();
+const cleanMusicText = value => String(value || '').split('').filter(ch => { const code = ch.charCodeAt(0); return code >= 32 && code !== 127 && code !== 65533 && code !== 9633 && code !== 9647; }).join('').trim();
 
 const getPlaylistModel = playlistId => {
   const tracks = Array.isArray(musicState.tracks) ? musicState.tracks : [];
@@ -476,7 +476,7 @@ const renderPlaylistDetail = playlistId => {
     cover.innerHTML = '<div class="playlist-detail-cover-placeholder"><span class="music-icon">album</span></div>';
   }
   hero.querySelector('.playlist-detail-title').textContent = title;
-  hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'}${model.playlist.folderPath ? ` 闁?${model.playlist.folderPath}` : ''}`;
+  hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'}${model.playlist.folderPath ? ` ? ${model.playlist.folderPath}` : ''}`;
   hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
     const first = model.tracks[0];
     const desktopMusic = getDesktopMusic();
@@ -624,13 +624,13 @@ const renderLocalPlaylist = () => {
     }
     const title = playlist.name || 'Local Playlist';
     card.querySelector('.playlist-card-title').textContent = title;
-    card.querySelector('.playlist-card-meta').textContent = `${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'}${firstTrack ? ` 闁?${cleanMusicText(firstTrack.title) || cleanMusicText(firstTrack.fileName) || 'Untitled'}` : ''}`;
+    card.querySelector('.playlist-card-meta').textContent = `${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'}${firstTrack ? ` ? ${cleanMusicText(firstTrack.title) || cleanMusicText(firstTrack.fileName) || 'Untitled'}` : ''}`;
     card.dataset.playlistId = playlist.id;
     attachTiltedCard(card);
     localPlaylistList.append(card);
   });
-  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'} 闁?${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
-  // Delegated click 闂?bypasses 3D transform interference
+  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'} ? ${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
+  // Delegated click bypasses 3D transform interference
   localPlaylistList.onclick = event => {
     const card = event.target.closest('.playlist-tilted-card');
     if (!card || !card.dataset.playlistId) return;
