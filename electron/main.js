@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
