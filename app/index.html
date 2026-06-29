@@ -328,17 +328,15 @@ Add slot
             window.kairosDesktop.pet?.show();
           };
           document.body.appendChild(petRestoreBtn);
+          const syncPetVisibility = visible => {
+            petRestoreBtn.style.display = visible === false ? 'flex' : 'none';
+          };
 
           window.kairosDesktop.pet?.onOpenAi?.(() => {
             document.getElementById('aiPanel').showModal();
           });
-          window.kairosDesktop.pet?.onVisibilityChanged?.(visible => {
-            if (visible === false) {
-              petRestoreBtn.style.display = 'flex';
-            } else {
-              petRestoreBtn.style.display = 'none';
-            }
-          });
+          window.kairosDesktop.pet?.onVisibilityChanged?.(syncPetVisibility);
+          window.kairosDesktop.pet?.getVisibility?.().then(syncPetVisibility);
         } else {
           // Browser mode: listen for postMessage from pet
           window.addEventListener('message', event => {

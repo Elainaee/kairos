@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     show: () => ipcRenderer.invoke("pet:show"),
     click: () => ipcRenderer.invoke("pet:click"),
     isReady: () => ipcRenderer.invoke("pet:is-ready"),
+    getVisibility: () => ipcRenderer.invoke("pet:get-visibility"),
     resize: (w, h) => ipcRenderer.invoke("pet:resize", { width: w, height: h }),
     move: (dx, dy) => ipcRenderer.invoke("pet:move", { dx, dy }),
     setMousePassthrough: (ignore) => ipcRenderer.send("pet:set-mouse-passthrough", Boolean(ignore)),
