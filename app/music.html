@@ -475,7 +475,7 @@ const renderPlaylistDetail = playlistId => {
     cover.innerHTML = '<div class="playlist-detail-cover-placeholder"><span class="material-symbols-outlined">album</span></div>';
   }
   hero.querySelector('.playlist-detail-title').textContent = title;
-  hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'}${model.playlist.folderPath ? ` ? ${model.playlist.folderPath}` : ''}`;
+  hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'} ${model.playlist.folderPath ? `\u00b7 ${model.playlist.folderPath}` : ''}`;
   hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
     const first = model.tracks[0];
     const desktopMusic = getDesktopMusic();
@@ -624,12 +624,12 @@ const renderLocalPlaylist = () => {
     }
     const title = playlist.name || 'Local Playlist';
     card.querySelector('.playlist-card-title').textContent = title;
-    card.querySelector('.playlist-card-meta').textContent = `${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'}${firstTrack ? ` ? ${cleanMusicText(firstTrack.title) || cleanMusicText(firstTrack.fileName) || 'Untitled'}` : ''}`;
+    card.querySelector('.playlist-card-meta').textContent = `${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'} ${firstTrack ? `\u00b7 ${cleanMusicText(firstTrack.title) || cleanMusicText(firstTrack.fileName) || 'Untitled'}` : ''}`;
     card.dataset.playlistId = playlist.id;
     attachTiltedCard(card);
     localPlaylistList.append(card);
   });
-  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'} ? ${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
+  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'}\u00b7 ${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
   // Delegated click bypasses 3D transform interference
   localPlaylistList.onclick = event => {
     const card = event.target.closest('.playlist-tilted-card');
