@@ -76,7 +76,7 @@
   const spaPages = {
     habits: ['habits.html?embed=1&v=41', 'Habits'],
     schedule: ['schedule.html?embed=1&v=47', 'Schedule'],
-    music: ['music.html?embed=1&v=27', 'Music']
+    music: ['music.html?embed=1&v=37', 'Music']
   };
   const syncScheduleState = frame => {
     if (!frame?.contentWindow) return;

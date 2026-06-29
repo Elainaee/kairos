@@ -172,8 +172,8 @@ body {
 .music-view-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
 .music-view-title{margin:0;color:var(--sidebar-fg);font-size:22px;line-height:1.2;font-weight:750}
 .music-view-subtitle{margin:5px 0 0;color:var(--sidebar-muted);font-size:13px}
-.music-import-button{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:0;border-radius:9px;background:#1b1c18;color:#fff;font:700 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 18px rgba(27,28,24,.14);transition:transform .16s ease,opacity .16s ease}
-.music-import-button:hover{transform:translateY(-1px);opacity:.92}
+.music-import-button{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:0;border-radius:9px;background:var(--primary,#d1633c);color:var(--primary-foreground,#fff);font:700 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 18px color-mix(in srgb,var(--primary,#d1633c) 24%,transparent);transition:transform .16s ease,opacity .16s ease}
+.music-import-button:hover{background:var(--primary,#d1633c)!important;color:var(--primary-foreground,#fff)!important;transform:translateY(-1px);opacity:.92}
 .music-import-button:active{transform:translateY(0)}
 .local-playlist-card{max-width:960px;border:0;background:transparent;box-shadow:none;overflow:visible}
 .local-playlist-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,220px));gap:18px;align-items:start;overflow:visible;padding:2px 2px 18px}
@@ -232,6 +232,19 @@ body {
 .playlist-detail-table tbody tr{transition:background .14s ease}
 .playlist-detail-table tbody tr:hover{background:rgba(27,28,24,.035)}
 .track-index{width:44px;text-align:center!important;color:#8f8a7d}
+.track-play-cell{position:relative;width:44px;text-align:center!important;color:#8f8a7d}
+.track-number{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;color:#8f8a7d;font-weight:650}
+.playlist-detail-table tbody tr .track-play-cell button.track-play-button{position:absolute;left:50%;top:50%;display:grid;width:34px;height:34px;padding:0!important;place-items:center;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#27364a!important;opacity:0;transform:translate(-50%,-50%) scale(.92);cursor:pointer;appearance:none;-webkit-appearance:none;transition:opacity .14s ease,transform .14s ease,color .14s ease,filter .14s ease}
+.track-play-button svg{width:22px;height:22px;display:block;overflow:visible;filter:none;transition:filter .14s ease,transform .14s ease}
+.track-pause-icon{display:none!important}
+.track-play-button[data-state="pause"] .track-play-icon{display:none!important}
+.track-play-button[data-state="pause"] .track-pause-icon{display:block!important}
+.playlist-detail-table tbody tr:hover .track-number,.playlist-detail-table tbody tr:focus-within .track-number{opacity:0}
+.playlist-detail-table tbody tr:hover .track-play-cell button.track-play-button,.playlist-detail-table tbody tr:focus-within .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%) scale(1)}
+.playlist-detail-table tbody tr.is-playing .track-number{opacity:0}
+.playlist-detail-table tbody tr.is-playing .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%) scale(1)}
+.playlist-detail-table tbody tr .track-play-cell button.track-play-button:hover,.playlist-detail-table tbody tr .track-play-cell button.track-play-button:focus-visible{border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#162236!important}
+.track-play-button:hover svg,.track-play-button:focus-visible svg{filter:drop-shadow(0 4px 5px rgba(20,28,40,.34));transform:translateY(-1px)}
 .track-title-cell{display:flex;align-items:center;gap:10px;min-width:0}
 .track-cover{width:38px;height:38px;border-radius:6px;overflow:hidden;display:grid;place-items:center;background:#ECE7D9;color:#676556;flex:0 0 38px}
 .track-cover img{width:100%;height:100%;object-fit:cover}
@@ -433,6 +446,24 @@ const formatTrackDuration = seconds => {
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 };
 
+const hydrateTrackDuration = (track, cell) => {
+  if (!track || Number.isFinite(track.duration) && track.duration > 0 || !track.playUrl || !cell) return;
+  const audio = new Audio();
+  audio.preload = 'metadata';
+  audio.src = track.playUrl;
+  audio.onloadedmetadata = async () => {
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    track.duration = duration;
+    cell.textContent = formatTrackDuration(duration);
+    const desktopMusic = getDesktopMusic();
+    if (desktopMusic?.updateTrack) {
+      try { musicState = await desktopMusic.updateTrack({ id: track.id, duration }); } catch {}
+    }
+  };
+  audio.onerror = () => {};
+};
+
 const cleanMusicText = value => String(value || '').split('').filter(ch => { const code = ch.charCodeAt(0); return code >= 32 && code !== 127 && code !== 65533 && code !== 9633 && code !== 9647; }).join('').trim();
 
 const getPlaylistModel = playlistId => {
@@ -481,18 +512,41 @@ const renderPlaylistDetail = playlistId => {
   }
   hero.querySelector('.playlist-detail-title').textContent = title;
   hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'} ${model.playlist.folderPath ? `\u00b7 ${model.playlist.folderPath}` : ''}`;
+  let activeTrackId = null;
+  let activeTrackPlaying = false;
+  const updateTrackPlaybackRows = () => {
+    tbody?.querySelectorAll('tr[data-track-id]').forEach(row => {
+      const isActive = row.dataset.trackId === activeTrackId && activeTrackPlaying;
+      row.classList.toggle('is-playing', isActive);
+      const button = row.querySelector('.track-play-button');
+      if (button) {
+        button.dataset.state = isActive ? 'pause' : 'play';
+        button.setAttribute('aria-label', isActive ? 'Pause track' : 'Play track');
+      }
+    });
+  };
+  const playPlaylistTrack = async trackId => {
+    const target = model.tracks.find(track => track.id === trackId);
+    const desktopMusic = getDesktopMusic();
+    if (!target) return;
+    if (activeTrackId === target.id && activeTrackPlaying) {
+      activeTrackPlaying = false;
+      notifyMusicPlayer({ currentTrackId: target.id, playing: false });
+      updateTrackPlaybackRows();
+      return;
+    }
+    const queueTrackIds = model.tracks.map(track => track.id);
+    if (desktopMusic) {
+      musicState = await desktopMusic.updatePlayback({ queueTrackIds, currentTrackId: target.id });
+    }
+    activeTrackId = target.id;
+    activeTrackPlaying = true;
+    updateTrackPlaybackRows();
+    notifyMusicPlayer({ currentTrackId: target.id, playing: true });
+  };
   hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
     const first = model.tracks[0];
-    const desktopMusic = getDesktopMusic();
-    if (first && desktopMusic?.playPlaylist) {
-      musicState = await desktopMusic.playPlaylist(model.playlist.id);
-      notifyMusicPlayer({ currentTrackId: first.id, playing: true });
-    } else if (first && desktopMusic) {
-      await desktopMusic.updatePlayback({ queueTrackIds: model.tracks.map(track => track.id), currentTrackId: first.id });
-      notifyMusicPlayer({ currentTrackId: first.id, playing: true });
-    } else if (first) {
-      notifyMusicPlayer({ currentTrackId: first.id, playing: true });
-    }
+    if (first) await playPlaylistTrack(first.id);
   });
 
   const deleteBtn = hero.querySelector('.playlist-delete');
@@ -547,13 +601,18 @@ const renderPlaylistDetail = playlistId => {
     resultsLabel.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
     filtered.forEach((track, index) => {
         const row = document.createElement('tr');
+        row.dataset.trackId = track.id;
         row.innerHTML = `
-          <td class="track-index">${String(index + 1).padStart(2, '0')}</td>
+          <td class="track-play-cell"><span class="track-number">${String(index + 1).padStart(2, '0')}</span><button class="track-play-button send" type="button" aria-label="Play track" data-state="play"><svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg></button></td>
           <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div></td>
           <td class="track-album"></td>
           <td class="track-like"><span class="material-symbols-outlined">favorite</span></td>
           <td class="track-duration"></td>
         `;
+        row.querySelector('.track-play-button').addEventListener('click', event => {
+          event.stopPropagation();
+          playPlaylistTrack(track.id);
+        });
         const trackCover = row.querySelector('.track-cover');
         if (track.coverUrl) {
           const img = document.createElement('img');
@@ -566,9 +625,12 @@ const renderPlaylistDetail = playlistId => {
         row.querySelector('.track-name').textContent = cleanMusicText(track.title) || cleanMusicText(track.fileName) || 'Untitled';
         row.querySelector('.track-artist').textContent = cleanMusicText(track.artist) || 'Local music';
         row.querySelector('.track-album').textContent = cleanMusicText(track.album) || title;
-        row.querySelector('.track-duration').textContent = formatTrackDuration(track.duration);
+        const durationCell = row.querySelector('.track-duration');
+        durationCell.textContent = formatTrackDuration(track.duration);
+        hydrateTrackDuration(track, durationCell);
         tbody.append(row);
       });
+    updateTrackPlaybackRows();
   };
   playlistDetailContent.append(hero, tabs, table);
   renderRows('');
@@ -742,6 +804,6 @@ refreshMusicState();
 <link href="stitch-shell.css?v=7" rel="stylesheet">
 <link href="stitch-layout.css?v=24" rel="stylesheet">
 <link href="tweakcn-theme.css?v=9" rel="stylesheet">
-<script src="stitch-shell.js?v=50"></script>
+<script src="stitch-shell.js?v=60"></script>
 </body>
 </html>
