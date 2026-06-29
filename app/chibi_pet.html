@@ -204,6 +204,20 @@ let bubbleTimer = null;
 let isDragging  = false;
 let clickCount  = 0;
 let startX, startY, prevSX, prevSY, origR, origB;
+let pendingMoveDx = 0, pendingMoveDy = 0, moveFrame = 0;
+
+function flushDesktopMove() {
+  moveFrame = 0;
+  if (!pendingMoveDx && !pendingMoveDy) return;
+  const dx = pendingMoveDx, dy = pendingMoveDy;
+  pendingMoveDx = 0; pendingMoveDy = 0;
+  window.kairosDesktop?.pet?.move(dx, dy);
+}
+function queueDesktopMove(dx, dy) {
+  pendingMoveDx += dx;
+  pendingMoveDy += dy;
+  if (!moveFrame) moveFrame = requestAnimationFrame(flushDesktopMove);
+}
 
 function getSlot() {
   const h = new Date().getHours();
@@ -320,10 +334,11 @@ document.addEventListener('mousemove',(e)=>{
   if(startX===undefined) return;
   if(!isDragging&&Math.hypot(e.screenX-startX,e.screenY-startY)>5) isDragging=true;
   if(!isDragging) return;
-  window.parent!==window?window.parent.postMessage({type:'kairos-pet-drag',dx:e.screenX-startX,dy:e.screenY-startY},'*'):window.kairosDesktop?.pet?.move(e.screenX-prevSX,e.screenY-prevSY)
+  window.parent!==window?window.parent.postMessage({type:'kairos-pet-drag',dx:e.screenX-startX,dy:e.screenY-startY},'*'):queueDesktopMove(e.screenX-prevSX,e.screenY-prevSY)
   prevSX=e.screenX; prevSY=e.screenY;
 });
 document.addEventListener('mouseup',()=>{
+  if(window.parent===window) flushDesktopMove();
   if(isDragging&&window.parent!==window) window.parent.postMessage({type:'kairos-pet-drop'},'*');
   setTimeout(()=>isDragging=false,10);
   startX=undefined;

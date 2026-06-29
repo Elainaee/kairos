@@ -370,8 +370,6 @@ body {
 
 </div>
 
-<link href="music-player.css?v=3" rel="stylesheet"><script src="music-player.js?v=3"></script>
-
 <script>
 const group = document.getElementById('sidebarGroup');
 const trigger = document.getElementById('sidebarTrigger');
@@ -397,6 +395,13 @@ const getDesktopMusic = () => {
     return window.parent?.kairosDesktop?.music || null;
   } catch {
     return null;
+  }
+};
+
+const notifyMusicPlayer = (detail = {}) => {
+  const payload = { source: location.href, at: Date.now(), refresh: true, ...detail };
+  if (window.parent && window.parent !== window) {
+    try { window.parent.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
   }
 };
 
@@ -479,11 +484,14 @@ const renderPlaylistDetail = playlistId => {
   hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
     const first = model.tracks[0];
     const desktopMusic = getDesktopMusic();
-    if (first && desktopMusic) {
-      await desktopMusic.updatePlayback({ currentTrackId: first.id });
-      window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+    if (first && desktopMusic?.playPlaylist) {
+      musicState = await desktopMusic.playPlaylist(model.playlist.id);
+      notifyMusicPlayer({ currentTrackId: first.id, playing: true });
+    } else if (first && desktopMusic) {
+      await desktopMusic.updatePlayback({ queueTrackIds: model.tracks.map(track => track.id), currentTrackId: first.id });
+      notifyMusicPlayer({ currentTrackId: first.id, playing: true });
     } else if (first) {
-      window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+      notifyMusicPlayer({ currentTrackId: first.id, playing: true });
     }
   });
 
@@ -629,7 +637,7 @@ const renderLocalPlaylist = () => {
     attachTiltedCard(card);
     localPlaylistList.append(card);
   });
-  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'}\u00b7 ${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
+  localPlaylistStatus.textContent = `${playlists.length} playlist${playlists.length === 1 ? '' : 's'} \u00b7 ${tracks.length} track${tracks.length === 1 ? '' : 's'}`;
   // Delegated click bypasses 3D transform interference
   localPlaylistList.onclick = event => {
     const card = event.target.closest('.playlist-tilted-card');
@@ -643,12 +651,12 @@ const refreshMusicState = async () => {
   const desktopMusic = getDesktopMusic();
   if (!desktopMusic) {
     renderLocalPlaylist();
-    window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+    notifyMusicPlayer();
     return;
   }
   musicState = await desktopMusic.getState();
   renderLocalPlaylist();
-  window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+  notifyMusicPlayer();
 };
 
 importLocalPlaylist.addEventListener('click', async () => {
@@ -661,7 +669,7 @@ importLocalPlaylist.addEventListener('click', async () => {
   const result = await desktopMusic.chooseFolder();
   musicState = result.state || result;
   renderLocalPlaylist();
-  window.dispatchEvent(new CustomEvent('kairos:music-refresh'));
+  notifyMusicPlayer();
   if (result.rejected?.length) {
     localPlaylistStatus.textContent = `${result.imported?.length || 0} imported, ${result.rejected.length} skipped`;
   }
@@ -734,6 +742,6 @@ refreshMusicState();
 <link href="stitch-shell.css?v=7" rel="stylesheet">
 <link href="stitch-layout.css?v=24" rel="stylesheet">
 <link href="tweakcn-theme.css?v=9" rel="stylesheet">
-<script src="stitch-shell.js?v=49"></script>
+<script src="stitch-shell.js?v=50"></script>
 </body>
 </html>

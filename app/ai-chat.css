@@ -1,6 +1,14 @@
 #aiPanel{box-sizing:border-box;width:min(520px,calc(100vw - 32px));height:min(680px,calc(100vh - 32px));max-width:none;max-height:none;margin:16px 16px 16px auto;padding:0;overflow:hidden;border:1px solid var(--border);border-radius:calc(var(--radius) + 6px)!important;background:var(--card)!important;color:var(--card-foreground)!important;box-shadow:0 28px 80px rgb(42 34 31/.2)!important}
 #aiPanel[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto}
 #aiPanel::backdrop{background:rgb(37 31 29/.18);backdrop-filter:blur(3px)}
+html.ai-window-mode,html.ai-window-mode body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent!important}
+html.ai-window-mode body{box-sizing:border-box;padding:12px}
+html.ai-window-mode #aiPanel{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;width:calc(100vw - 24px);height:calc(100vh - 24px);margin:0;border:1px solid color-mix(in oklch,var(--border) 88%,#6d625c)!important;border-radius:32px!important;clip-path:inset(0 round 32px);background-clip:padding-box;box-shadow:0 18px 52px rgb(42 34 31/.22)!important;animation:aiPanelFloatIn .18s cubic-bezier(.2,.85,.2,1) both;transform-origin:100% 88%}
+html.ai-window-mode #aiPanel::backdrop{display:none}
+html.ai-window-mode .ai-chat-controls{position:relative;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);padding-right:0}
+html.ai-window-mode .ai-chat-controls>span{position:absolute;right:0;top:-23px;padding:0;font-size:9px;opacity:.72}
+@keyframes aiPanelFloatIn{from{opacity:0;transform:translate(10px,8px) scale(.985);filter:blur(1px)}to{opacity:1;transform:translate(0,0) scale(1);filter:blur(0)}}
+@media(prefers-reduced-motion:reduce){html.ai-window-mode #aiPanel{animation:none}}
 #closeAiPanel{width:40px!important;height:40px!important;border:1px solid var(--border)!important;border-radius:12px!important;background:color-mix(in oklch,var(--popover) 68%,transparent)!important;box-shadow:var(--shadow-sm);transition:transform .16s ease,background .16s ease}#closeAiPanel .material-symbols-outlined{font-size:22px!important}#closeAiPanel:hover{transform:scale(1.04);background:var(--accent)!important;color:var(--foreground)!important}#closeAiPanel:active{transform:scale(.96)}#closeAiPanel:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 26%,transparent);outline-offset:2px}
 .ai-chat-header{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:14px 18px 12px;border-bottom:1px solid var(--border);background:color-mix(in oklch,var(--popover) 91%,transparent)}
 .ai-chat-contact,.ai-chat-header-actions,.ai-chat-composer{display:flex;align-items:center}

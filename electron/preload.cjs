@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   getProviderSettings: () => ipcRenderer.invoke("ai:get-settings"),
   saveProviderSettings: (settings) => ipcRenderer.invoke("ai:save-settings", settings),
   testProvider: (provider, sessionKey = "") => ipcRenderer.invoke("ai:test-provider", { provider, sessionKey }),
+  closeAiWindow: () => ipcRenderer.invoke("ai-window:close"),
   sendMessage: (payload) => ipcRenderer.invoke("ai:send", payload),
   extractSchedules: (payload) => ipcRenderer.invoke("ai:extract-schedules", payload),
   stopMessage: (requestId) => ipcRenderer.invoke("ai:stop", requestId),
@@ -26,6 +27,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     removeTrack: (id) => ipcRenderer.invoke("music:remove-track", id),
     clear: () => ipcRenderer.invoke("music:clear"),
     reorder: (ids) => ipcRenderer.invoke("music:reorder", ids),
+    playPlaylist: (id) => ipcRenderer.invoke("music:play-playlist", id),
     removePlaylist: (id) => ipcRenderer.invoke("music:remove-playlist", id),
     pathForFile: (file) => webUtils.getPathForFile(file)
   }),

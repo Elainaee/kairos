@@ -8,6 +8,7 @@ const EMPTY = {
   version: 1,
   tracks: [],
   playlists: [],
+  queueTrackIds: [],
   currentTrackId: null,
   mode: "sequence",
   volume: 70,
@@ -23,6 +24,7 @@ function normalize(input = {}) {
   const out = { ...structuredClone(EMPTY), ...input, version: 1 };
   if (!Array.isArray(out.tracks)) out.tracks = [];
   if (!Array.isArray(out.playlists)) out.playlists = [];
+  if (!Array.isArray(out.queueTrackIds)) out.queueTrackIds = [];
   if (!out.positions || typeof out.positions !== "object" || Array.isArray(out.positions)) out.positions = {};
   if (!["sequence", "loop", "shuffle", "single"].includes(out.mode)) out.mode = "sequence";
   out.volume = Math.min(100, Math.max(0, Number.isFinite(out.volume) ? out.volume : 70));
@@ -253,7 +255,8 @@ export class MusicLibrary {
         rejected.push({ path: resolved, reason: "unreadable_file" });
       }
     }
-    if (!state.currentTrackId && state.tracks.length) state.currentTrackId = state.tracks[0].id;
+    if (!state.queueTrackIds.length && state.tracks.length) state.queueTrackIds = state.tracks.map(track => track.id);
+    if (!state.currentTrackId && state.queueTrackIds.length) state.currentTrackId = state.queueTrackIds[0];
     await this.write(state);
     return { state: await this.publicState(), added: await Promise.all(added.map(track => this.publicTrack(track))), rejected };
   }
@@ -314,6 +317,10 @@ export class MusicLibrary {
 
   async updatePlayback(patch = {}) {
     const state = await this.read();
+    if (Array.isArray(patch.queueTrackIds)) {
+      const validIds = new Set(state.tracks.map(track => track.id));
+      state.queueTrackIds = patch.queueTrackIds.filter(id => validIds.has(id));
+    }
     if (patch.currentTrackId !== undefined) state.currentTrackId = patch.currentTrackId || null;
     if (patch.mode && ["sequence", "loop", "shuffle", "single"].includes(patch.mode)) state.mode = patch.mode;
     if (Number.isFinite(patch.volume)) state.volume = Math.min(100, Math.max(0, Math.round(patch.volume)));
@@ -336,8 +343,9 @@ export class MusicLibrary {
   async removeTrack(id) {
     const state = await this.read();
     state.tracks = state.tracks.filter(track => track.id !== id);
+    state.queueTrackIds = state.queueTrackIds.filter(trackId => trackId !== id);
     delete state.positions[id];
-    if (state.currentTrackId === id) state.currentTrackId = state.tracks[0]?.id || null;
+    if (state.currentTrackId === id) state.currentTrackId = state.queueTrackIds[0] || state.tracks[0]?.id || null;
     await this.write(state);
     return this.publicState();
   }
@@ -345,6 +353,7 @@ export class MusicLibrary {
   async clear() {
     const state = await this.read();
     state.tracks = [];
+    state.queueTrackIds = [];
     state.currentTrackId = null;
     state.positions = {};
     await this.write(state);
@@ -353,7 +362,13 @@ export class MusicLibrary {
 
   async removePlaylist(id) {
     const state = await this.read();
+    const removed = state.playlists.find(item => item.id === id);
     state.playlists = state.playlists.filter(item => item.id !== id);
+    if (removed?.trackIds?.length) {
+      const removedIds = new Set(removed.trackIds);
+      state.queueTrackIds = state.queueTrackIds.filter(trackId => !removedIds.has(trackId));
+      if (state.currentTrackId && removedIds.has(state.currentTrackId)) state.currentTrackId = state.queueTrackIds[0] || state.tracks[0]?.id || null;
+    }
     await this.write(state);
     return this.publicState();
   }
@@ -364,6 +379,20 @@ export class MusicLibrary {
     const ordered = ids.map(id => byId.get(id)).filter(Boolean);
     const rest = state.tracks.filter(track => !ids.includes(track.id));
     state.tracks = [...ordered, ...rest];
+    state.queueTrackIds = [...ordered.map(track => track.id), ...state.queueTrackIds.filter(id => !ids.includes(id))];
+    await this.write(state);
+    return this.publicState();
+  }
+
+  async playPlaylist(id) {
+    const state = await this.read();
+    const playlist = state.playlists.find(item => item.id === id);
+    if (!playlist) throw new Error("playlist_not_found");
+    const validIds = new Set(state.tracks.map(track => track.id));
+    const queueTrackIds = (playlist.trackIds || []).filter(trackId => validIds.has(trackId));
+    state.queueTrackIds = queueTrackIds;
+    state.currentTrackId = queueTrackIds[0] || null;
+    if (state.currentTrackId) state.positions[state.currentTrackId] = 0;
     await this.write(state);
     return this.publicState();
   }

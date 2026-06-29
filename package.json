@@ -5,6 +5,7 @@
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
+    "start": "electron .",
     "dev": "electron .",
     "check": "node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --test electron/*.test.js"
   },

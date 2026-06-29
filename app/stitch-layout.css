@@ -2,9 +2,9 @@
 .kairos-shell-body>.kairos-topbar{position:fixed!important;inset:0 0 auto 0!important;width:100vw!important;z-index:999!important}
 .kairos-page-main{margin-left:0!important;padding-top:0!important;width:100vw!important;min-height:0!important;overflow:auto!important}
 .kairos-page-main[hidden],.kairos-spa-view[hidden]{display:none!important}
-.kairos-spa-view{position:fixed;inset:64px 0 80px;width:100vw;height:calc(100vh - 144px);border:0;background:var(--background,#f9f7f0);z-index:20}
-.kairos-secondary-view>#musicPlayer{display:none!important}
-.kairos-secondary-view>.kairos-spa-view{bottom:0;height:calc(100vh - 64px)}
+.kairos-spa-view{position:fixed;inset:64px 0 0;width:100vw;height:calc(100vh - 64px);border:0;background:var(--background,#f9f7f0);z-index:20}
+.kairos-secondary-view:not(.kairos-music-view)>#musicPlayer{display:none!important}
+.kairos-secondary-view.kairos-music-view>.kairos-spa-view{bottom:80px;height:calc(100vh - 144px)}
 .kairos-embedded-root,.kairos-embedded{height:100%!important;min-height:100%!important;overflow:hidden!important}
 .kairos-embedded{display:block!important;background:var(--background,#f9f7f0)!important}
 .kairos-embedded>.kairos-page-main{box-sizing:border-box!important;margin:0!important;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;padding-top:0!important;overflow-x:hidden!important;overflow-y:auto!important}

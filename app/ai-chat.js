@@ -6,6 +6,8 @@
   const input = $('aiInput');
   const send = $('sendAiMessage');
   if (!panel || !messages || !input || !send) return;
+  const windowMode = panel.dataset.windowMode === 'true';
+  if (windowMode) document.documentElement.classList.add('ai-window-mode');
 
   const ui = {
     session: $('aiSessionSelect'), provider: $('aiProviderSelect'), model: $('aiModelInput'),
@@ -301,8 +303,15 @@
     await desktop.conversations.update(active.id, { provider: active.provider, model: active.model });
   }));
   ui.model?.addEventListener('change', runAction(async () => { if (!active) throw new Error('会话尚未加载完成'); active.model = ui.model.value.trim(); await desktop.conversations.update(active.id, { model: active.model }); }));
-  $('closeAiPanel')?.addEventListener('click', () => panel.close());
-  panel.addEventListener('close', () => input.blur());
-  new MutationObserver(() => { if (panel.open) { renderMessages(); input.focus(); } }).observe(panel, { attributes: true, attributeFilter: ['open'] });
-  initialize().catch(error => { initializationError = error.message || String(error); initialized = false; renderMessages(); updateComposer(); });
+  $('closeAiPanel')?.addEventListener('click', () => {
+    if (windowMode) desktop?.closeAiWindow?.();
+    else panel.close();
+  });
+  if (!windowMode) {
+    panel.addEventListener('close', () => input.blur());
+    new MutationObserver(() => { if (panel.open) { renderMessages(); input.focus(); } }).observe(panel, { attributes: true, attributeFilter: ['open'] });
+  }
+  initialize()
+    .then(() => { if (windowMode) { renderMessages(); input.focus(); } })
+    .catch(error => { initializationError = error.message || String(error); initialized = false; renderMessages(); updateComposer(); });
 })();

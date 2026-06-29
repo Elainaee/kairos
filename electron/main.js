@@ -15,13 +15,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 dotenv.config({ path: path.join(root, ".env.local"), quiet: true });
 const controllers = new Map();
 const sessionKeys = new Map();
-let mainWindow, petWindow;
+let mainWindow, petWindow, aiChatWindow;
+let aiChatFollowTimer = null;
+let aiChatTargetBounds = null;
+let aiChatFadeTimer = null;
+let petMoveTimer = null;
+let petPendingDx = 0;
+let petPendingDy = 0;
+let petVisible = true;
 let aiStore, appStateStore, attachments, toolRuntime, contextManager, appAdapters, musicLibrary;
 
 const settingsPath = () => path.join(app.getPath("userData"), "ai-settings.json");
+const petStatePath = () => path.join(app.getPath("userData"), "pet-state.json");
 const defaults = { defaultProvider: "openai", providers: { openai: { model: PROVIDERS.openai.defaultModel, credentialMode: "session", encryptedKey: "" } } };
 async function readSettings() { try { return { ...defaults, ...JSON.parse(await fs.readFile(settingsPath(), "utf8")) }; } catch { return structuredClone(defaults); } }
 async function writeSettings(value) { await fs.mkdir(path.dirname(settingsPath()), { recursive: true }); await fs.writeFile(settingsPath(), JSON.stringify(value, null, 2), "utf8"); }
+async function readPetState() { try { return { visible: JSON.parse(await fs.readFile(petStatePath(), "utf8")).visible !== false }; } catch { return { visible: true }; } }
+async function writePetState(value) { await fs.mkdir(path.dirname(petStatePath()), { recursive: true }); await fs.writeFile(petStatePath(), JSON.stringify(value, null, 2), "utf8"); }
+function sendPetVisibility() { mainWindow?.webContents.send("pet:visibility", petVisible); }
 function decryptKey(entry, provider) {
   if (sessionKeys.has(provider)) return sessionKeys.get(provider);
   if (entry?.encryptedKey && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(entry.encryptedKey, "base64"));
@@ -30,8 +41,123 @@ function decryptKey(entry, provider) {
   return "";
 }
 function publicSettings(settings) { return { ...settings, providers: Object.fromEntries(Object.entries(settings.providers || {}).map(([id, value]) => [id, { ...value, encryptedKey: undefined, hasKey: Boolean(value.encryptedKey || sessionKeys.has(id) || (id === "openai" && process.env.OPENAI_API_KEY)) }])) }; }
+function broadcastAiStream(payload) {
+  for (const win of [mainWindow, aiChatWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.send("ai:stream", payload);
+  }
+}
+function getAiChatBounds() {
+  const width = 520, height = 680, visualOverlap = 96;
+  const petBounds = petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null;
+  const display = petBounds ? screen.getDisplayNearestPoint({ x: petBounds.x, y: petBounds.y }) : screen.getPrimaryDisplay();
+  const work = display.workArea;
+  let x = petBounds ? petBounds.x - width + visualOverlap : work.x + work.width - width - 24;
+  let y = petBounds ? petBounds.y + petBounds.height - height : work.y + work.height - height - 24;
+  x = Math.max(work.x, Math.min(x, work.x + work.width - width));
+  y = Math.max(work.y, Math.min(y, work.y + work.height - height));
+  return { x, y, width, height };
+}
+function stopAiChatFollow() {
+  if (!aiChatFollowTimer) return;
+  clearInterval(aiChatFollowTimer);
+  aiChatFollowTimer = null;
+  aiChatTargetBounds = null;
+}
+function stopAiChatFade() {
+  if (!aiChatFadeTimer) return;
+  clearInterval(aiChatFadeTimer);
+  aiChatFadeTimer = null;
+}
+function updateAiChatFollowTarget() {
+  if (!aiChatWindow || aiChatWindow.isDestroyed() || !aiChatWindow.isVisible()) return;
+  aiChatTargetBounds = getAiChatBounds();
+  if (aiChatFollowTimer) return;
+  aiChatFollowTimer = setInterval(() => {
+    if (!aiChatWindow || aiChatWindow.isDestroyed() || !aiChatWindow.isVisible() || !aiChatTargetBounds) {
+      stopAiChatFollow();
+      return;
+    }
+    const current = aiChatWindow.getBounds();
+    const nextX = Math.round(current.x + (aiChatTargetBounds.x - current.x) * 0.32);
+    const nextY = Math.round(current.y + (aiChatTargetBounds.y - current.y) * 0.32);
+    const closeEnough = Math.abs(nextX - aiChatTargetBounds.x) <= 1 && Math.abs(nextY - aiChatTargetBounds.y) <= 1;
+    aiChatWindow.setPosition(closeEnough ? aiChatTargetBounds.x : nextX, closeEnough ? aiChatTargetBounds.y : nextY);
+    if (closeEnough) stopAiChatFollow();
+  }, 16);
+}
+function hideAiChatWindowSmooth() {
+  if (!aiChatWindow || aiChatWindow.isDestroyed() || !aiChatWindow.isVisible()) return false;
+  stopAiChatFade();
+  stopAiChatFollow();
+  let opacity = aiChatWindow.getOpacity();
+  aiChatFadeTimer = setInterval(() => {
+    if (!aiChatWindow || aiChatWindow.isDestroyed()) { stopAiChatFade(); return; }
+    opacity = Math.max(0, opacity - 0.28);
+    aiChatWindow.setOpacity(opacity);
+    if (opacity <= 0) {
+      aiChatWindow.hide();
+      aiChatWindow.setOpacity(1);
+      stopAiChatFade();
+    }
+  }, 12);
+  return true;
+}
+function flushPetMove() {
+  petMoveTimer = null;
+  if (!petWindow || petWindow.isDestroyed()) { petPendingDx = 0; petPendingDy = 0; return; }
+  if (!petPendingDx && !petPendingDy) return;
+  const [x, y] = petWindow.getPosition();
+  petWindow.setPosition(x + petPendingDx, y + petPendingDy, false);
+  petPendingDx = 0;
+  petPendingDy = 0;
+  updateAiChatFollowTarget();
+}
+function queuePetMove(dx, dy) {
+  petPendingDx += Number(dx) || 0;
+  petPendingDy += Number(dy) || 0;
+  if (!petMoveTimer) petMoveTimer = setTimeout(flushPetMove, 16);
+}
+function createAiChatWindow() {
+  if (aiChatWindow && !aiChatWindow.isDestroyed()) return aiChatWindow;
+  aiChatWindow = new BrowserWindow({
+    ...getAiChatBounds(),
+    minWidth: 360,
+    minHeight: 480,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    opacity: 0,
+    backgroundColor: "#00000000",
+    webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true }
+  });
+  aiChatWindow.loadFile(path.join(root, "app", "ai-chat-window.html"));
+  aiChatWindow.on("closed", () => { stopAiChatFade(); stopAiChatFollow(); aiChatWindow = null; });
+  return aiChatWindow;
+}
+function showAiChatWindow() {
+  const win = createAiChatWindow();
+  win.setBounds(getAiChatBounds());
+  const reveal = () => {
+    if (win.isDestroyed()) return;
+    stopAiChatFade();
+    win.setOpacity(0);
+    win.show();
+    win.focus();
+    let opacity = 0;
+    const timer = setInterval(() => {
+      if (win.isDestroyed()) { clearInterval(timer); return; }
+      opacity = Math.min(1, opacity + 0.22);
+      win.setOpacity(opacity);
+      if (opacity >= 1) clearInterval(timer);
+    }, 12);
+  };
+  if (win.webContents.isLoading()) win.once("ready-to-show", reveal);
+  else reveal();
+}
 
-function createWindow() { mainWindow = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } }); mainWindow.webContents.on("did-finish-load", () => { mainWindow?.show(); }); mainWindow.on("closed", () => { petWindow?.close(); petWindow = null; mainWindow = null; }); mainWindow.loadFile(path.join(root, "app", "index.html")); }
+function createWindow() { mainWindow = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } }); mainWindow.webContents.on("did-finish-load", () => { mainWindow?.show(); sendPetVisibility(); }); mainWindow.on("closed", () => { aiChatWindow?.close(); petWindow?.close(); aiChatWindow = null; petWindow = null; mainWindow = null; }); mainWindow.loadFile(path.join(root, "app", "index.html")); }
 
 function createPetWindow() {
   try {
@@ -39,7 +165,7 @@ function createPetWindow() {
       width: 195, height: 230,
       frame: false, transparent: true,
       alwaysOnTop: true, skipTaskbar: true,
-      resizable: false, hasShadow: false,
+      resizable: false, hasShadow: false, show: false,
       webPreferences: {
         preload: path.join(root, "electron", "preload.cjs"),
         contextIsolation: true, nodeIntegration: false, sandbox: true
@@ -54,7 +180,8 @@ function createPetWindow() {
       // A transparent BrowserWindow still intercepts input. Start in pass-through
       // mode; the renderer turns hit testing back on only over visible pet UI.
       petWindow?.setIgnoreMouseEvents(true, { forward: true });
-      if (mainWindow?.webContents) mainWindow?.webContents.send("pet:visibility", true);
+      if (petVisible) petWindow?.show();
+      sendPetVisibility();
     });
     petWindow.on("blur", () => petWindow?.webContents.send("pet:blur"));
   } catch (e) {
@@ -63,12 +190,14 @@ function createPetWindow() {
   }
 }
 
-ipcMain.handle("pet:hide", () => { petWindow?.hide(); mainWindow?.webContents.send("pet:visibility", false); return true; });
-ipcMain.handle("pet:show", () => { petWindow?.show(); mainWindow?.webContents.send("pet:visibility", true); return true; });
-ipcMain.handle("pet:click", () => { mainWindow?.webContents.send("pet:open-ai"); return true; });
-ipcMain.handle("pet:move", (_event, { dx, dy }) => { if (petWindow) { const [x, y] = petWindow.getPosition(); petWindow.setPosition(x + dx, y + dy); } return true; });
+ipcMain.handle("pet:hide", async () => { petVisible = false; await writePetState({ visible: false }); petWindow?.hide(); hideAiChatWindowSmooth(); sendPetVisibility(); return true; });
+ipcMain.handle("pet:show", async () => { petVisible = true; await writePetState({ visible: true }); petWindow?.show(); sendPetVisibility(); return true; });
+ipcMain.handle("pet:click", () => { showAiChatWindow(); return true; });
+ipcMain.handle("pet:move", (_event, { dx, dy }) => { queuePetMove(dx, dy); return true; });
 ipcMain.handle("pet:is-ready", () => !!petWindow && !petWindow.isDestroyed());
+ipcMain.handle("pet:get-visibility", () => petVisible);
 ipcMain.handle("pet:resize", (_event, { width, height }) => { if (petWindow) petWindow.setSize(width, height); return true; });
+ipcMain.handle("ai-window:close", event => { const win = BrowserWindow.fromWebContents(event.sender); if (win === aiChatWindow) return hideAiChatWindowSmooth(); return false; });
 ipcMain.on("pet:set-mouse-passthrough", (event, ignore) => {
   if (!petWindow || event.sender !== petWindow.webContents) return;
   petWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: Boolean(ignore) });
@@ -87,7 +216,7 @@ ipcMain.handle("ai:test-provider", async (_event, { provider, sessionKey }) => {
 ipcMain.handle("ai:send", async (_event, payload) => {
   const requestId = crypto.randomUUID(); const controller = new AbortController(); controllers.set(requestId, controller); const settings = await readSettings(); const provider = payload.provider || settings.defaultProvider; const entry = settings.providers[provider] || {};
   const model=payload.model || entry.model || PROVIDERS[provider].defaultModel; const conversationId=payload.conversationId; const lastUser=[...(payload.messages||[])].reverse().find(x=>x.role==="user"); if(conversationId&&lastUser&&!payload.isRetry)await aiStore.addMessage({conversationId,role:"user",content:lastUser.content,provider,model,attachmentIds:payload.attachmentIds,attachmentNames:payload.attachmentNames});
-  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { const requestMessages=[...(payload.messages||[])],images=[];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});if(prepared.mode==="image"){const bytes=await fs.readFile(prepared.localPath);images.push({dataUrl:`data:${prepared.attachment.mimeType};base64,${bytes.toString("base64")}`});}}mainWindow.webContents.send("ai:stream", { requestId, type: "started" }); for await (const event of streamProviderRequest({ ...payload, messages:requestMessages,images,provider,model,apiKey:decryptKey(entry,provider),signal:controller.signal })) { if(event.type==="text_delta")output+=event.delta;if(event.type==="completed")usage=event.usage;if(event.type==="stopped")status="stopped";mainWindow.webContents.send("ai:stream", { requestId, ...event }); } } catch (error) { status="failed";errorValue={code:error.code||"unknown",message:error.message};mainWindow.webContents.send("ai:stream", { requestId, type: "failed", ...errorValue }); } finally { if(conversationId){await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model}).then(message=>errorValue?aiStore.updateMessage(message.id,{error:errorValue}):message);if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0});}controllers.delete(requestId); } }); return { requestId };
+  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { const requestMessages=[...(payload.messages||[])],images=[];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});if(prepared.mode==="image"){const bytes=await fs.readFile(prepared.localPath);images.push({dataUrl:`data:${prepared.attachment.mimeType};base64,${bytes.toString("base64")}`});}}broadcastAiStream({ requestId, type: "started" }); for await (const event of streamProviderRequest({ ...payload, messages:requestMessages,images,provider,model,apiKey:decryptKey(entry,provider),signal:controller.signal })) { if(event.type==="text_delta")output+=event.delta;if(event.type==="completed")usage=event.usage;if(event.type==="stopped")status="stopped";broadcastAiStream({ requestId, ...event }); } } catch (error) { status="failed";errorValue={code:error.code||"unknown",message:error.message};broadcastAiStream({ requestId, type: "failed", ...errorValue }); } finally { if(conversationId){await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model}).then(message=>errorValue?aiStore.updateMessage(message.id,{error:errorValue}):message);if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0});}controllers.delete(requestId); } }); return { requestId };
 });
 ipcMain.handle("ai:stop", (_event, requestId) => { controllers.get(requestId)?.abort(); return { ok: true }; });
 ipcMain.handle("ai:extract-schedules", async (_event, payload) => {
@@ -129,6 +258,7 @@ ipcMain.handle("music:update-track",(_event,input)=>musicLibrary.updateTrack(inp
 ipcMain.handle("music:remove-track",(_event,id)=>musicLibrary.removeTrack(id));
 ipcMain.handle("music:clear",()=>musicLibrary.clear());
 ipcMain.handle("music:reorder",(_event,ids)=>musicLibrary.reorder(ids));
+ipcMain.handle("music:play-playlist",(_event,id)=>musicLibrary.playPlaylist(id));
 ipcMain.handle("music:remove-playlist",(_event,id)=>musicLibrary.removePlaylist(id));
 
 app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });

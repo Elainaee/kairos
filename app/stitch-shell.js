@@ -76,7 +76,7 @@
   const spaPages = {
     habits: ['habits.html?embed=1&v=41', 'Habits'],
     schedule: ['schedule.html?embed=1&v=47', 'Schedule'],
-    music: ['music.html?embed=1&v=26', 'Music']
+    music: ['music.html?embed=1&v=27', 'Music']
   };
   const syncScheduleState = frame => {
     if (!frame?.contentWindow) return;
@@ -94,6 +94,30 @@
     if (!spaShell) return;
     const nextView = view in spaPages ? view : 'calendar';
     document.body.classList.toggle('kairos-secondary-view', nextView !== 'calendar');
+    document.body.classList.toggle('kairos-music-view', nextView === 'music');
+    const syncShellPlayer = () => {
+      const shellPlayer = document.getElementById('musicPlayer');
+      if (!shellPlayer) {
+        window.KairosMusicPlayer?.mount?.();
+        return false;
+      }
+      shellPlayer.hidden = !['calendar', 'music'].includes(nextView);
+      if (nextView === 'music') {
+        shellPlayer.style.left = '0px';
+        shellPlayer.style.right = '0px';
+        shellPlayer.style.top = 'auto';
+        shellPlayer.style.bottom = '0px';
+        shellPlayer.style.setProperty('height', '80px', 'important');
+      }
+      window.dispatchEvent(new CustomEvent('kairos:player-route-layout', { detail:{ view:nextView } }));
+      return true;
+    };
+    syncShellPlayer();
+    requestAnimationFrame(() => {
+      syncShellPlayer();
+      requestAnimationFrame(syncShellPlayer);
+    });
+    [80, 220].forEach(delay => setTimeout(syncShellPlayer, delay));
     if (nextView !== 'calendar' && !main.hidden) {
       const calendarPanel = main.querySelector(':scope > div.flex.flex-1 > section');
       const player = document.getElementById('musicPlayer');
@@ -252,7 +276,7 @@
   if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=22">');
   if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=2">');
   const scheduleFeatureScript=document.createElement('script');
-  scheduleFeatureScript.src='schedule-feature.js?v=31';
+  scheduleFeatureScript.src='schedule-feature.js?v=32';
   document.body.appendChild(scheduleFeatureScript);
 }
 if (new URLSearchParams(location.search).get('embed') !== '1') {
