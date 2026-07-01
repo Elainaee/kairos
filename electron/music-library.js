@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 const SUPPORTED_EXTENSIONS = new Set([".mp3", ".flac", ".wav", ".m4a", ".mp4", ".aac"]);
 const COVER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const pathKey = value => path.resolve(String(value || "")).toLowerCase();
 const EMPTY = {
   version: 1,
   tracks: [],
@@ -37,6 +38,12 @@ function normalize(input = {}) {
   };
   if (!Array.isArray(out.tracks)) out.tracks = [];
   if (!Array.isArray(out.playlists)) out.playlists = [];
+  out.playlists = out.playlists.map(playlist => ({
+    ...playlist,
+    hiddenTrackPaths: Array.isArray(playlist.hiddenTrackPaths)
+      ? [...new Set(playlist.hiddenTrackPaths.map(pathKey).filter(Boolean))]
+      : []
+  }));
   if (!Array.isArray(out.queueTrackIds)) out.queueTrackIds = [];
   if (!out.positions || typeof out.positions !== "object" || Array.isArray(out.positions)) out.positions = {};
   if (!["sequence", "loop", "shuffle", "single"].includes(out.mode)) out.mode = "sequence";
@@ -230,11 +237,33 @@ export class MusicLibrary {
 
   async publicState() {
     const state = await this.read();
+    const trackByPath = new Map(state.tracks.map(track => [pathKey(track.path), track]));
     return {
       ...state,
       tracks: await Promise.all(state.tracks.map(track => this.publicTrack(track))),
       playlists: state.playlists.map(playlist => ({
         ...playlist,
+        hiddenTracks: (playlist.hiddenTrackPaths || []).map(hiddenPath => {
+          const track = trackByPath.get(hiddenPath);
+          return track ? {
+            id: track.id,
+            path: track.path,
+            fileName: track.fileName,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            coverUrl: track.coverPath ? pathToFileURL(track.coverPath).href : "",
+            available: true
+          } : {
+            path: hiddenPath,
+            fileName: path.basename(hiddenPath),
+            title: path.basename(hiddenPath).replace(/\.[^.]+$/, ""),
+            artist: "",
+            album: "",
+            coverUrl: "",
+            available: false
+          };
+        }),
         coverUrl: playlist.coverPath ? pathToFileURL(playlist.coverPath).href : ""
       }))
     };
@@ -328,11 +357,12 @@ export class MusicLibrary {
     const imported = await this.addFiles(files);
     const state = await this.read();
     const fileKeys = new Set(files.map(file => path.resolve(file).toLowerCase()));
-    const folderTracks = state.tracks.filter(track => fileKeys.has(path.resolve(track.path).toLowerCase()));
+    const existing = state.playlists.find(item => path.resolve(item.folderPath || "").toLowerCase() === resolved.toLowerCase());
+    const hidden = new Set(existing?.hiddenTrackPaths || []);
+    const folderTracks = state.tracks.filter(track => fileKeys.has(path.resolve(track.path).toLowerCase()) && !hidden.has(pathKey(track.path)));
     const folderTrackIds = folderTracks.map(track => track.id);
     const folderTrackIdSet = new Set(folderTrackIds);
     const now = new Date().toISOString();
-    const existing = state.playlists.find(item => path.resolve(item.folderPath || "").toLowerCase() === resolved.toLowerCase());
     const playlist = existing || { id: crypto.randomUUID(), createdAt: now };
     const previousTrackIds = existing?.trackIds || [];
     const orderedTrackIds = existing
@@ -345,6 +375,7 @@ export class MusicLibrary {
       name: path.basename(resolved) || "Local Playlist",
       folderPath: resolved,
       trackIds: orderedTrackIds,
+      hiddenTrackPaths: existing?.hiddenTrackPaths || [],
       coverPath: existing?.coverPath || await this.findFolderCover(resolved),
       updatedAt: now
     });
@@ -409,6 +440,16 @@ export class MusicLibrary {
     const track = state.tracks.find(item => item.id === input.id);
     if (!track) throw new Error("track_not_found");
     if (Number.isFinite(input.duration)) track.duration = Math.max(0, input.duration);
+    if (input.liked !== undefined) {
+      track.liked = Boolean(input.liked);
+      track.likedAt = track.liked ? new Date().toISOString() : null;
+    }
+    if (input.incrementPlayCount === true) {
+      track.playCount = Math.max(0, Number(track.playCount) || 0) + 1;
+      track.lastPlayedAt = new Date().toISOString();
+    } else if (Number.isFinite(input.playCount)) {
+      track.playCount = Math.max(0, Math.round(input.playCount));
+    }
     track.updatedAt = new Date().toISOString();
     await this.write(state);
     return this.publicState();
@@ -444,6 +485,56 @@ export class MusicLibrary {
       if (state.currentTrackId && removedIds.has(state.currentTrackId)) state.currentTrackId = state.queueTrackIds[0] || null;
     }
     await this.write(state);
+    return this.publicState();
+  }
+
+  async refreshPlaylist(id) {
+    const state = await this.read();
+    const playlist = state.playlists.find(item => item.id === id);
+    if (!playlist?.folderPath) throw new Error("playlist_not_found");
+    return this.addFolder(playlist.folderPath);
+  }
+
+  async removeTracksFromPlaylist(id, trackIds = []) {
+    const state = await this.read();
+    const playlist = state.playlists.find(item => item.id === id);
+    if (!playlist) throw new Error("playlist_not_found");
+    const removeSet = new Set(trackIds);
+    const tracksById = new Map(state.tracks.map(track => [track.id, track]));
+    const hidden = new Set(playlist.hiddenTrackPaths || []);
+    for (const trackId of removeSet) {
+      const track = tracksById.get(trackId);
+      if (track?.path) hidden.add(pathKey(track.path));
+    }
+    playlist.hiddenTrackPaths = [...hidden];
+    playlist.trackIds = (playlist.trackIds || []).filter(trackId => !removeSet.has(trackId));
+    playlist.updatedAt = new Date().toISOString();
+    state.queueTrackIds = state.queueTrackIds.filter(trackId => !removeSet.has(trackId));
+    if (state.currentTrackId && removeSet.has(state.currentTrackId)) state.currentTrackId = state.queueTrackIds[0] || null;
+    if (!state.currentTrackId) state.playing = false;
+    await this.write(state);
+    return this.publicState();
+  }
+
+  async restoreHiddenTracks(id, trackPaths = []) {
+    const state = await this.read();
+    const playlist = state.playlists.find(item => item.id === id);
+    if (!playlist) throw new Error("playlist_not_found");
+    const restoreSet = new Set(trackPaths.map(pathKey));
+    playlist.hiddenTrackPaths = (playlist.hiddenTrackPaths || []).filter(item => !restoreSet.has(item));
+    await this.write(state);
+    await this.addFiles([...restoreSet]);
+    const next = await this.read();
+    const nextPlaylist = next.playlists.find(item => item.id === id);
+    const existingIds = new Set(nextPlaylist.trackIds || []);
+    for (const track of next.tracks) {
+      if (restoreSet.has(pathKey(track.path)) && !existingIds.has(track.id)) {
+        nextPlaylist.trackIds.push(track.id);
+        existingIds.add(track.id);
+      }
+    }
+    nextPlaylist.updatedAt = new Date().toISOString();
+    await this.write(next);
     return this.publicState();
   }
 

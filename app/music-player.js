@@ -32,10 +32,12 @@
     document.body.appendChild(els.playlistPanel);
 
     let state = { tracks: [], queueTrackIds: [], currentTrackId: null, mode: 'sequence', playing: false, volume: 70, muted: false, positions: {} };
-    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false;
+    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null;
     const durationCache = new Map();
+    const PLAY_COUNT_KEY = 'kairos-music-play-counts';
     try { localStorage.removeItem('kairos-music-runtime'); localStorage.removeItem('kairos-music-owner'); } catch {}
     const desktop = () => window.kairosDesktop?.music || null;
+    const toast = (type, title, description='') => window.dispatchEvent(new CustomEvent('kairos:toast',{detail:{type,title,description}}));
     const queueTracks = () => { const byId = new Map((state.tracks || []).map(t => [t.id, t])); return (state.queueTrackIds || []).map(id => byId.get(id)).filter(Boolean); };
     const currentTrack = () => queueTracks().find(t => t.id === state.currentTrackId) || queueTracks()[0] || null;
     const persist = patch => { const api = desktop(); if (!api) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => api.updatePlayback(patch).catch(()=>{}), 180); };
@@ -47,6 +49,35 @@
     const intendedPlaying = () => state.playing === true && els.audio.paused;
     const syncPlayButton = () => { const active = !els.audio.paused || intendedPlaying(); els.toggleIcon.textContent = active ? 'pause' : 'play_arrow'; els.toggle.classList.toggle('is-paused', active); };
     const emitState = () => window.dispatchEvent(new CustomEvent('kairos:music-state-changed',{detail:{...state,queueTrackIds:state.queueTrackIds||[],currentTrackId:state.currentTrackId||null,playing:state.playing===true,currentTime:els.audio.currentTime||0}}));
+    const readLocalPlayCounts = () => { try { return JSON.parse(localStorage.getItem(PLAY_COUNT_KEY)||'{}')||{}; } catch { return {}; } };
+    const writeLocalPlayCount = id => {
+      const counts=readLocalPlayCounts();
+      const entry=counts[id]||{};
+      counts[id]={count:Math.max(0,Number(entry.count)||0)+1,lastPlayedAt:new Date().toISOString()};
+      localStorage.setItem(PLAY_COUNT_KEY,JSON.stringify(counts));
+      state.tracks=(state.tracks||[]).map(track=>track.id===id?{...track,playCount:Math.max(Number(track.playCount)||0,counts[id].count),lastPlayedAt:counts[id].lastPlayedAt}:track);
+    };
+    const emitMusicRefresh = detail => {
+      const eventDetail={source:'player',...detail};
+      window.dispatchEvent(new CustomEvent('kairos:music-refresh',{detail:eventDetail}));
+      if(window.parent&&window.parent!==window) window.parent.dispatchEvent(new CustomEvent('kairos:music-refresh',{detail:eventDetail}));
+    };
+    const countCurrentPlay = () => {
+      const id=state.currentTrackId;
+      if(!id||countedPlayTrackId===id) return;
+      countedPlayTrackId=id;
+      writeLocalPlayCount(id);
+      emitState();
+      emitMusicRefresh({source:'player-play-count',tracks:state.tracks});
+      const api=desktop();
+      if(api?.updateTrack) {
+        api.updateTrack({id,incrementPlayCount:true}).then(nextState=>{
+          state={...state,tracks:nextState.tracks||state.tracks};
+          emitState();
+          emitMusicRefresh({source:'player-play-count',tracks:state.tracks});
+        }).catch(()=>{ countedPlayTrackId=null; });
+      }
+    };
     const applyVolume = () => { const v=Number.isFinite(state.volume)?state.volume:70; els.audio.volume=state.muted?0:Math.max(0,Math.min(1,v/100)); els.volume.value=v; els.volumeRange.style.width=`${v}%`; els.volumeValue.value=v; els.volumeRoot.setAttribute('aria-valuenow',v); els.volumeIcon.textContent=state.muted||els.audio.volume===0?'volume_off':els.audio.volume<.5?'volume_down':'volume_up'; };
     const applyRouteLayout = () => {
       const root = document.getElementById('musicPlayer');
@@ -64,17 +95,26 @@
       }
     };
 
+    function queuePlayIcon(){
+      return '<svg class="music-queue-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="music-queue-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg>';
+    }
     function queueCover(track){
       const c=document.createElement('div'); c.className='music-queue-cover';
       if (track.coverUrl) { const img=document.createElement('img'); img.alt=''; img.src=track.coverUrl; c.append(img); }
       else { const i=document.createElement('span'); i.className='music-icon material-symbols-outlined'; i.textContent='music_note'; c.append(i); }
-      if (track.id===state.currentTrackId) { const eq=document.createElement('span'); eq.className='music-icon material-symbols-outlined music-eq'; eq.textContent=els.audio.paused?'play_arrow':'graphic_eq'; c.append(eq); }
+      const play=document.createElement('button'); play.type='button'; play.className='music-queue-play-button'; play.dataset.state=track.id===state.currentTrackId && !els.audio.paused?'pause':'play'; play.setAttribute('aria-label',play.dataset.state==='pause'?'Pause track':'Play track'); play.innerHTML=queuePlayIcon(); play.onclick=e=>{ e.stopPropagation(); toggleQueueTrack(track.id); };
+      c.append(play);
       return c;
     }
+    async function toggleQueueTrack(id){
+      if (id===state.currentTrackId && !els.audio.paused) { els.audio.pause(); return; }
+      await playTrack(id,true);
+    }
     function queueItem(track,index){
-      const li=document.createElement('li'); li.className=track.id===state.currentTrackId?'current':''; li.dataset.id=track.id; li.append(queueCover(track));
+      const li=document.createElement('li'); li.className=track.id===state.currentTrackId?'current':''; li.dataset.id=track.id; li.draggable=true;
+      li.append(queueCover(track));
       const main=document.createElement('button'); main.type='button'; main.className='music-track-main'; main.innerHTML='<span class="music-track-title"></span><span class="music-track-subtitle"></span>'; main.querySelector('.music-track-title').textContent=clean(track.title)||clean(track.fileName)||'Untitled'; main.querySelector('.music-track-subtitle').textContent=clean(track.artist)||'Local music'; main.onclick=()=>playTrack(track.id,true);
-      const remove=document.createElement('button'); remove.type='button'; remove.className='music-track-remove'; remove.setAttribute('aria-label',`Remove ${track.title||track.fileName||'track'}`); remove.innerHTML='<span class="music-icon material-symbols-outlined">more_vert</span>'; remove.onclick=async e=>{ e.stopPropagation(); const api=desktop(); if(api) state=await api.removeTrack(track.id); else state.tracks.splice(index,1); loadTrack(false); window.dispatchEvent(new CustomEvent('kairos:music-state-changed',{detail:state})); };
+      const remove=document.createElement('button'); remove.type='button'; remove.className='music-track-remove'; remove.setAttribute('aria-label',`Remove ${track.title||track.fileName||'track'} from queue`); remove.innerHTML='<span class="music-icon material-symbols-outlined">close</span>'; remove.onclick=async e=>{ e.stopPropagation(); const api=desktop(); const nextQueue=(state.queueTrackIds||[]).filter(id=>id!==track.id); const nextCurrent=state.currentTrackId===track.id?(nextQueue[0]||null):state.currentTrackId; const nextPlaying=Boolean(nextCurrent)&&state.playing===true; state={...state,queueTrackIds:nextQueue,currentTrackId:nextCurrent,playing:nextPlaying}; if(api) state=await api.updatePlayback({queueTrackIds:nextQueue,currentTrackId:nextCurrent,playing:nextPlaying}); loadTrack(false); emitState(); };
       li.append(main,remove); return li;
     }
     function renderQueue(){
@@ -84,7 +124,43 @@
       const cur=currentTrack(); if (cur) els.playlist.append(queueItem(cur,queue.indexOf(cur)));
       const upcoming=queue.filter(t=>t.id!==cur?.id); if (upcoming.length) { const s=document.createElement('li'); s.className='music-queue-section'; s.textContent='Upcoming'; els.playlist.append(s); }
       queue.forEach((t,i)=>{ if(t.id!==cur?.id) els.playlist.append(queueItem(t,i)); });
-      const rem=remainingText(remainingSeconds()); els.status.textContent=`${queue.length} Track${queue.length===1?'':'s'}${rem?` \u00b7 ${rem}`:''}`;
+      updateQueueStatus(queue);
+      updateQueuePlaybackState();
+    }
+    function updateQueueStatus(queue = queueTracks()){
+      const rem=remainingText(remainingSeconds());
+      els.status.textContent=`${queue.length} Track${queue.length===1?'':'s'}${rem?` \u00b7 ${rem}`:''}`;
+    }
+    function updateQueuePlaybackState(){
+      els.playlist.querySelectorAll('li[data-id]').forEach(item=>{
+        const isCurrent=item.dataset.id===state.currentTrackId;
+        item.classList.toggle('current',isCurrent);
+        const button=item.querySelector('.music-queue-play-button');
+        if(button){
+          const isPause=isCurrent&&!els.audio.paused;
+          button.dataset.state=isPause?'pause':'play';
+          button.setAttribute('aria-label',isPause?'Pause track':'Play track');
+        }
+      });
+    }
+    const clearQueueDropHints = () => els.playlist.querySelectorAll('.drop-before,.drop-after').forEach(item=>item.classList.remove('drop-before','drop-after'));
+    function makeQueueDragCard(track){
+      const card=document.createElement('div'); card.className='music-queue-drag-card';
+      const cover=document.createElement('span'); cover.className='music-queue-drag-cover';
+      if(track?.coverUrl){ const img=document.createElement('img'); img.alt=''; img.src=track.coverUrl; cover.append(img); }
+      else cover.innerHTML='<span class="music-icon material-symbols-outlined">music_note</span>';
+      const copy=document.createElement('span'); copy.className='music-queue-drag-copy';
+      const title=document.createElement('span'); title.className='music-queue-drag-title'; title.textContent=clean(track?.title)||clean(track?.fileName)||'Untitled';
+      const artist=document.createElement('span'); artist.className='music-queue-drag-artist'; artist.textContent=clean(track?.artist)||'Local music';
+      copy.append(title,artist); card.append(cover,copy); document.body.append(card); return card;
+    }
+    async function persistQueueOrderFromDom(){
+      const nextQueue=[...els.playlist.querySelectorAll('li[data-id]')].map(item=>item.dataset.id).filter(Boolean);
+      if(!nextQueue.length) return;
+      state={...state,queueTrackIds:nextQueue,currentTrackId:nextQueue.includes(state.currentTrackId)?state.currentTrackId:nextQueue[0]||null};
+      const api=desktop();
+      if(api) state=await api.updatePlayback({queueTrackIds:state.queueTrackIds,currentTrackId:state.currentTrackId,playing:state.playing===true&&Boolean(state.currentTrackId)});
+      renderQueue(); emitState();
     }
     function loadTrack(restore=true){
       const t=currentTrack();
@@ -94,7 +170,26 @@
       if (knownDuration) durationCache.set(t.id, knownDuration);
       els.title.textContent=clean(t.title)||clean(t.fileName)||'Untitled'; els.artist.textContent=clean(t.artist)||'Local music'; els.duration.textContent=knownDuration?fmt(knownDuration):'0:00'; setCover(t); pendingSeek=restore?state.positions?.[t.id]||0:null; syncPlayButton(); renderQueue();
     }
-    async function playTrack(id, shouldPlay=true){ if(!id) return; state.currentTrackId=id; state.playing=shouldPlay; persistNow({currentTrackId:id,playing:state.playing}); loadTrack(true); emitState(); if(shouldPlay) try{ await els.audio.play(); }catch{ state.playing=false; els.status.textContent='Unable to play this audio file'; emitState(); } }
+    async function playTrack(id, shouldPlay=true){
+      if(!id) return;
+      state.currentTrackId=id;
+      countedPlayTrackId=null;
+      state.playing=shouldPlay;
+      persistNow({currentTrackId:id,playing:state.playing});
+      loadTrack(true);
+      emitState();
+      if(shouldPlay) {
+        try{
+          await els.audio.play();
+          countCurrentPlay();
+        }catch{
+          state.playing=false;
+          els.status.textContent='Unable to play this audio file';
+          toast('error','Unable to play this audio file');
+          emitState();
+        }
+      }
+    }
     const nextId = d => { const a=queueTracks(); if(!a.length) return null; if(state.mode==='single') return state.currentTrackId||a[0].id; if(state.mode==='shuffle') return a[Math.floor(Math.random()*a.length)]?.id||null; const i=Math.max(0,a.findIndex(t=>t.id===state.currentTrackId))+d; return i>=0&&i<a.length?a[i].id:state.mode==='loop'?a[(i+a.length)%a.length].id:null; };
     async function refresh(restore=true, shouldEmit=true){ const api=desktop(); if(api) state=await api.getState(); if(!Number.isFinite(state.volume)) state.volume=70; state.mode||='sequence'; state.playing=state.playing===true; state.queueTrackIds ||= []; if(state.currentTrackId && !queueTracks().some(track=>track.id===state.currentTrackId)) state.currentTrackId = queueTracks()[0]?.id || null; modeButton(); applyVolume(); loadTrack(restore); if(shouldEmit) emitState(); }
 
@@ -109,17 +204,21 @@
     els.mode.onclick=()=>{ const m=['sequence','loop','shuffle','single']; state.mode=m[(m.indexOf(state.mode||'sequence')+1)%m.length]; modeButton(); persist({mode:state.mode}); };
     els.playlistToggle.onclick=()=>{ els.playlistPanel.hidden=!els.playlistPanel.hidden; if(!els.playlistPanel.hidden) requestAnimationFrame(positionQueue); };
     els.playlistClose.onclick=()=>{ els.playlistPanel.hidden=true; };
-    els.clear.onclick=async()=>{ const api=desktop(); state={...state,queueTrackIds:[],currentTrackId:null,playing:false}; if(api) state=await api.updatePlayback({queueTrackIds:[],currentTrackId:null,playing:false}); loadTrack(false); emitState(); };
+    els.clear.onclick=async()=>{ const api=desktop(); state={...state,queueTrackIds:[],currentTrackId:null,playing:false}; if(api) state=await api.updatePlayback({queueTrackIds:[],currentTrackId:null,playing:false}); loadTrack(false); emitState(); toast('success','Playlist cleared'); };
     els.volumeRoot.addEventListener('pointerdown', e=>{ volumeDragging=true; els.volumeRoot.setPointerCapture(e.pointerId); moveElasticVolume(e); });
     els.volumeRoot.addEventListener('pointermove', moveElasticVolume); els.volumeRoot.addEventListener('pointerup', releaseVolume); els.volumeRoot.addEventListener('pointercancel', releaseVolume);
     els.volumeRoot.addEventListener('keydown', e=>{ if(!['ArrowLeft','ArrowDown','ArrowRight','ArrowUp','Home','End'].includes(e.key)) return; e.preventDefault(); const d=['ArrowLeft','ArrowDown'].includes(e.key)?-1:1; updateElasticVolume(e.key==='Home'?0:e.key==='End'?100:Number(els.volume.value)+d); });
     els.volume.oninput=()=>{ state.volume=Number(els.volume.value); state.muted=state.volume===0; applyVolume(); persist({volume:state.volume,muted:state.muted}); };
     els.progress.oninput=()=>{ progressDragging=true; if(els.audio.duration) els.audio.currentTime=els.progress.value/100*els.audio.duration; els.progressRange.style.width=`${els.progress.value}%`; progressDragging=false; };
-    els.audio.onplay=()=>{ state.playing=true; persist({playing:true}); syncPlayButton(); renderQueue(); emitState(); };
-    els.audio.onpause=()=>{ if(!suppressPausePersist){ state.playing=false; persist({playing:false}); } syncPlayButton(); renderQueue(); emitState(); };
+    els.audio.onplay=()=>{ state.playing=true; persist({playing:true}); countCurrentPlay(); syncPlayButton(); updateQueuePlaybackState(); emitState(); };
+    els.audio.onpause=()=>{ if(!suppressPausePersist){ state.playing=false; persist({playing:false}); } syncPlayButton(); updateQueuePlaybackState(); emitState(); };
     els.audio.onloadedmetadata=()=>{ const t=currentTrack(); els.duration.textContent=fmt(els.audio.duration); if(t&&Number.isFinite(els.audio.duration)){ t.duration=els.audio.duration; durationCache.set(t.id, els.audio.duration); } if(pendingSeek) els.audio.currentTime=Math.min(pendingSeek,Math.max(0,els.audio.duration-2)); pendingSeek=null; };
-    els.audio.ontimeupdate=()=>{ if(progressDragging) return; const p=els.audio.duration?els.audio.currentTime/els.audio.duration*100:0; els.progress.value=p; els.progressRange.style.width=`${p}%`; els.current.textContent=fmt(els.audio.currentTime); const t=currentTrack(); if(t&&Math.floor(els.audio.currentTime)%5===0) persist({position:{trackId:t.id,seconds:els.audio.currentTime}}); if(!els.playlistPanel.hidden) renderQueue(); };
+    els.audio.ontimeupdate=()=>{ if(progressDragging) return; if(!els.audio.paused&&state.currentTrackId) countCurrentPlay(); const p=els.audio.duration?els.audio.currentTime/els.audio.duration*100:0; els.progress.value=p; els.progressRange.style.width=`${p}%`; els.current.textContent=fmt(els.audio.currentTime); const t=currentTrack(); if(t&&Math.floor(els.audio.currentTime)%5===0) persist({position:{trackId:t.id,seconds:els.audio.currentTime}}); if(!els.playlistPanel.hidden&&!queueDragging) updateQueueStatus(); };
     els.audio.onended=()=>{ const id=nextId(1); if(id) playTrack(id,true); };
+    els.playlist.addEventListener('dragstart',e=>{ const item=e.target.closest('li[data-id]'); if(!item||e.target.closest('button')){ e.preventDefault(); return; } draggedQueueId=item.dataset.id; queueDragging=true; item.classList.add('is-dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',draggedQueueId); queueDragCard?.remove(); queueDragCard=makeQueueDragCard(queueTracks().find(track=>track.id===draggedQueueId)); e.dataTransfer.setDragImage(queueDragCard,24,23); });
+    els.playlist.addEventListener('dragover',e=>{ const item=e.target.closest('li[data-id]'); if(!item||!draggedQueueId||item.dataset.id===draggedQueueId) return; e.preventDefault(); const dragged=els.playlist.querySelector(`li[data-id="${CSS.escape(draggedQueueId)}"]`); if(!dragged) return; clearQueueDropHints(); const rect=item.getBoundingClientRect(); const after=e.clientY>rect.top+rect.height/2; item.classList.add(after?'drop-after':'drop-before'); els.playlist.insertBefore(dragged,after?item.nextSibling:item); });
+    els.playlist.addEventListener('dragleave',e=>e.target.closest('li[data-id]')?.classList.remove('drop-before','drop-after'));
+    els.playlist.addEventListener('dragend',async()=>{ els.playlist.querySelectorAll('.is-dragging,.drop-before,.drop-after').forEach(item=>item.classList.remove('is-dragging','drop-before','drop-after')); queueDragCard?.remove(); queueDragCard=null; const hadDrag=Boolean(draggedQueueId); draggedQueueId=null; queueDragging=false; if(hadDrag) await persistQueueOrderFromDom(); });
     document.addEventListener('pointerdown', e=>{ if(els.playlistPanel.hidden) return; if(els.playlistPanel.contains(e.target)||els.playlistToggle.contains(e.target)) return; els.playlistPanel.hidden=true; });
     document.addEventListener('keydown', e=>{ if(e.key==='Escape') els.playlistPanel.hidden=true; });
     window.addEventListener('resize', positionQueue);
@@ -146,7 +245,7 @@
       } else if (Array.isArray(event.detail?.queueTrackIds)) {
         loadTrack(false);
       }
-      if (event.detail?.playing === true && els.audio.src) await els.audio.play().catch(()=>{ els.status.textContent='Unable to play this audio file'; });
+      if (event.detail?.playing === true && els.audio.src) await els.audio.play().catch(()=>{ els.status.textContent='Unable to play this audio file'; toast('error','Unable to play this audio file'); });
       if (event.detail?.playing === false && !els.audio.paused) els.audio.pause();
       syncPlayButton();
       emitState();

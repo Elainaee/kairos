@@ -262,5 +262,8 @@ ipcMain.handle("music:reorder",(_event,ids)=>musicLibrary.reorder(ids));
 ipcMain.handle("music:reorder-playlist",(_event,input)=>musicLibrary.reorderPlaylist(input?.id,input?.trackIds));
 ipcMain.handle("music:play-playlist",(_event,id)=>musicLibrary.playPlaylist(id));
 ipcMain.handle("music:remove-playlist",(_event,id)=>musicLibrary.removePlaylist(id));
+ipcMain.handle("music:refresh-playlist",(_event,id)=>musicLibrary.refreshPlaylist(id));
+ipcMain.handle("music:remove-tracks-from-playlist",(_event,input)=>musicLibrary.removeTracksFromPlaylist(input?.id,input?.trackIds));
+ipcMain.handle("music:restore-hidden-tracks",(_event,input)=>musicLibrary.restoreHiddenTracks(input?.id,input?.trackPaths));
 
 app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });

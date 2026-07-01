@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     reorderPlaylist: (id, trackIds) => ipcRenderer.invoke("music:reorder-playlist", { id, trackIds }),
     playPlaylist: (id) => ipcRenderer.invoke("music:play-playlist", id),
     removePlaylist: (id) => ipcRenderer.invoke("music:remove-playlist", id),
+    refreshPlaylist: (id) => ipcRenderer.invoke("music:refresh-playlist", id),
+    removeTracksFromPlaylist: (id, trackIds) => ipcRenderer.invoke("music:remove-tracks-from-playlist", { id, trackIds }),
+    restoreHiddenTracks: (id, trackPaths) => ipcRenderer.invoke("music:restore-hidden-tracks", { id, trackPaths }),
     pathForFile: (file) => webUtils.getPathForFile(file)
   }),
   onStreamEvent: (handler) => {
