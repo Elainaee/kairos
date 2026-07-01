@@ -6,7 +6,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>Kairos | Music</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=block" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script id="tailwind-config">
 tailwind.config = {
@@ -231,6 +231,17 @@ body {
 .playlist-detail-table td{height:56px;padding:8px 10px;border-bottom:1px solid rgba(61,59,46,.055);vertical-align:middle}
 .playlist-detail-table tbody tr{transition:background .14s ease}
 .playlist-detail-table tbody tr:hover{background:rgba(27,28,24,.035)}
+.playlist-detail-table tbody tr[draggable="true"]{cursor:grab}
+.playlist-detail-table tbody tr.is-dragging{opacity:.32;background:rgba(27,28,24,.045)}
+.playlist-detail-table tbody tr.drop-before{box-shadow:inset 0 2px 0 var(--primary,#d1633c)}
+.playlist-detail-table tbody tr.drop-after{box-shadow:inset 0 -2px 0 var(--primary,#d1633c)}
+.playlist-drag-card{position:fixed;left:-9999px;top:-9999px;z-index:9999;display:flex;align-items:center;gap:10px;width:190px;height:46px;padding:6px 12px;border:1px solid rgba(61,59,46,.1);border-radius:8px;background:color-mix(in srgb,var(--primary,#d1633c) 16%,#fff 84%);box-shadow:0 12px 28px rgba(27,28,24,.16);color:var(--sidebar-fg);pointer-events:none}
+.playlist-drag-card-cover{width:34px;height:34px;border-radius:5px;overflow:hidden;display:grid;place-items:center;flex:0 0 34px;background:#ECE7D9;color:#676556}
+.playlist-drag-card-cover img{width:100%;height:100%;object-fit:cover}
+.playlist-drag-card-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.playlist-drag-card-title,.playlist-drag-card-artist{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playlist-drag-card-title{font-size:13px;font-weight:750;line-height:1.1}
+.playlist-drag-card-artist{font-size:11px;font-weight:600;color:var(--sidebar-muted)}
 .track-index{width:44px;text-align:center!important;color:#8f8a7d}
 .track-play-cell{position:relative;width:44px;text-align:center!important;color:#8f8a7d}
 .track-number{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;color:#8f8a7d;font-weight:650}
@@ -392,6 +403,7 @@ const importLocalPlaylist = document.getElementById('importLocalPlaylist');
 const playlistDetailBack = document.getElementById('playlistDetailBack');
 const playlistDetailContent = document.getElementById('playlistDetailContent');
 const KEY = 'kairos-music-sidebar';
+const PLAYLIST_ORDER_KEY = 'kairos-music-playlist-orders';
   const kairosConfirmAlert=({title:t,description:d,action='Delete',cancel='Cancel'}={})=>new Promise(resolve=>{
     let dialog=document.getElementById('kairosAlertDialog');
     if(!dialog){dialog=document.createElement('dialog');dialog.id='kairosAlertDialog';dialog.className='kairos-alert-dialog';dialog.setAttribute('role','alertdialog');dialog.innerHTML='<form method="dialog" class="kairos-alert-content"><div class="kairos-alert-header"><div class="kairos-alert-media"><span class="material-symbols-outlined">warning</span></div><div><h2 class="kairos-alert-title"></h2><p class="kairos-alert-description"></p></div></div><footer class="kairos-alert-footer"><button class="kairos-alert-cancel" value="cancel" type="submit"></button><button class="kairos-alert-action" value="confirm" type="submit"></button></footer></form>';document.body.append(dialog)}
@@ -402,6 +414,10 @@ const KEY = 'kairos-music-sidebar';
 
 let musicState = { tracks: [] };
 let currentPlaylistId = null;
+let musicSyncing = false;
+let musicStateSignature = "";
+let playbackState = { currentTrackId: null, playing: false };
+let syncVisiblePlaylistPlayback = () => {};
 const getDesktopMusic = () => {
   if (window.kairosDesktop?.music) return window.kairosDesktop.music;
   try {
@@ -413,6 +429,7 @@ const getDesktopMusic = () => {
 
 const notifyMusicPlayer = (detail = {}) => {
   const payload = { source: location.href, at: Date.now(), refresh: true, ...detail };
+  try { window.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
   if (window.parent && window.parent !== window) {
     try { window.parent.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
   }
@@ -466,14 +483,132 @@ const hydrateTrackDuration = (track, cell) => {
 
 const cleanMusicText = value => String(value || '').split('').filter(ch => { const code = ch.charCodeAt(0); return code >= 32 && code !== 127 && code !== 65533 && code !== 9633 && code !== 9647; }).join('').trim();
 
+const applyPlaybackState = detail => {
+  if (!detail?.currentTrackId) {
+    playbackState = { currentTrackId: null, playing: false };
+    syncVisiblePlaylistPlayback();
+    return;
+  }
+  playbackState = { currentTrackId: detail.currentTrackId, playing: detail.playing === true };
+  syncVisiblePlaylistPlayback();
+};
+
+window.addEventListener('kairos:music-state-changed', event => applyPlaybackState(event.detail));
+window.addEventListener('message', event => {
+  if (event.data?.type === 'kairos:music-state-changed') applyPlaybackState(event.data.detail);
+});
+
+const getMusicStateSignature = state => JSON.stringify({
+  tracks: (state.tracks || []).map(track => [track.id, track.path, track.fileSize, track.updatedAt]),
+  playlists: (state.playlists || []).map(playlist => [playlist.id, playlist.folderPath, playlist.trackIds])
+});
+
+const readPlaylistOrders = () => {
+  try { return JSON.parse(localStorage.getItem(PLAYLIST_ORDER_KEY) || '{}') || {}; }
+  catch { return {}; }
+};
+
+const playlistOrderKey = playlist => playlist?.id || playlist?.folderPath || playlist?.name || 'playlist';
+
+const savePlaylistOrder = (playlist, trackIds) => {
+  const orders = readPlaylistOrders();
+  orders[playlistOrderKey(playlist)] = trackIds;
+  if (playlist?.folderPath) orders[playlist.folderPath] = trackIds;
+  localStorage.setItem(PLAYLIST_ORDER_KEY, JSON.stringify(orders));
+};
+
+const removeSavedPlaylistOrder = playlist => {
+  const orders = readPlaylistOrders();
+  delete orders[playlistOrderKey(playlist)];
+  if (playlist?.folderPath) delete orders[playlist.folderPath];
+  localStorage.setItem(PLAYLIST_ORDER_KEY, JSON.stringify(orders));
+};
+
+const orderPlaylistTrackIds = playlist => {
+  const ids = Array.isArray(playlist?.trackIds) ? playlist.trackIds : [];
+  const orders = readPlaylistOrders();
+  const saved = orders[playlistOrderKey(playlist)] || orders[playlist?.folderPath];
+  if (!Array.isArray(saved) || !saved.length) return ids;
+  const valid = new Set(ids);
+  return [...saved.filter(id => valid.has(id)), ...ids.filter(id => !saved.includes(id))];
+};
+
+const applySavedPlaylistOrders = state => ({
+  ...state,
+  playlists: (state.playlists || []).map(playlist => ({
+    ...playlist,
+    trackIds: orderPlaylistTrackIds(playlist)
+  }))
+});
+
 const getPlaylistModel = playlistId => {
   const tracks = Array.isArray(musicState.tracks) ? musicState.tracks : [];
   const playlists = Array.isArray(musicState.playlists) ? musicState.playlists : [];
   const playlist = playlists.find(item => item.id === playlistId) || playlists[0];
   if (!playlist) return null;
   const byId = new Map(tracks.map(track => [track.id, track]));
-  const playlistTracks = (playlist.trackIds || []).map(id => byId.get(id)).filter(Boolean);
-  return { playlist, tracks: playlistTracks };
+  const orderedTrackIds = orderPlaylistTrackIds(playlist);
+  const orderedPlaylist = { ...playlist, trackIds: orderedTrackIds };
+  const playlistTracks = orderedTrackIds.map(id => byId.get(id)).filter(Boolean);
+  return { playlist: orderedPlaylist, tracks: playlistTracks };
+};
+
+const playlistDisplayCover = (playlist, firstTrack) => firstTrack?.coverUrl || playlist?.coverUrl || '';
+
+const renderCoverNode = (container, coverUrl, fallbackClass = '') => {
+  container.replaceChildren();
+  if (coverUrl) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = coverUrl;
+    container.append(img);
+    return;
+  }
+  if (fallbackClass === 'playlist-card') {
+    container.innerHTML = '<span class="playlist-card-cover-placeholder"><span class="material-symbols-outlined">album</span></span>';
+  } else {
+    container.innerHTML = '<div class="playlist-detail-cover-placeholder"><span class="material-symbols-outlined">album</span></div>';
+  }
+};
+
+const syncPlaylistCardCover = (playlist, tracks) => {
+  const card = localPlaylistList.querySelector(`.playlist-tilted-card[data-playlist-id="${CSS.escape(playlist.id)}"]`);
+  const cover = card?.querySelector('.playlist-card-cover');
+  if (!cover) return;
+  renderCoverNode(cover, playlistDisplayCover(playlist, tracks?.[0]), 'playlist-card');
+};
+
+const deletePlaylist = async (playlist, triggerButton = null) => {
+  if (!playlist?.id) return;
+  const title = playlist.name || 'Local Playlist';
+  const ok = await kairosConfirmAlert({
+    title: 'Delete playlist?',
+    description: `${title} will be removed from your library.`,
+    action: 'Delete',
+    cancel: 'Cancel'
+  });
+  if (!ok) return;
+  const desktopMusic = getDesktopMusic();
+  if (!desktopMusic?.removePlaylist) {
+    localPlaylistStatus.textContent = 'Delete is unavailable in this view.';
+    return;
+  }
+  if (triggerButton) triggerButton.disabled = true;
+  try {
+    removeSavedPlaylistOrder(playlist);
+    musicState = applySavedPlaylistOrders(await desktopMusic.removePlaylist(playlist.id));
+    if (currentPlaylistId === playlist.id) {
+      currentPlaylistId = null;
+      showMusicView('playlist');
+    }
+    renderLocalPlaylist();
+    notifyMusicPlayer({ queueTrackIds: musicState.queueTrackIds || [], currentTrackId: musicState.currentTrackId || null, playing: false });
+  } catch (error) {
+    console.error('removePlaylist failed', error);
+    localPlaylistStatus.textContent = 'Delete failed. Please try again.';
+  } finally {
+    if (triggerButton) triggerButton.disabled = false;
+  }
 };
 
 const renderPlaylistDetail = playlistId => {
@@ -485,7 +620,7 @@ const renderPlaylistDetail = playlistId => {
   }
   currentPlaylistId = model.playlist.id;
   const firstTrack = model.tracks[0];
-  const coverUrl = model.playlist.coverUrl || firstTrack?.coverUrl || '';
+  const coverUrl = playlistDisplayCover(model.playlist, firstTrack);
   const title = model.playlist.name || 'Local Playlist';
   const hero = document.createElement('div');
   hero.className = 'playlist-detail-hero';
@@ -502,21 +637,12 @@ const renderPlaylistDetail = playlistId => {
     </div>
   `;
   const cover = hero.querySelector('.playlist-detail-cover');
-  if (coverUrl) {
-    const img = document.createElement('img');
-    img.alt = '';
-    img.src = coverUrl;
-    cover.append(img);
-  } else {
-    cover.innerHTML = '<div class="playlist-detail-cover-placeholder"><span class="material-symbols-outlined">album</span></div>';
-  }
+  renderCoverNode(cover, coverUrl);
   hero.querySelector('.playlist-detail-title').textContent = title;
   hero.querySelector('.playlist-detail-meta').textContent = `${model.tracks.length} track${model.tracks.length === 1 ? '' : 's'} ${model.playlist.folderPath ? `\u00b7 ${model.playlist.folderPath}` : ''}`;
-  let activeTrackId = null;
-  let activeTrackPlaying = false;
   const updateTrackPlaybackRows = () => {
     tbody?.querySelectorAll('tr[data-track-id]').forEach(row => {
-      const isActive = row.dataset.trackId === activeTrackId && activeTrackPlaying;
+      const isActive = row.dataset.trackId === playbackState.currentTrackId && playbackState.playing;
       row.classList.toggle('is-playing', isActive);
       const button = row.querySelector('.track-play-button');
       if (button) {
@@ -525,52 +651,55 @@ const renderPlaylistDetail = playlistId => {
       }
     });
   };
-  const playPlaylistTrack = async trackId => {
+  const playPlaylistTrack = async (trackId, options = {}) => {
     const target = model.tracks.find(track => track.id === trackId);
     const desktopMusic = getDesktopMusic();
     if (!target) return;
-    if (activeTrackId === target.id && activeTrackPlaying) {
-      activeTrackPlaying = false;
+    if (playbackState.currentTrackId === target.id && playbackState.playing) {
+      playbackState = { currentTrackId: target.id, playing: false };
+      if (desktopMusic?.updatePlayback) {
+        try { musicState = await desktopMusic.updatePlayback({ currentTrackId: target.id, playing: false }); } catch (error) { console.error('updatePlayback failed', error); }
+      }
       notifyMusicPlayer({ currentTrackId: target.id, playing: false });
       updateTrackPlaybackRows();
       return;
     }
     const queueTrackIds = model.tracks.map(track => track.id);
+    const playbackPatch = {
+      queueTrackIds,
+      currentTrackId: target.id,
+      playing: true,
+      ...(options.forceSequence ? { mode: 'sequence' } : {})
+    };
+    musicState = {
+      ...musicState,
+      queueTrackIds,
+      currentTrackId: target.id,
+      playing: true,
+      ...(options.forceSequence ? { mode: 'sequence' } : {})
+    };
     if (desktopMusic) {
-      musicState = await desktopMusic.updatePlayback({ queueTrackIds, currentTrackId: target.id });
+      try {
+        musicState = await desktopMusic.updatePlayback(playbackPatch);
+      } catch (error) {
+        console.error('updatePlayback failed', error);
+      }
     }
-    activeTrackId = target.id;
-    activeTrackPlaying = true;
+    playbackState = { currentTrackId: target.id, playing: true };
     updateTrackPlaybackRows();
-    notifyMusicPlayer({ currentTrackId: target.id, playing: true });
+    notifyMusicPlayer({ queueTrackIds, currentTrackId: target.id, playing: true, ...(options.forceSequence ? { mode: 'sequence' } : {}) });
   };
   hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
     const first = model.tracks[0];
-    if (first) await playPlaylistTrack(first.id);
+    if (first) await playPlaylistTrack(first.id, { forceSequence: true });
   });
 
   const deleteBtn = hero.querySelector('.playlist-delete');
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', async () => {
-      const ok=await kairosConfirmAlert({title:"Delete playlist?",description:title+" will be removed from your library. This cannot be undone.",action:"Delete",cancel:"Cancel"});
-      if(!ok)return;
-      const desktopMusic = getDesktopMusic();
-      if (desktopMusic) {
-        try {
-          await desktopMusic.removePlaylist(model.playlist.id);
-        } catch (e) {
-          console.error('removePlaylist failed', e);
-        }
-      } else {
-        const raw = localStorage.getItem('kairos-mvp-state');
-        if (raw) {
-          const state = JSON.parse(raw);
-          if (state.playlists) state.playlists = state.playlists.filter(p => p.id !== model.playlist.id);
-          localStorage.setItem('kairos-mvp-state', JSON.stringify(state));
-        }
-      }
-      showMusicView('playlist');
-      await refreshMusicState();
+    deleteBtn.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      deletePlaylist(model.playlist, deleteBtn);
     });
   }
 
@@ -593,6 +722,65 @@ const renderPlaylistDetail = playlistId => {
   `;
   const tbody = table.querySelector('tbody');
   const resultsLabel = tabs.querySelector('#playlistSearchResults');
+  let draggedTrackId = null;
+  let dragCard = null;
+  const clearDropHints = () => tbody.querySelectorAll('.drop-before,.drop-after').forEach(row => row.classList.remove('drop-before', 'drop-after'));
+  const makeDragCard = track => {
+    const card = document.createElement('div');
+    card.className = 'playlist-drag-card';
+    const cover = document.createElement('span');
+    cover.className = 'playlist-drag-card-cover';
+    if (track?.coverUrl) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = track.coverUrl;
+      cover.append(img);
+    } else {
+      cover.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">music_note</span>';
+    }
+    const copy = document.createElement('span');
+    copy.className = 'playlist-drag-card-copy';
+    const name = document.createElement('span');
+    name.className = 'playlist-drag-card-title';
+    name.textContent = cleanMusicText(track?.title) || cleanMusicText(track?.fileName) || 'Untitled';
+    const artist = document.createElement('span');
+    artist.className = 'playlist-drag-card-artist';
+    artist.textContent = cleanMusicText(track?.artist) || 'Local music';
+    copy.append(name, artist);
+    card.append(cover, copy);
+    document.body.append(card);
+    return card;
+  };
+  const persistPlaylistOrder = async () => {
+    const visibleIds = [...tbody.querySelectorAll('tr[data-track-id]')].map(row => row.dataset.trackId);
+    if (!visibleIds.length) return;
+    const currentIds = model.tracks.map(track => track.id);
+    const visibleSet = new Set(visibleIds);
+    const nextIds = [...visibleIds, ...currentIds.filter(id => !visibleSet.has(id))];
+    const byId = new Map(model.tracks.map(track => [track.id, track]));
+    model.playlist.trackIds = nextIds;
+    model.tracks = nextIds.map(id => byId.get(id)).filter(Boolean);
+    savePlaylistOrder(model.playlist, nextIds);
+    const statePlaylist = musicState.playlists?.find(playlist => playlist.id === model.playlist.id);
+    if (statePlaylist) statePlaylist.trackIds = nextIds;
+    renderCoverNode(cover, playlistDisplayCover(model.playlist, model.tracks[0]));
+    syncPlaylistCardCover(model.playlist, model.tracks);
+    const desktopMusic = getDesktopMusic();
+    if (desktopMusic?.reorderPlaylist) {
+      try {
+        musicState = applySavedPlaylistOrders(await desktopMusic.reorderPlaylist(model.playlist.id, nextIds));
+      } catch (error) {
+        console.error('reorderPlaylist failed', error);
+      }
+    } else if (desktopMusic?.reorder) {
+      try {
+        musicState = applySavedPlaylistOrders(await desktopMusic.reorder(nextIds));
+      } catch (error) {
+        console.error('reorder fallback failed', error);
+      }
+    }
+    notifyMusicPlayer();
+  };
   const renderRows = query => {
     tbody.replaceChildren();
     const normalized = (query || '').trim().toLowerCase();
@@ -602,6 +790,7 @@ const renderPlaylistDetail = playlistId => {
     filtered.forEach((track, index) => {
         const row = document.createElement('tr');
         row.dataset.trackId = track.id;
+        row.draggable = true;
         row.innerHTML = `
           <td class="track-play-cell"><span class="track-number">${String(index + 1).padStart(2, '0')}</span><button class="track-play-button send" type="button" aria-label="Play track" data-state="play"><svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg></button></td>
           <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div></td>
@@ -609,10 +798,6 @@ const renderPlaylistDetail = playlistId => {
           <td class="track-like"><span class="material-symbols-outlined">favorite</span></td>
           <td class="track-duration"></td>
         `;
-        row.querySelector('.track-play-button').addEventListener('click', event => {
-          event.stopPropagation();
-          playPlaylistTrack(track.id);
-        });
         const trackCover = row.querySelector('.track-cover');
         if (track.coverUrl) {
           const img = document.createElement('img');
@@ -633,6 +818,52 @@ const renderPlaylistDetail = playlistId => {
     updateTrackPlaybackRows();
   };
   playlistDetailContent.append(hero, tabs, table);
+  syncVisiblePlaylistPlayback = updateTrackPlaybackRows;
+  tbody.addEventListener('click', event => {
+    const button = event.target.closest('.track-play-button');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const row = button.closest('tr[data-track-id]');
+    if (row?.dataset.trackId) playPlaylistTrack(row.dataset.trackId);
+  });
+  tbody.addEventListener('dragstart', event => {
+    const row = event.target.closest('tr[data-track-id]');
+    if (!row || event.target.closest('button, input, a')) {
+      event.preventDefault();
+      return;
+    }
+    draggedTrackId = row.dataset.trackId;
+    row.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', draggedTrackId);
+    dragCard?.remove();
+    dragCard = makeDragCard(model.tracks.find(track => track.id === draggedTrackId));
+    event.dataTransfer.setDragImage(dragCard, 24, 23);
+  });
+  tbody.addEventListener('dragover', event => {
+    const row = event.target.closest('tr[data-track-id]');
+    if (!row || !draggedTrackId || row.dataset.trackId === draggedTrackId) return;
+    event.preventDefault();
+    const dragged = tbody.querySelector(`tr[data-track-id="${CSS.escape(draggedTrackId)}"]`);
+    if (!dragged) return;
+    const rect = row.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    clearDropHints();
+    row.classList.add(after ? 'drop-after' : 'drop-before');
+    tbody.insertBefore(dragged, after ? row.nextSibling : row);
+  });
+  tbody.addEventListener('dragleave', event => {
+    event.target.closest('tr[data-track-id]')?.classList.remove('drop-before', 'drop-after');
+  });
+  tbody.addEventListener('dragend', async () => {
+    tbody.querySelectorAll('.is-dragging,.drop-before,.drop-after').forEach(row => row.classList.remove('is-dragging', 'drop-before', 'drop-after'));
+    dragCard?.remove();
+    dragCard = null;
+    const hadDrag = Boolean(draggedTrackId);
+    draggedTrackId = null;
+    if (hadDrag) await persistPlaylistOrder();
+  });
   renderRows('');
   playlistDetailContent.querySelector('#playlistDetailSearch')?.addEventListener('input', event => renderRows(event.target.value));
 };
@@ -652,11 +883,12 @@ const renderLocalPlaylist = () => {
 
   const byId = new Map(tracks.map(track => [track.id, track]));
   playlists.forEach(playlist => {
-    const playlistTracks = (playlist.trackIds || []).map(id => byId.get(id)).filter(Boolean);
+    const playlistTracks = orderPlaylistTrackIds(playlist).map(id => byId.get(id)).filter(Boolean);
     const firstTrack = playlistTracks[0];
-    const card = document.createElement('button');
+    const card = document.createElement('div');
     card.className = 'playlist-tilted-card';
-    card.type = 'button';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
     card.setAttribute('aria-label', `Open ${playlist.name || 'Local Playlist'}`);
     const openPlaylistDetail = () => {
       renderPlaylistDetail(playlist.id);
@@ -683,15 +915,8 @@ const renderLocalPlaylist = () => {
       </span>
     `;
     const cover = card.querySelector('.playlist-card-cover');
-    const coverUrl = playlist.coverUrl || firstTrack?.coverUrl || "";
-    if (coverUrl) {
-      const img = document.createElement('img');
-      img.alt = '';
-      img.src = coverUrl;
-      cover.append(img);
-    } else {
-      cover.innerHTML = '<span class="playlist-card-cover-placeholder"><span class="material-symbols-outlined">album</span></span>';
-    }
+    const coverUrl = playlistDisplayCover(playlist, firstTrack);
+    renderCoverNode(cover, coverUrl, 'playlist-card');
     const title = playlist.name || 'Local Playlist';
     card.querySelector('.playlist-card-title').textContent = title;
     card.querySelector('.playlist-card-meta').textContent = `${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'} ${firstTrack ? `\u00b7 ${cleanMusicText(firstTrack.title) || cleanMusicText(firstTrack.fileName) || 'Untitled'}` : ''}`;
@@ -709,16 +934,44 @@ const renderLocalPlaylist = () => {
   };
 };
 
-const refreshMusicState = async () => {
+const refreshMusicState = async ({ forceRender = true } = {}) => {
+  if (musicSyncing) return;
+  musicSyncing = true;
   const desktopMusic = getDesktopMusic();
-  if (!desktopMusic) {
-    renderLocalPlaylist();
-    notifyMusicPlayer();
-    return;
+  try {
+    if (!desktopMusic) {
+      if (forceRender) renderLocalPlaylist();
+      return;
+    }
+    let nextState;
+    try {
+      nextState = desktopMusic.syncFolders ? await desktopMusic.syncFolders() : await desktopMusic.getState();
+    } catch (error) {
+      console.warn('syncFolders failed, falling back to getState', error);
+      nextState = await desktopMusic.getState();
+    }
+    const nextSignature = getMusicStateSignature(nextState);
+    const changed = nextSignature !== musicStateSignature;
+    musicState = applySavedPlaylistOrders(nextState);
+    playbackState = { currentTrackId: musicState.currentTrackId || null, playing: musicState.playing === true };
+    musicStateSignature = nextSignature;
+    if (forceRender || changed) {
+      if (currentPlaylistId && !document.querySelector('[data-music-view="playlist-detail"]')?.hidden) {
+        renderPlaylistDetail(currentPlaylistId);
+      } else {
+        renderLocalPlaylist();
+      }
+    }
+  } catch (error) {
+    console.error('refreshMusicState failed', error);
+    if (forceRender) {
+      renderLocalPlaylist();
+      localPlaylistStatus.textContent = 'Unable to load local playlists. Retrying...';
+      setTimeout(() => refreshMusicState({ forceRender: true }), 600);
+    }
+  } finally {
+    musicSyncing = false;
   }
-  musicState = await desktopMusic.getState();
-  renderLocalPlaylist();
-  notifyMusicPlayer();
 };
 
 importLocalPlaylist.addEventListener('click', async () => {
@@ -729,9 +982,9 @@ importLocalPlaylist.addEventListener('click', async () => {
   }
   localPlaylistStatus.textContent = 'Opening folder picker...';
   const result = await desktopMusic.chooseFolder();
-  musicState = result.state || result;
+  musicState = applySavedPlaylistOrders(result.state || result);
+  musicStateSignature = getMusicStateSignature(musicState);
   renderLocalPlaylist();
-  notifyMusicPlayer();
   if (result.rejected?.length) {
     localPlaylistStatus.textContent = `${result.imported?.length || 0} imported, ${result.rejected.length} skipped`;
   }
@@ -798,12 +1051,21 @@ document.querySelectorAll('[data-source]').forEach(button => {
   });
 });
 showMusicView('playlist');
-refreshMusicState();
+refreshMusicState().finally(() => {
+  try {
+    window.dispatchEvent(new CustomEvent('kairos:music-content-ready'));
+    if (window.parent && window.parent !== window) window.parent.dispatchEvent(new CustomEvent('kairos:music-content-ready'));
+  } catch {}
+});
+window.addEventListener('focus', () => refreshMusicState({ forceRender: false }));
+setInterval(() => refreshMusicState({ forceRender: false }), 30000);
 </script>
 
 <link href="stitch-shell.css?v=7" rel="stylesheet">
 <link href="stitch-layout.css?v=24" rel="stylesheet">
 <link href="tweakcn-theme.css?v=9" rel="stylesheet">
-<script src="stitch-shell.js?v=60"></script>
+<link href="music-player.css?v=23" rel="stylesheet">
+<script src="stitch-shell.js?v=80"></script>
+<script src="music-player.js?v=28"></script>
 </body>
 </html>

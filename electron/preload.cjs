@@ -22,11 +22,13 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     chooseFiles: () => ipcRenderer.invoke("music:choose-files"),
     chooseFolder: () => ipcRenderer.invoke("music:choose-folder"),
     addFiles: (filePaths) => ipcRenderer.invoke("music:add-files", filePaths),
+    syncFolders: () => ipcRenderer.invoke("music:sync-folders"),
     updatePlayback: (patch) => ipcRenderer.invoke("music:update-playback", patch),
     updateTrack: (input) => ipcRenderer.invoke("music:update-track", input),
     removeTrack: (id) => ipcRenderer.invoke("music:remove-track", id),
     clear: () => ipcRenderer.invoke("music:clear"),
     reorder: (ids) => ipcRenderer.invoke("music:reorder", ids),
+    reorderPlaylist: (id, trackIds) => ipcRenderer.invoke("music:reorder-playlist", { id, trackIds }),
     playPlaylist: (id) => ipcRenderer.invoke("music:play-playlist", id),
     removePlaylist: (id) => ipcRenderer.invoke("music:remove-playlist", id),
     pathForFile: (file) => webUtils.getPathForFile(file)

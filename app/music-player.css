@@ -65,7 +65,7 @@
     overflow: hidden;
     background: #ECE7D9;
     color: var(--primary, #d1633c);
-    cursor: pointer
+    cursor: default
 }
 
 #musicCoverButton img {

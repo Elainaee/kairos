@@ -11,6 +11,7 @@ const EMPTY = {
   queueTrackIds: [],
   currentTrackId: null,
   mode: "sequence",
+  playing: false,
   volume: 70,
   muted: false,
   positions: {}
@@ -21,12 +22,29 @@ const latinDecoder = new TextDecoder("latin1", { fatal: false });
 const utf16Decoder = new TextDecoder("utf-16", { fatal: false });
 
 function normalize(input = {}) {
-  const out = { ...structuredClone(EMPTY), ...input, version: 1 };
+  const out = {
+    ...structuredClone(EMPTY),
+    version: 1,
+    tracks: input.tracks,
+    playlists: input.playlists,
+    queueTrackIds: input.queueTrackIds,
+    currentTrackId: input.currentTrackId,
+    mode: input.mode,
+    playing: input.playing,
+    volume: input.volume,
+    muted: input.muted,
+    positions: input.positions
+  };
   if (!Array.isArray(out.tracks)) out.tracks = [];
   if (!Array.isArray(out.playlists)) out.playlists = [];
   if (!Array.isArray(out.queueTrackIds)) out.queueTrackIds = [];
   if (!out.positions || typeof out.positions !== "object" || Array.isArray(out.positions)) out.positions = {};
   if (!["sequence", "loop", "shuffle", "single"].includes(out.mode)) out.mode = "sequence";
+  const validIds = new Set(out.tracks.map(track => track.id));
+  out.queueTrackIds = out.queueTrackIds.filter(id => validIds.has(id));
+  if (!out.queueTrackIds.length || !out.queueTrackIds.includes(out.currentTrackId)) out.currentTrackId = out.queueTrackIds[0] || null;
+  out.playing = Boolean(out.playing);
+  if (!out.currentTrackId) out.playing = false;
   out.volume = Math.min(100, Math.max(0, Number.isFinite(out.volume) ? out.volume : 70));
   out.muted = Boolean(out.muted);
   return out;
@@ -157,6 +175,32 @@ function coverExtension(mimeType = "") {
   return ".jpg";
 }
 
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const isTransientFileError = error => ["EPERM", "EACCES", "EBUSY"].includes(error?.code);
+
+async function replaceFileWithRetry(tempPath, targetPath) {
+  let lastError;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await fs.rename(tempPath, targetPath);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientFileError(error)) throw error;
+    }
+    try {
+      await fs.copyFile(tempPath, targetPath);
+      await fs.unlink(tempPath).catch(() => {});
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientFileError(error)) throw error;
+      await wait(40 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 export class MusicLibrary {
   constructor({ statePath, coverDir }) {
     this.statePath = statePath;
@@ -174,11 +218,11 @@ export class MusicLibrary {
 
   async write(input) {
     const state = normalize(input);
-    this.queue = this.queue.then(async () => {
+    this.queue = this.queue.catch(() => {}).then(async () => {
       await fs.mkdir(path.dirname(this.statePath), { recursive: true });
-      const temp = `${this.statePath}.tmp`;
+      const temp = `${this.statePath}.${process.pid}.${Date.now()}.tmp`;
       await fs.writeFile(temp, JSON.stringify(state, null, 2), "utf8");
-      await fs.rename(temp, this.statePath);
+      await replaceFileWithRetry(temp, this.statePath);
       return state;
     });
     return this.queue;
@@ -255,8 +299,6 @@ export class MusicLibrary {
         rejected.push({ path: resolved, reason: "unreadable_file" });
       }
     }
-    if (!state.queueTrackIds.length && state.tracks.length) state.queueTrackIds = state.tracks.map(track => track.id);
-    if (!state.currentTrackId && state.queueTrackIds.length) state.currentTrackId = state.queueTrackIds[0];
     await this.write(state);
     return { state: await this.publicState(), added: await Promise.all(added.map(track => this.publicTrack(track))), rejected };
   }
@@ -285,19 +327,38 @@ export class MusicLibrary {
     const files = await this.scanAudioFiles(resolved);
     const imported = await this.addFiles(files);
     const state = await this.read();
-    const trackIds = new Set(files.map(file => path.resolve(file).toLowerCase()));
-    const folderTracks = state.tracks.filter(track => trackIds.has(path.resolve(track.path).toLowerCase()));
+    const fileKeys = new Set(files.map(file => path.resolve(file).toLowerCase()));
+    const folderTracks = state.tracks.filter(track => fileKeys.has(path.resolve(track.path).toLowerCase()));
+    const folderTrackIds = folderTracks.map(track => track.id);
+    const folderTrackIdSet = new Set(folderTrackIds);
     const now = new Date().toISOString();
     const existing = state.playlists.find(item => path.resolve(item.folderPath || "").toLowerCase() === resolved.toLowerCase());
     const playlist = existing || { id: crypto.randomUUID(), createdAt: now };
+    const previousTrackIds = existing?.trackIds || [];
+    const orderedTrackIds = existing
+      ? [
+          ...previousTrackIds.filter(id => folderTrackIdSet.has(id)),
+          ...folderTrackIds.filter(id => !previousTrackIds.includes(id))
+        ]
+      : folderTrackIds;
     Object.assign(playlist, {
       name: path.basename(resolved) || "Local Playlist",
       folderPath: resolved,
-      trackIds: folderTracks.map(track => track.id),
+      trackIds: orderedTrackIds,
       coverPath: existing?.coverPath || await this.findFolderCover(resolved),
       updatedAt: now
     });
     if (!existing) state.playlists.push(playlist);
+    const playlistIds = new Set(state.playlists.flatMap(item => item.trackIds || []));
+    const missingFolderIds = existing ? previousTrackIds.filter(id => !folderTrackIdSet.has(id)) : [];
+    for (const id of missingFolderIds) {
+      if (!playlistIds.has(id)) {
+        state.tracks = state.tracks.filter(track => track.id !== id);
+        delete state.positions[id];
+      }
+      state.queueTrackIds = state.queueTrackIds.filter(trackId => trackId !== id);
+      if (state.currentTrackId === id) state.currentTrackId = state.queueTrackIds[0] || null;
+    }
     await this.write(state);
     return { ...(await this.publicState()), imported: imported.added, rejected: imported.rejected, playlist };
   }
@@ -315,6 +376,18 @@ export class MusicLibrary {
     return picked ? path.join(dirPath, picked.name) : "";
   }
 
+  async syncFolders() {
+    const state = await this.read();
+    const folderPaths = state.playlists.map(playlist => playlist.folderPath).filter(Boolean);
+    for (const folderPath of folderPaths) {
+      try {
+        await fs.access(folderPath);
+        await this.addFolder(folderPath);
+      } catch {}
+    }
+    return this.publicState();
+  }
+
   async updatePlayback(patch = {}) {
     const state = await this.read();
     if (Array.isArray(patch.queueTrackIds)) {
@@ -323,6 +396,7 @@ export class MusicLibrary {
     }
     if (patch.currentTrackId !== undefined) state.currentTrackId = patch.currentTrackId || null;
     if (patch.mode && ["sequence", "loop", "shuffle", "single"].includes(patch.mode)) state.mode = patch.mode;
+    if (patch.playing !== undefined) state.playing = Boolean(patch.playing);
     if (Number.isFinite(patch.volume)) state.volume = Math.min(100, Math.max(0, Math.round(patch.volume)));
     if (patch.muted !== undefined) state.muted = Boolean(patch.muted);
     if (patch.position?.trackId) state.positions[patch.position.trackId] = Math.max(0, Number(patch.position.seconds) || 0);
@@ -345,7 +419,7 @@ export class MusicLibrary {
     state.tracks = state.tracks.filter(track => track.id !== id);
     state.queueTrackIds = state.queueTrackIds.filter(trackId => trackId !== id);
     delete state.positions[id];
-    if (state.currentTrackId === id) state.currentTrackId = state.queueTrackIds[0] || state.tracks[0]?.id || null;
+    if (state.currentTrackId === id) state.currentTrackId = state.queueTrackIds[0] || null;
     await this.write(state);
     return this.publicState();
   }
@@ -367,7 +441,7 @@ export class MusicLibrary {
     if (removed?.trackIds?.length) {
       const removedIds = new Set(removed.trackIds);
       state.queueTrackIds = state.queueTrackIds.filter(trackId => !removedIds.has(trackId));
-      if (state.currentTrackId && removedIds.has(state.currentTrackId)) state.currentTrackId = state.queueTrackIds[0] || state.tracks[0]?.id || null;
+      if (state.currentTrackId && removedIds.has(state.currentTrackId)) state.currentTrackId = state.queueTrackIds[0] || null;
     }
     await this.write(state);
     return this.publicState();
@@ -380,6 +454,35 @@ export class MusicLibrary {
     const rest = state.tracks.filter(track => !ids.includes(track.id));
     state.tracks = [...ordered, ...rest];
     state.queueTrackIds = [...ordered.map(track => track.id), ...state.queueTrackIds.filter(id => !ids.includes(id))];
+    const orderedIds = ordered.map(track => track.id);
+    for (const playlist of state.playlists) {
+      const current = playlist.trackIds || [];
+      const currentSet = new Set(current);
+      const next = orderedIds.filter(id => currentSet.has(id));
+      if (next.length) playlist.trackIds = [...next, ...current.filter(id => !next.includes(id))];
+    }
+    await this.write(state);
+    return this.publicState();
+  }
+
+  async reorderPlaylist(id, trackIds = []) {
+    const state = await this.read();
+    const playlist = state.playlists.find(item => item.id === id);
+    if (!playlist) throw new Error("playlist_not_found");
+    const current = playlist.trackIds || [];
+    const currentSet = new Set(current);
+    const ordered = trackIds.filter(trackId => currentSet.has(trackId));
+    playlist.trackIds = [...ordered, ...current.filter(trackId => !ordered.includes(trackId))];
+    playlist.updatedAt = new Date().toISOString();
+    const queueSet = new Set(state.queueTrackIds || []);
+    const playlistInQueue = current.some(trackId => queueSet.has(trackId));
+    if (playlistInQueue) {
+      const playlistSet = new Set(current);
+      state.queueTrackIds = [
+        ...playlist.trackIds,
+        ...state.queueTrackIds.filter(trackId => !playlistSet.has(trackId))
+      ];
+    }
     await this.write(state);
     return this.publicState();
   }

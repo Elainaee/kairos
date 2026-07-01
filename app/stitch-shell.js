@@ -10,7 +10,7 @@
     embeddedMain?.classList.add('kairos-page-main');
     return;
   }
-  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=22">');
+  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=23">');
   if (!document.querySelector('link[href="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css">');
   if (!document.querySelector('link[href^="reminder-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="reminder-feature.css?v=1">');
   const page = document.body.dataset.page || 'calendar';
@@ -76,7 +76,7 @@
   const spaPages = {
     habits: ['habits.html?embed=1&v=41', 'Habits'],
     schedule: ['schedule.html?embed=1&v=47', 'Schedule'],
-    music: ['music.html?embed=1&v=37', 'Music']
+    music: ['music.html?embed=1&v=60', 'Music']
   };
   const syncScheduleState = frame => {
     if (!frame?.contentWindow) return;
@@ -155,6 +155,25 @@
     if (options.history) history.pushState({ kairosView:nextView }, '', `#${nextView}`);
     document.title = nextView === 'calendar' ? 'Clarity Calendar | Intentional Dashboard' : `Clarity Calendar | ${spaPages[nextView][1]}`;
   };
+  const ensureShellPlayer = () => {
+    if (!spaShell) return;
+    const view = getSpaView();
+    if (!['calendar', 'music'].includes(view)) return;
+    window.KairosMusicPlayer?.mount?.();
+    const player = document.getElementById('musicPlayer');
+    if (!player) return;
+    player.hidden = false;
+    player.style.display = '';
+    if (view === 'music') {
+      document.body.classList.add('kairos-secondary-view', 'kairos-music-view');
+      player.style.left = '0px';
+      player.style.right = '0px';
+      player.style.top = 'auto';
+      player.style.bottom = '0px';
+      player.style.setProperty('height', '80px', 'important');
+    }
+    window.dispatchEvent(new CustomEvent('kairos:player-route-layout', { detail:{ view } }));
+  };
   requestAnimationFrame(refreshGooeyEffect);
   document.fonts?.ready.then(refreshGooeyEffect);
   window.addEventListener('load', refreshGooeyEffect, { once:true });
@@ -179,7 +198,17 @@
 
   if (spaShell) {
     window.addEventListener('popstate', () => showSpaView(getSpaView()));
+    window.addEventListener('kairos:music-player-ready', () => showSpaView(getSpaView()));
+    window.addEventListener('kairos:music-content-ready', () => showSpaView(getSpaView()));
+    window.addEventListener('kairos:music-state-changed', event => {
+      const frame = spaFrames.get('music');
+      if (!frame?.contentWindow) return;
+      frame.contentWindow.postMessage({ type:'kairos:music-state-changed', detail:event.detail }, '*');
+    });
     showSpaView(getSpaView());
+    requestAnimationFrame(() => requestAnimationFrame(ensureShellPlayer));
+    [120, 360, 800, 1500].forEach(delay => setTimeout(ensureShellPlayer, delay));
+    setInterval(ensureShellPlayer, 2000);
   }
 
   const preloadTargets = spaShell ? Object.values(spaPages).map(([href]) => href) : labels.map(([,href]) => href);
@@ -273,10 +302,10 @@
 })();
 
 {
-  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=22">');
+  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=23">');
   if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=2">');
   const scheduleFeatureScript=document.createElement('script');
-  scheduleFeatureScript.src='schedule-feature.js?v=32';
+  scheduleFeatureScript.src='schedule-feature.js?v=36';
   document.body.appendChild(scheduleFeatureScript);
 }
 if (new URLSearchParams(location.search).get('embed') !== '1') {

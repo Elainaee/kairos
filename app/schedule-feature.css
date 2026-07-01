@@ -118,6 +118,105 @@
   text-decoration-color:color-mix(in srgb,var(--task-text) 72%,transparent);
   text-decoration-skip-ink:auto;
 }
+
+/* Calendar right-side agenda: neutral ReactBits Animated List treatment. */
+#scheduleTodayList.schedule-animated-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:2px 0 0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-width:none;
+}
+#scheduleTodayList.schedule-animated-list::-webkit-scrollbar{display:none}
+#scheduleTodayList.schedule-animated-list>:not([hidden])~:not([hidden]){margin-top:0!important}
+#scheduleTodayList .schedule-animated-item{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  align-items:center;
+  gap:6px;
+  min-height:56px;
+  opacity:0;
+  transform:translateY(14px) scale(.98);
+  animation:schedule-list-rise .34s cubic-bezier(.2,.8,.2,1) calc(var(--schedule-index,0)*42ms) both;
+}
+#scheduleTodayList .schedule-animated-time{
+  color:var(--muted-foreground);
+  font-size:11px;
+  font-weight:700;
+  line-height:1.1;
+  text-align:left;
+}
+#scheduleTodayList .schedule-animated-card{
+  display:grid;
+  grid-template-columns:22px minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  width:calc(100% - 12px);
+  min-height:52px;
+  padding:8px 10px;
+  border:1px solid color-mix(in srgb,var(--border) 74%,transparent);
+  border-radius:10px;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--popover) 92%,white),color-mix(in srgb,var(--muted) 24%,var(--popover)));
+  box-shadow:inset 0 1px 0 rgb(255 255 255/.72),0 3px 10px rgb(44 38 30/.055);
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease;
+}
+#scheduleTodayList .schedule-animated-item:hover .schedule-animated-card{
+  transform:translateY(-1px);
+  border-color:color-mix(in srgb,var(--primary) 26%,var(--border));
+  background:linear-gradient(145deg,color-mix(in srgb,var(--primary) 5%,var(--popover)),color-mix(in srgb,var(--muted) 28%,var(--popover)));
+  box-shadow:inset 0 1px 0 rgb(255 255 255/.82),0 8px 18px rgb(44 38 30/.08);
+}
+#scheduleTodayList .schedule-agenda-check{
+  width:18px!important;
+  height:18px!important;
+  border-radius:6px!important;
+}
+#scheduleTodayList .schedule-agenda-check:checked{
+  background:var(--primary)!important;
+  border-color:var(--primary)!important;
+}
+#scheduleTodayList .schedule-animated-content{
+  min-width:0;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+#scheduleTodayList .schedule-animated-content strong,
+#scheduleTodayList .schedule-animated-content small{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#scheduleTodayList .schedule-animated-content strong{
+  color:var(--foreground);
+  font-size:13px;
+  font-weight:750;
+  line-height:1.15;
+}
+#scheduleTodayList .schedule-animated-content small{
+  margin-top:4px;
+  color:var(--muted-foreground);
+  font-size:11px;
+  font-weight:600;
+}
+#scheduleTodayList .schedule-animated-item.is-done .schedule-animated-content strong{
+  color:color-mix(in srgb,var(--foreground) 58%,transparent);
+  text-decoration-line:line-through;
+  text-decoration-thickness:1.5px;
+  text-decoration-color:color-mix(in srgb,var(--foreground) 48%,transparent);
+}
+#scheduleTodayList .schedule-animated-item.is-done .schedule-animated-content small{color:color-mix(in srgb,var(--muted-foreground) 68%,transparent)}
+@keyframes schedule-list-rise{to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){
+  #scheduleTodayList .schedule-animated-item{animation:none;opacity:1;transform:none}
+  #scheduleTodayList .schedule-animated-card{transition:none}
+}
 .schedule-form-head>[data-close]{display:grid!important;width:40px!important;height:40px!important;min-width:40px;padding:0!important;place-items:center;border:1px solid var(--border)!important;border-radius:12px!important;background:color-mix(in oklch,var(--popover) 72%,transparent)!important;color:var(--muted-foreground)!important;font-size:24px!important;line-height:1!important;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .16s ease,background .16s ease}.schedule-form-head>[data-close]:hover{transform:scale(1.04);background:var(--accent)!important;color:var(--foreground)!important}.schedule-form-head>[data-close]:active{transform:scale(.96)}.schedule-form-head>[data-close]:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 26%,transparent);outline-offset:2px}
 
 /* Calendar critical layout guard: this stylesheet is injected after the base shell,

@@ -253,11 +253,13 @@ ipcMain.handle("music:get-state",()=>musicLibrary.publicState());
 ipcMain.handle("music:choose-files",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:"选择本地音乐",properties:["openFile","multiSelections"],filters:[{name:"Audio",extensions:["mp3","flac","wav","m4a","mp4","aac"]}]});if(result.canceled)return{state:await musicLibrary.publicState(),added:[],rejected:[]};return musicLibrary.addFiles(result.filePaths);});
 ipcMain.handle("music:choose-folder",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:"选择本地歌单文件夹",properties:["openDirectory"]});if(result.canceled||!result.filePaths[0])return{state:await musicLibrary.publicState(),imported:[],rejected:[]};return musicLibrary.addFolder(result.filePaths[0]);});
 ipcMain.handle("music:add-files",(_event,filePaths)=>musicLibrary.addFiles(filePaths));
+ipcMain.handle("music:sync-folders",()=>musicLibrary.syncFolders());
 ipcMain.handle("music:update-playback",(_event,patch)=>musicLibrary.updatePlayback(patch));
 ipcMain.handle("music:update-track",(_event,input)=>musicLibrary.updateTrack(input));
 ipcMain.handle("music:remove-track",(_event,id)=>musicLibrary.removeTrack(id));
 ipcMain.handle("music:clear",()=>musicLibrary.clear());
 ipcMain.handle("music:reorder",(_event,ids)=>musicLibrary.reorder(ids));
+ipcMain.handle("music:reorder-playlist",(_event,input)=>musicLibrary.reorderPlaylist(input?.id,input?.trackIds));
 ipcMain.handle("music:play-playlist",(_event,id)=>musicLibrary.playPlaylist(id));
 ipcMain.handle("music:remove-playlist",(_event,id)=>musicLibrary.removePlaylist(id));
 
