@@ -36,6 +36,17 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     restoreHiddenTracks: (id, trackPaths) => ipcRenderer.invoke("music:restore-hidden-tracks", { id, trackPaths }),
     pathForFile: (file) => webUtils.getPathForFile(file)
   }),
+  netease: Object.freeze({
+    getStatus: () => ipcRenderer.invoke("netease:get-status"),
+    startLogin: () => ipcRenderer.invoke("netease:start-login"),
+    loginCheck: (input) => ipcRenderer.invoke("netease:login-check", input),
+    searchSongs: (input) => ipcRenderer.invoke("netease:search-songs", input),
+    playSong: (input) => ipcRenderer.invoke("netease:play-song", input),
+    getUserPlaylists: (input) => ipcRenderer.invoke("netease:get-user-playlists", input),
+    getPlaylistSongs: (input) => ipcRenderer.invoke("netease:get-playlist-songs", input),
+    getLikedSongs: () => ipcRenderer.invoke("netease:get-liked-songs"),
+    getHistory: (input) => ipcRenderer.invoke("netease:get-history", input)
+  }),
   onStreamEvent: (handler) => {
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on("ai:stream", listener);

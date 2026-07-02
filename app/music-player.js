@@ -32,16 +32,25 @@
     document.body.appendChild(els.playlistPanel);
 
     let state = { tracks: [], queueTrackIds: [], currentTrackId: null, mode: 'sequence', playing: false, volume: 70, muted: false, positions: {} };
-    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null;
+    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null, externalRefreshVersion = 0;
     const durationCache = new Map();
     const PLAY_COUNT_KEY = 'kairos-music-play-counts';
     try { localStorage.removeItem('kairos-music-runtime'); localStorage.removeItem('kairos-music-owner'); } catch {}
     const desktop = () => window.kairosDesktop?.music || null;
     const toast = (type, title, description='') => window.dispatchEvent(new CustomEvent('kairos:toast',{detail:{type,title,description}}));
+    const isNeteaseId = id => String(id || '').startsWith('netease:');
+    const hasNeteaseQueue = () => isNeteaseId(state.currentTrackId) || (state.queueTrackIds || []).some(isNeteaseId);
+    const shouldPersistPlayback = patch => {
+      if (hasNeteaseQueue()) return false;
+      if (isNeteaseId(patch?.currentTrackId)) return false;
+      if (Array.isArray(patch?.queueTrackIds) && patch.queueTrackIds.some(isNeteaseId)) return false;
+      if (patch?.position?.trackId && isNeteaseId(patch.position.trackId)) return false;
+      return true;
+    };
     const queueTracks = () => { const byId = new Map((state.tracks || []).map(t => [t.id, t])); return (state.queueTrackIds || []).map(id => byId.get(id)).filter(Boolean); };
     const currentTrack = () => queueTracks().find(t => t.id === state.currentTrackId) || queueTracks()[0] || null;
-    const persist = patch => { const api = desktop(); if (!api) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => api.updatePlayback(patch).catch(()=>{}), 180); };
-    const persistNow = patch => { const api = desktop(); if (!api) return; clearTimeout(saveTimer); api.updatePlayback(patch).catch(()=>{}); };
+    const persist = patch => { const api = desktop(); if (!api || !shouldPersistPlayback(patch)) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => api.updatePlayback(patch).catch(()=>{}), 180); };
+    const persistNow = patch => { const api = desktop(); if (!api || !shouldPersistPlayback(patch)) return; clearTimeout(saveTimer); api.updatePlayback(patch).catch(()=>{}); };
     const remainingSeconds = () => queueTracks().reduce((sum,t) => !Number.isFinite(t.duration)||t.duration<=0 ? sum : sum + (t.id===state.currentTrackId ? Math.max(0,t.duration-(els.audio.currentTime||0)) : t.duration), 0);
     const remainingText = s => { if (!Number.isFinite(s)||s<=0) return ''; const m=Math.round(s/60); return m<60 ? `${m} min remaining` : `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m remaining`; };
     const setCover = t => { if (t?.coverUrl) { els.cover.src=t.coverUrl; els.cover.classList.remove('hidden'); els.coverIcon.style.opacity='0'; } else { els.cover.removeAttribute('src'); els.cover.classList.add('hidden'); els.coverIcon.style.opacity='1'; } };
@@ -49,6 +58,27 @@
     const intendedPlaying = () => state.playing === true && els.audio.paused;
     const syncPlayButton = () => { const active = !els.audio.paused || intendedPlaying(); els.toggleIcon.textContent = active ? 'pause' : 'play_arrow'; els.toggle.classList.toggle('is-paused', active); };
     const emitState = () => window.dispatchEvent(new CustomEvent('kairos:music-state-changed',{detail:{...state,queueTrackIds:state.queueTrackIds||[],currentTrackId:state.currentTrackId||null,playing:state.playing===true,currentTime:els.audio.currentTime||0}}));
+    const requestNeteaseUrlRefresh = track => new Promise(resolve => {
+      if (!track?.neteaseId && !isNeteaseId(track?.id)) return resolve(null);
+      const requestId = `netease-url-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      let done = false;
+      const finish = nextTrack => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        window.removeEventListener('kairos:netease-url-refreshed', onResponse);
+        resolve(nextTrack || null);
+      };
+      const onResponse = event => {
+        if (event.detail?.requestId !== requestId) return;
+        finish(event.detail?.track || null);
+      };
+      const timer = setTimeout(() => finish(null), 9000);
+      window.addEventListener('kairos:netease-url-refreshed', onResponse);
+      const detail = { requestId, track };
+      window.dispatchEvent(new CustomEvent('kairos:netease-refresh-url', { detail }));
+      if (window.parent && window.parent !== window) window.parent.dispatchEvent(new CustomEvent('kairos:netease-refresh-url', { detail }));
+    });
     const readLocalPlayCounts = () => { try { return JSON.parse(localStorage.getItem(PLAY_COUNT_KEY)||'{}')||{}; } catch { return {}; } };
     const writeLocalPlayCount = id => {
       const counts=readLocalPlayCounts();
@@ -70,7 +100,7 @@
       emitState();
       emitMusicRefresh({source:'player-play-count',tracks:state.tracks});
       const api=desktop();
-      if(api?.updateTrack) {
+      if(api?.updateTrack && !String(id).startsWith('netease:')) {
         api.updateTrack({id,incrementPlayCount:true}).then(nextState=>{
           state={...state,tracks:nextState.tracks||state.tracks};
           emitState();
@@ -114,7 +144,7 @@
       const li=document.createElement('li'); li.className=track.id===state.currentTrackId?'current':''; li.dataset.id=track.id; li.draggable=true;
       li.append(queueCover(track));
       const main=document.createElement('button'); main.type='button'; main.className='music-track-main'; main.innerHTML='<span class="music-track-title"></span><span class="music-track-subtitle"></span>'; main.querySelector('.music-track-title').textContent=clean(track.title)||clean(track.fileName)||'Untitled'; main.querySelector('.music-track-subtitle').textContent=clean(track.artist)||'Local music'; main.onclick=()=>playTrack(track.id,true);
-      const remove=document.createElement('button'); remove.type='button'; remove.className='music-track-remove'; remove.setAttribute('aria-label',`Remove ${track.title||track.fileName||'track'} from queue`); remove.innerHTML='<span class="music-icon material-symbols-outlined">close</span>'; remove.onclick=async e=>{ e.stopPropagation(); const api=desktop(); const nextQueue=(state.queueTrackIds||[]).filter(id=>id!==track.id); const nextCurrent=state.currentTrackId===track.id?(nextQueue[0]||null):state.currentTrackId; const nextPlaying=Boolean(nextCurrent)&&state.playing===true; state={...state,queueTrackIds:nextQueue,currentTrackId:nextCurrent,playing:nextPlaying}; if(api) state=await api.updatePlayback({queueTrackIds:nextQueue,currentTrackId:nextCurrent,playing:nextPlaying}); loadTrack(false); emitState(); };
+      const remove=document.createElement('button'); remove.type='button'; remove.className='music-track-remove'; remove.setAttribute('aria-label',`Remove ${track.title||track.fileName||'track'} from queue`); remove.innerHTML='<span class="music-icon material-symbols-outlined">close</span>'; remove.onclick=async e=>{ e.stopPropagation(); const wasNeteaseQueue=hasNeteaseQueue(); const api=desktop(); const nextQueue=(state.queueTrackIds||[]).filter(id=>id!==track.id); const nextCurrent=state.currentTrackId===track.id?(nextQueue[0]||null):state.currentTrackId; const nextPlaying=Boolean(nextCurrent)&&state.playing===true; state={...state,queueTrackIds:nextQueue,currentTrackId:nextCurrent,playing:nextPlaying}; if(api&&!wasNeteaseQueue) state=await api.updatePlayback({queueTrackIds:nextQueue,currentTrackId:nextCurrent,playing:nextPlaying}); loadTrack(false); emitState(); };
       li.append(main,remove); return li;
     }
     function renderQueue(){
@@ -159,7 +189,7 @@
       if(!nextQueue.length) return;
       state={...state,queueTrackIds:nextQueue,currentTrackId:nextQueue.includes(state.currentTrackId)?state.currentTrackId:nextQueue[0]||null};
       const api=desktop();
-      if(api) state=await api.updatePlayback({queueTrackIds:state.queueTrackIds,currentTrackId:state.currentTrackId,playing:state.playing===true&&Boolean(state.currentTrackId)});
+      if(api&&!hasNeteaseQueue()) state=await api.updatePlayback({queueTrackIds:state.queueTrackIds,currentTrackId:state.currentTrackId,playing:state.playing===true&&Boolean(state.currentTrackId)});
       renderQueue(); emitState();
     }
     function loadTrack(restore=true){
@@ -169,6 +199,32 @@
       const knownDuration = Number.isFinite(t.duration) && t.duration > 0 ? t.duration : durationCache.get(t.id) || (els.audio.src === t.playUrl && Number.isFinite(els.audio.duration) ? els.audio.duration : 0);
       if (knownDuration) durationCache.set(t.id, knownDuration);
       els.title.textContent=clean(t.title)||clean(t.fileName)||'Untitled'; els.artist.textContent=clean(t.artist)||'Local music'; els.duration.textContent=knownDuration?fmt(knownDuration):'0:00'; setCover(t); pendingSeek=restore?state.positions?.[t.id]||0:null; syncPlayButton(); renderQueue();
+    }
+    function waitForPlayable(timeout=4500){
+      if(!els.audio.src || els.audio.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA) return Promise.resolve();
+      return new Promise((resolve,reject)=>{
+        let done=false;
+        const finish=fn=>{ if(done) return; done=true; clearTimeout(timer); els.audio.removeEventListener('canplay',onReady); els.audio.removeEventListener('loadeddata',onReady); els.audio.removeEventListener('error',onError); fn(); };
+        const onReady=()=>finish(resolve);
+        const onError=()=>finish(()=>reject(new Error('Audio failed to load')));
+        const timer=setTimeout(()=>finish(resolve),timeout);
+        els.audio.addEventListener('canplay',onReady,{once:true});
+        els.audio.addEventListener('loadeddata',onReady,{once:true});
+        els.audio.addEventListener('error',onError,{once:true});
+      });
+    }
+    async function playLoadedAudio(){
+      await waitForPlayable();
+      await els.audio.play();
+      countCurrentPlay();
+    }
+    async function refreshNeteaseTrackUrl(track){
+      const nextTrack = await requestNeteaseUrlRefresh(track);
+      if (!nextTrack?.playUrl) return null;
+      state.tracks = (state.tracks || []).map(item => item.id === nextTrack.id ? { ...item, ...nextTrack } : item);
+      loadTrack(false);
+      emitState();
+      return nextTrack;
     }
     async function playTrack(id, shouldPlay=true){
       if(!id) return;
@@ -180,8 +236,7 @@
       emitState();
       if(shouldPlay) {
         try{
-          await els.audio.play();
-          countCurrentPlay();
+          await playLoadedAudio();
         }catch{
           state.playing=false;
           els.status.textContent='Unable to play this audio file';
@@ -191,7 +246,24 @@
       }
     }
     const nextId = d => { const a=queueTracks(); if(!a.length) return null; if(state.mode==='single') return state.currentTrackId||a[0].id; if(state.mode==='shuffle') return a[Math.floor(Math.random()*a.length)]?.id||null; const i=Math.max(0,a.findIndex(t=>t.id===state.currentTrackId))+d; return i>=0&&i<a.length?a[i].id:state.mode==='loop'?a[(i+a.length)%a.length].id:null; };
-    async function refresh(restore=true, shouldEmit=true){ const api=desktop(); if(api) state=await api.getState(); if(!Number.isFinite(state.volume)) state.volume=70; state.mode||='sequence'; state.playing=state.playing===true; state.queueTrackIds ||= []; if(state.currentTrackId && !queueTracks().some(track=>track.id===state.currentTrackId)) state.currentTrackId = queueTracks()[0]?.id || null; modeButton(); applyVolume(); loadTrack(restore); if(shouldEmit) emitState(); }
+    async function refresh(restore=true, shouldEmit=true, options={}){
+      const api=desktop();
+      const guardedVersion=options.guardExternalVersion;
+      let nextState=state;
+      if(api) nextState=await api.getState();
+      if(guardedVersion!==undefined && externalRefreshVersion!==guardedVersion) return false;
+      state=nextState;
+      if(!Number.isFinite(state.volume)) state.volume=70;
+      state.mode||='sequence';
+      state.playing=state.playing===true;
+      state.queueTrackIds ||= [];
+      if(state.currentTrackId && !queueTracks().some(track=>track.id===state.currentTrackId)) state.currentTrackId = queueTracks()[0]?.id || null;
+      modeButton();
+      applyVolume();
+      loadTrack(restore);
+      if(shouldEmit) emitState();
+      return true;
+    }
 
     const positionQueue = () => { if (els.playlistPanel.hidden) return; const gap=12, margin=12, r=els.playlistToggle.getBoundingClientRect(); const above=Math.max(180,r.top-gap-margin); const w=Math.min(340,window.innerWidth-margin*2); const h=Math.min(520,above); els.playlistPanel.style.cssText += `width:${w}px;height:${h}px;left:${Math.min(window.innerWidth-w-margin,Math.max(margin,r.right-w))}px;top:${Math.max(margin,r.top-h-gap)}px;right:auto;bottom:auto;`; };
     const updateElasticVolume = value => { const n=Math.round(Math.min(100,Math.max(0,value))); els.volume.value=n; els.volumeRange.style.width=`${n}%`; els.volumeValue.value=n; els.volumeRoot.setAttribute('aria-valuenow',n); els.volume.dispatchEvent(new Event('input',{bubbles:true})); };
@@ -204,7 +276,7 @@
     els.mode.onclick=()=>{ const m=['sequence','loop','shuffle','single']; state.mode=m[(m.indexOf(state.mode||'sequence')+1)%m.length]; modeButton(); persist({mode:state.mode}); };
     els.playlistToggle.onclick=()=>{ els.playlistPanel.hidden=!els.playlistPanel.hidden; if(!els.playlistPanel.hidden) requestAnimationFrame(positionQueue); };
     els.playlistClose.onclick=()=>{ els.playlistPanel.hidden=true; };
-    els.clear.onclick=async()=>{ const api=desktop(); state={...state,queueTrackIds:[],currentTrackId:null,playing:false}; if(api) state=await api.updatePlayback({queueTrackIds:[],currentTrackId:null,playing:false}); loadTrack(false); emitState(); toast('success','Playlist cleared'); };
+    els.clear.onclick=async()=>{ const wasNeteaseQueue=hasNeteaseQueue(); const api=desktop(); state={...state,queueTrackIds:[],currentTrackId:null,playing:false}; if(api&&!wasNeteaseQueue) state=await api.updatePlayback({queueTrackIds:[],currentTrackId:null,playing:false}); loadTrack(false); emitState(); toast('success','Playlist cleared'); };
     els.volumeRoot.addEventListener('pointerdown', e=>{ volumeDragging=true; els.volumeRoot.setPointerCapture(e.pointerId); moveElasticVolume(e); });
     els.volumeRoot.addEventListener('pointermove', moveElasticVolume); els.volumeRoot.addEventListener('pointerup', releaseVolume); els.volumeRoot.addEventListener('pointercancel', releaseVolume);
     els.volumeRoot.addEventListener('keydown', e=>{ if(!['ArrowLeft','ArrowDown','ArrowRight','ArrowUp','Home','End'].includes(e.key)) return; e.preventDefault(); const d=['ArrowLeft','ArrowDown'].includes(e.key)?-1:1; updateElasticVolume(e.key==='Home'?0:e.key==='End'?100:Number(els.volume.value)+d); });
@@ -214,7 +286,8 @@
     els.audio.onpause=()=>{ if(!suppressPausePersist){ state.playing=false; persist({playing:false}); } syncPlayButton(); updateQueuePlaybackState(); emitState(); };
     els.audio.onloadedmetadata=()=>{ const t=currentTrack(); els.duration.textContent=fmt(els.audio.duration); if(t&&Number.isFinite(els.audio.duration)){ t.duration=els.audio.duration; durationCache.set(t.id, els.audio.duration); } if(pendingSeek) els.audio.currentTime=Math.min(pendingSeek,Math.max(0,els.audio.duration-2)); pendingSeek=null; };
     els.audio.ontimeupdate=()=>{ if(progressDragging) return; if(!els.audio.paused&&state.currentTrackId) countCurrentPlay(); const p=els.audio.duration?els.audio.currentTime/els.audio.duration*100:0; els.progress.value=p; els.progressRange.style.width=`${p}%`; els.current.textContent=fmt(els.audio.currentTime); const t=currentTrack(); if(t&&Math.floor(els.audio.currentTime)%5===0) persist({position:{trackId:t.id,seconds:els.audio.currentTime}}); if(!els.playlistPanel.hidden&&!queueDragging) updateQueueStatus(); };
-    els.audio.onended=()=>{ const id=nextId(1); if(id) playTrack(id,true); };
+    els.audio.onended=async()=>{ const id=nextId(1); if(id) { const nextTrack=queueTracks().find(track=>track.id===id); if(isNeteaseId(id)) await refreshNeteaseTrackUrl(nextTrack); playTrack(id,true); } };
+    els.audio.onerror=async()=>{ const t=currentTrack(); if(!isNeteaseId(t?.id)) return; const refreshed=await refreshNeteaseTrackUrl(t); if(refreshed&&state.playing===true) playLoadedAudio().catch(()=>{ els.status.textContent='Unable to refresh NetEase URL'; toast('error','Unable to refresh NetEase URL'); }); };
     els.playlist.addEventListener('dragstart',e=>{ const item=e.target.closest('li[data-id]'); if(!item||e.target.closest('button')){ e.preventDefault(); return; } draggedQueueId=item.dataset.id; queueDragging=true; item.classList.add('is-dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',draggedQueueId); queueDragCard?.remove(); queueDragCard=makeQueueDragCard(queueTracks().find(track=>track.id===draggedQueueId)); e.dataTransfer.setDragImage(queueDragCard,24,23); });
     els.playlist.addEventListener('dragover',e=>{ const item=e.target.closest('li[data-id]'); if(!item||!draggedQueueId||item.dataset.id===draggedQueueId) return; e.preventDefault(); const dragged=els.playlist.querySelector(`li[data-id="${CSS.escape(draggedQueueId)}"]`); if(!dragged) return; clearQueueDropHints(); const rect=item.getBoundingClientRect(); const after=e.clientY>rect.top+rect.height/2; item.classList.add(after?'drop-after':'drop-before'); els.playlist.insertBefore(dragged,after?item.nextSibling:item); });
     els.playlist.addEventListener('dragleave',e=>e.target.closest('li[data-id]')?.classList.remove('drop-before','drop-after'));
@@ -224,33 +297,49 @@
     window.addEventListener('resize', positionQueue);
     window.addEventListener('kairos:player-route-layout', applyRouteLayout);
     if ('MutationObserver' in window) new MutationObserver(applyRouteLayout).observe(document.body, { attributes:true, attributeFilter:['class'] });
-    window.addEventListener('kairos:music-refresh', async event => {
-      const hasPlaybackPatch = event.detail?.currentTrackId || Array.isArray(event.detail?.queueTrackIds) || event.detail?.playing !== undefined || event.detail?.mode;
-      if (!hasPlaybackPatch) await refresh(false, false);
-      else if (!(state.tracks || []).length) await refresh(false, false);
-      if (Array.isArray(event.detail?.queueTrackIds)) {
-        const validIds = new Set((state.tracks || []).map(track => track.id));
-        state.queueTrackIds = event.detail.queueTrackIds.filter(id => validIds.has(id));
+    async function applyMusicRefresh(detail = {}) {
+      externalRefreshVersion += 1;
+      const hasPlaybackPatch = detail?.currentTrackId || Array.isArray(detail?.queueTrackIds) || detail?.playing !== undefined || detail?.mode;
+      const hasIncomingTracks = Array.isArray(detail?.tracks) && detail.tracks.some(track => track?.id);
+      if (Array.isArray(detail?.tracks)) {
+        const byId = new Map((state.tracks || []).map(track => [track.id, track]));
+        detail.tracks.forEach(track => {
+          if (track?.id) byId.set(track.id, { ...(byId.get(track.id) || {}), ...track });
+        });
+        state.tracks = [...byId.values()];
       }
-      if (event.detail?.mode && ['sequence','loop','shuffle','single'].includes(event.detail.mode)) {
-        state.mode = event.detail.mode;
+      if (!hasIncomingTracks) {
+        if (!hasPlaybackPatch) await refresh(false, false);
+        else if (!(state.tracks || []).length) await refresh(false, false);
+      }
+      if (Array.isArray(detail?.queueTrackIds)) {
+        const validIds = new Set((state.tracks || []).map(track => track.id));
+        state.queueTrackIds = detail.queueTrackIds.filter(id => validIds.has(id));
+      }
+      if (detail?.mode && ['sequence','loop','shuffle','single'].includes(detail.mode)) {
+        state.mode = detail.mode;
         modeButton();
       }
-      if (event.detail?.playing !== undefined) {
-        state.playing = event.detail.playing === true;
+      if (detail?.playing !== undefined) {
+        state.playing = detail.playing === true;
       }
-      if (event.detail?.currentTrackId) {
-        state.currentTrackId = event.detail.currentTrackId;
+      if (detail?.currentTrackId) {
+        state.currentTrackId = detail.currentTrackId;
         loadTrack(false);
-      } else if (Array.isArray(event.detail?.queueTrackIds)) {
+      } else if (Array.isArray(detail?.queueTrackIds)) {
         loadTrack(false);
       }
-      if (event.detail?.playing === true && els.audio.src) await els.audio.play().catch(()=>{ els.status.textContent='Unable to play this audio file'; toast('error','Unable to play this audio file'); });
-      if (event.detail?.playing === false && !els.audio.paused) els.audio.pause();
+      if (detail?.playing === true && els.audio.src) await playLoadedAudio().catch(()=>{ state.playing=false; els.status.textContent='Unable to play this audio file'; toast('error','Unable to play this audio file'); });
+      if (detail?.playing === false && !els.audio.paused) els.audio.pause();
       syncPlayButton();
       emitState();
-    });
-    refresh(true).then(() => {
+    }
+    window.KairosMusicPlayer.applyRefresh = applyMusicRefresh;
+    window.KairosMusicPlayer.getState = () => ({ ...state, queueTrackIds: [...(state.queueTrackIds || [])], tracks: [...(state.tracks || [])] });
+    window.addEventListener('kairos:music-refresh', event => { applyMusicRefresh(event.detail); });
+    const initialRefreshVersion = externalRefreshVersion;
+    refresh(true, true, { guardExternalVersion: initialRefreshVersion }).then(applied => {
+      if (!applied) return;
       suppressPausePersist = true;
       els.audio.pause();
       suppressPausePersist = false;

@@ -168,6 +168,42 @@ body {
 .music-placeholder { text-align: center; margin-top: min(22vh, 180px); }
 .music-placeholder h2 { font-size: 20px; font-weight: 650; color: var(--sidebar-fg); margin: 0 0 6px; }
 .music-placeholder p { font-size: 13px; margin: 0; }
+.netease-view{max-width:980px}
+.netease-panel{display:grid;gap:16px}
+.netease-status{display:flex;align-items:center;gap:8px;min-height:28px;color:var(--sidebar-muted);font-size:13px;font-weight:650}
+.netease-status-dot{width:8px;height:8px;border-radius:999px;background:#a9a399;box-shadow:0 0 0 4px rgba(169,163,153,.12)}
+.netease-status.is-ready .netease-status-dot{background:var(--sidebar-accent-fg);box-shadow:0 0 0 4px rgba(209,99,60,.14)}
+.netease-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.netease-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 16px;border:1px solid rgba(61,59,46,.14);border-radius:999px;background:#fffaf3;color:var(--sidebar-fg);font:700 13px/1 Outfit,system-ui,sans-serif;box-shadow:0 8px 20px rgba(61,59,46,.06);cursor:pointer;transition:transform .16s,box-shadow .16s,background .16s}
+.netease-button:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(61,59,46,.1)}
+.netease-button.primary{border-color:transparent;background:var(--sidebar-accent-fg);color:white}
+.netease-button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.netease-search{display:flex;align-items:center;gap:10px;max-width:640px}
+.netease-input-wrap{display:flex;align-items:center;gap:8px;flex:1;height:38px;padding:0 14px;border:1px solid rgba(61,59,46,.24);border-radius:999px;background:#fffdf8;box-shadow:inset 0 1px 2px rgba(61,59,46,.04)}
+.netease-input-wrap input{width:100%;border:0;background:transparent;outline:0;color:var(--sidebar-fg);font:600 13px/1 Outfit,system-ui,sans-serif}
+.netease-qr-card{width:max-content;display:grid;gap:10px;padding:14px;border:1px solid rgba(61,59,46,.12);border-radius:16px;background:rgba(255,255,255,.72);box-shadow:0 18px 48px rgba(61,59,46,.12);backdrop-filter:blur(18px)}
+.netease-qr-card img{width:180px;height:180px;border-radius:10px;background:white}
+.netease-qr-card p{margin:0;color:var(--sidebar-muted);font-size:12px;font-weight:650;text-align:center}
+.netease-results{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.netease-results th{height:38px;border-bottom:1px solid rgba(61,59,46,.1);color:var(--sidebar-muted);font-size:12px;text-align:left}
+.netease-results td{height:58px;border-bottom:1px solid rgba(61,59,46,.07);vertical-align:middle}
+.netease-results tr:hover td{background:rgba(61,59,46,.035)}
+.netease-results.playlist-detail-table{margin-top:4px}
+.netease-results .track-actions{width:44px}
+.netease-song-title{display:block;color:var(--sidebar-fg);font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.netease-song-artist{display:block;margin-top:3px;color:var(--sidebar-muted);font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.netease-cover{width:38px;height:38px;border-radius:8px;object-fit:cover;background:rgba(61,59,46,.08)}
+.netease-play{width:34px;height:34px;border:0;border-radius:999px;background:transparent;color:#1f2f45;display:inline-grid;place-items:center;cursor:pointer}
+.netease-play:hover{filter:drop-shadow(0 4px 7px rgba(31,47,69,.22))}
+.netease-empty{margin:18px 0;color:var(--sidebar-muted);font-weight:650}
+.netease-debug{margin:0;color:var(--sidebar-muted);font-size:12px;font-weight:650}
+.netease-account-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;max-width:860px}
+.netease-account-card{display:flex;align-items:center;gap:12px;height:76px;padding:10px;border:1px solid rgba(61,59,46,.1);border-radius:10px;background:rgba(255,255,255,.64);box-shadow:0 10px 24px rgba(61,59,46,.07);cursor:pointer;text-align:left}
+.netease-account-card:hover{background:rgba(255,255,255,.9)}
+.netease-account-card img{width:54px;height:54px;border-radius:8px;object-fit:cover;background:#ece7d9}
+.netease-account-card strong,.netease-account-card span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.netease-account-card strong{color:var(--sidebar-fg);font-size:13px}
+.netease-account-card span{margin-top:4px;color:var(--sidebar-muted);font-size:11px;font-weight:650}
 .music-view[hidden]{display:none!important}
 .music-view-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
 .music-view-title{margin:0;color:var(--sidebar-fg);font-size:22px;line-height:1.2;font-weight:750}
@@ -392,10 +428,31 @@ body {
             </div>
           </div>
 
-          <button class="music-item" data-source="netease" aria-checked="false">
-            <span class="material-symbols-outlined">cloud</span>
-            <span>NetEase Cloud</span>
-          </button>
+          <div class="music-submenu" data-state="closed">
+            <button class="music-item music-submenu-trigger" data-source="netease" aria-checked="false" aria-expanded="false">
+              <span class="material-symbols-outlined">cloud</span>
+              <span>NetEase Cloud</span>
+              <span class="music-submenu-chevron">&#8250;</span>
+            </button>
+            <div class="music-submenu-list">
+              <button class="music-item music-sub-item netease-sub-item" data-netease-view="search" aria-checked="false">
+                <span class="material-symbols-outlined">search</span>
+                <span>Search</span>
+              </button>
+              <button class="music-item music-sub-item netease-sub-item" data-netease-view="playlists" aria-checked="false">
+                <span class="material-symbols-outlined">queue_music</span>
+                <span>Playlists</span>
+              </button>
+              <button class="music-item music-sub-item netease-sub-item" data-netease-view="liked" aria-checked="false">
+                <span class="material-symbols-outlined">favorite</span>
+                <span>Liked</span>
+              </button>
+              <button class="music-item music-sub-item netease-sub-item" data-netease-view="history" aria-checked="false">
+                <span class="material-symbols-outlined">history</span>
+                <span>History</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="music-sidebar-footer"></div>
@@ -443,10 +500,48 @@ body {
       </section>
 
       <section class="music-view" data-music-view="netease" hidden>
-        <div class="music-placeholder">
-          <span class="material-symbols-outlined" style="font-size:48px;opacity:.35;width:auto">cloud</span>
-          <h2>NetEase Cloud</h2>
-          <p></p>
+        <div class="netease-view">
+          <header class="music-view-header">
+            <div>
+              <h1 class="music-view-title">NetEase Cloud</h1>
+              <p class="music-view-subtitle">Search NetEase Cloud Music and play through Kairos.</p>
+            </div>
+          </header>
+          <div class="netease-panel">
+            <div class="netease-status" id="neteaseStatus">
+              <span class="netease-status-dot"></span>
+              <span>Checking login...</span>
+            </div>
+            <div class="netease-actions">
+              <button class="netease-button" id="neteaseLoginButton" type="button">
+                <span class="material-symbols-outlined">qr_code_scanner</span>
+                <span>Login</span>
+              </button>
+              <button class="netease-button" id="neteaseRefreshButton" type="button">
+                <span class="material-symbols-outlined">refresh</span>
+                <span>Recheck</span>
+              </button>
+            </div>
+            <div class="netease-qr-card" id="neteaseQrCard" hidden>
+              <img id="neteaseQrImage" alt="NetEase Cloud login QR code">
+              <p id="neteaseQrStatus">Scan with the NetEase Cloud Music app.</p>
+            </div>
+            <form class="netease-search" id="neteaseSearchForm">
+              <label class="netease-input-wrap">
+                <span class="material-symbols-outlined">search</span>
+                <input id="neteaseSearchInput" autocomplete="off" placeholder="Search songs">
+              </label>
+              <button class="netease-button primary" id="neteaseSearchButton" type="submit">
+                <span class="material-symbols-outlined">search</span>
+                <span>Search</span>
+              </button>
+            </form>
+            <div id="neteaseResults">
+              <p class="netease-empty">Search for a song to start.</p>
+            </div>
+            <div id="neteaseAccountPanel"></div>
+            <p class="netease-debug" id="neteaseUrlStatus"></p>
+          </div>
         </div>
       </section>
 
@@ -472,6 +567,17 @@ const playlistDetailBack = document.getElementById('playlistDetailBack');
 const playlistDetailContent = document.getElementById('playlistDetailContent');
 const historyList = document.getElementById('historyList');
 const historyStatus = document.getElementById('historyStatus');
+const neteaseStatus = document.getElementById('neteaseStatus');
+const neteaseLoginButton = document.getElementById('neteaseLoginButton');
+const neteaseRefreshButton = document.getElementById('neteaseRefreshButton');
+const neteaseQrCard = document.getElementById('neteaseQrCard');
+const neteaseQrImage = document.getElementById('neteaseQrImage');
+const neteaseQrStatus = document.getElementById('neteaseQrStatus');
+const neteaseSearchForm = document.getElementById('neteaseSearchForm');
+const neteaseSearchInput = document.getElementById('neteaseSearchInput');
+const neteaseResults = document.getElementById('neteaseResults');
+const neteaseAccountPanel = document.getElementById('neteaseAccountPanel');
+const neteaseUrlStatus = document.getElementById('neteaseUrlStatus');
 const KEY = 'kairos-music-sidebar';
 const PLAYLIST_ORDER_KEY = 'kairos-music-playlist-orders';
 const LIKED_PLAYLIST_ID = '__liked_songs__';
@@ -494,6 +600,11 @@ let playbackState = { currentTrackId: null, playing: false };
 let syncVisiblePlaylistPlayback = () => {};
 let syncHistoryPlayback = () => {};
 let detailReturnView = 'playlist';
+let neteaseInitialized = false;
+let neteaseLoginKey = "";
+let neteaseLoginTimer = null;
+let neteaseLastSongs = [];
+let neteaseActiveView = 'search';
 const getDesktopMusic = () => {
   if (window.kairosDesktop?.music) return window.kairosDesktop.music;
   try {
@@ -503,12 +614,54 @@ const getDesktopMusic = () => {
   }
 };
 
+const getDesktopNetease = () => {
+  if (window.kairosDesktop?.netease) return window.kairosDesktop.netease;
+  try {
+    return window.parent?.kairosDesktop?.netease || null;
+  } catch {
+    return null;
+  }
+};
+
 const notifyMusicPlayer = (detail = {}) => {
   const payload = { source: location.href, at: Date.now(), refresh: true, ...detail };
-  try { window.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
-  if (window.parent && window.parent !== window) {
-    try { window.parent.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
+  const applyTo = target => {
+    try {
+      target?.KairosMusicPlayer?.mount?.();
+      if (target?.KairosMusicPlayer?.applyRefresh) {
+        target.KairosMusicPlayer.applyRefresh(payload);
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+  const directTargets = [window];
+  try {
+    if (window.parent && window.parent !== window) directTargets.push(window.parent);
+  } catch {}
+  if (directTargets.some(applyTo)) return;
+  const requiresDirectPlayer = Array.isArray(payload.tracks) && Boolean(payload.currentTrackId);
+  if (requiresDirectPlayer) {
+    [40, 120, 260, 520, 900].forEach(delay => setTimeout(() => directTargets.some(applyTo), delay));
+    return;
   }
+  [80, 220, 500].forEach(delay => {
+    setTimeout(() => {
+      if (directTargets.some(applyTo)) return;
+      try { window.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload }));
+        }
+      } catch {}
+    }, delay);
+  });
+  try { window.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload })); } catch {}
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.dispatchEvent(new CustomEvent('kairos:music-refresh', { detail: payload }));
+    }
+  } catch {}
 };
 
 const showMusicView = view => {
@@ -538,6 +691,367 @@ const formatTrackDuration = seconds => {
   if (!Number.isFinite(seconds) || seconds <= 0) return '--:--';
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+};
+
+const trackPlayIcon = () => '<svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg>';
+
+const setNeteaseStatus = (message, ready = false) => {
+  if (!neteaseStatus) return;
+  neteaseStatus.classList.toggle('is-ready', ready);
+  const text = neteaseStatus.querySelector('span:last-child');
+  if (text) text.textContent = message;
+};
+
+const setNeteaseBusy = busy => {
+  [neteaseLoginButton, neteaseRefreshButton, neteaseSearchForm?.querySelector('button')].forEach(button => {
+    if (button) button.disabled = Boolean(busy);
+  });
+};
+
+const getPlayerSnapshot = () => {
+  try {
+    const player = window.parent && window.parent !== window ? window.parent.KairosMusicPlayer : window.KairosMusicPlayer;
+    return player?.getState?.() || {};
+  } catch {
+    return {};
+  }
+};
+
+const postNeteaseUrlRefresh = (requestId, track = null) => {
+  const detail = { requestId, track };
+  try { window.dispatchEvent(new CustomEvent('kairos:netease-url-refreshed', { detail })); } catch {}
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.dispatchEvent(new CustomEvent('kairos:netease-url-refreshed', { detail }));
+    }
+  } catch {}
+};
+
+const handleNeteaseUrlRefresh = async event => {
+  const requestId = event.detail?.requestId;
+  const sourceTrack = event.detail?.track;
+  if (!requestId || !sourceTrack) return;
+  const api = getDesktopNetease();
+  if (!api?.playSong) return postNeteaseUrlRefresh(requestId, null);
+  try {
+    const result = await api.playSong({ id: sourceTrack.id, neteaseId: sourceTrack.neteaseId });
+    postNeteaseUrlRefresh(requestId, result?.ok ? result.track : null);
+  } catch (error) {
+    console.error('netease url refresh failed', error);
+    postNeteaseUrlRefresh(requestId, null);
+  }
+};
+
+const registerNeteaseUrlRefreshListener = () => {
+  window.addEventListener('kairos:netease-refresh-url', handleNeteaseUrlRefresh);
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.addEventListener('kairos:netease-refresh-url', handleNeteaseUrlRefresh);
+    }
+  } catch {}
+};
+
+const updateNeteasePlaybackRows = () => {
+  const snapshot = getPlayerSnapshot();
+  const currentId = snapshot.currentTrackId || null;
+  const playing = snapshot.playing === true;
+  neteaseResults?.querySelectorAll('tbody tr[data-id]').forEach(row => {
+    const isCurrent = row.dataset.id === currentId;
+    row.classList.toggle('is-playing', isCurrent);
+    const button = row.querySelector('.track-play-button');
+    const number = row.querySelector('.track-number');
+    if (button) {
+      button.dataset.state = isCurrent && playing ? 'pause' : 'play';
+      button.setAttribute('aria-label', isCurrent && playing ? 'Pause track' : 'Play track');
+    }
+    if (number && isCurrent) number.textContent = playing ? '' : number.dataset.indexLabel || number.textContent;
+  });
+};
+
+const playNeteaseTrack = async song => {
+  const snapshot = getPlayerSnapshot();
+  if (snapshot.currentTrackId === song.id && snapshot.playing === true) {
+    notifyMusicPlayer({ currentTrackId: song.id, playing: false });
+    return null;
+  }
+  if (snapshot.currentTrackId === song.id && snapshot.playing === false) {
+    notifyMusicPlayer({ currentTrackId: song.id, playing: true });
+    return null;
+  }
+  const api = getDesktopNetease();
+  if (!api?.playSong) return null;
+  if (neteaseUrlStatus) neteaseUrlStatus.textContent = 'Getting playable URL...';
+  const result = await api.playSong({ id: song.id, neteaseId: song.neteaseId });
+  if (!result?.ok || !result.track?.playUrl) {
+    throw new Error(result?.message || 'No playable URL returned.');
+  }
+  const track = result.track;
+  notifyMusicPlayer({
+    tracks: [track],
+    queueTrackIds: [track.id],
+    currentTrackId: track.id,
+    playing: true,
+    mode: 'sequence'
+  });
+  if (neteaseUrlStatus) neteaseUrlStatus.textContent = `Playing ${track.title || 'NetEase song'} through Kairos Player.`;
+  toast.success('Playing from NetEase', track.title || 'NetEase song');
+  updateNeteasePlaybackRows();
+  return track;
+};
+
+const enqueueNeteaseTrack = async (song, mode = 'queue') => {
+  const api = getDesktopNetease();
+  if (!api?.playSong) return;
+  const result = await api.playSong({ id: song.id, neteaseId: song.neteaseId });
+  if (!result?.ok || !result.track?.playUrl) {
+    throw new Error(result?.message || 'No playable URL returned.');
+  }
+  const track = result.track;
+  const snapshot = getPlayerSnapshot();
+  const isCurrentNetease = String(snapshot.currentTrackId || '').startsWith('netease:');
+  const currentTrackId = isCurrentNetease ? snapshot.currentTrackId : track.id;
+  const existingQueue = Array.isArray(snapshot.queueTrackIds)
+    ? snapshot.queueTrackIds.filter(id => String(id).startsWith('netease:') && id !== track.id)
+    : [];
+  const currentIndex = isCurrentNetease ? existingQueue.indexOf(currentTrackId) : -1;
+  const insertIndex = mode === 'next' ? (currentIndex >= 0 ? currentIndex + 1 : 0) : existingQueue.length;
+  existingQueue.splice(insertIndex, 0, track.id);
+  notifyMusicPlayer({
+    tracks: [track],
+    queueTrackIds: existingQueue,
+    currentTrackId,
+    playing: isCurrentNetease && snapshot.playing === true && Boolean(currentTrackId),
+    mode: snapshot.mode || 'sequence'
+  });
+  toast.success(mode === 'next' ? 'Added to play next' : 'Added to queue', track.title || 'NetEase song');
+};
+
+const renderNeteaseResults = songs => {
+  if (!neteaseResults) return;
+  neteaseLastSongs = songs || [];
+  if (!songs?.length) {
+    neteaseResults.innerHTML = '<p class="netease-empty">No songs found.</p>';
+    return;
+  }
+  const table = document.createElement('table');
+  table.className = 'playlist-detail-table netease-results';
+  table.innerHTML = '<thead><tr><th class="track-index">#</th><th>Title</th><th>Album</th><th class="track-duration">Time</th><th class="track-actions"></th></tr></thead><tbody></tbody>';
+  const tbody = table.querySelector('tbody');
+  songs.forEach((song, index) => {
+    const row = document.createElement('tr');
+    row.dataset.id = song.id;
+    const playCell = document.createElement('td');
+    playCell.className = 'track-play-cell';
+    const number = document.createElement('span');
+    number.className = 'track-number';
+    number.textContent = String(index + 1).padStart(2, '0');
+    number.dataset.indexLabel = number.textContent;
+    const playButton = document.createElement('button');
+    playButton.className = 'track-play-button';
+    playButton.type = 'button';
+    playButton.setAttribute('aria-label', `Play ${song.title || 'song'}`);
+    playButton.dataset.state = 'play';
+    playButton.innerHTML = trackPlayIcon();
+    playButton.addEventListener('click', async () => {
+      playButton.disabled = true;
+      try {
+        await playNeteaseTrack(song);
+      } catch (error) {
+        console.error('netease play failed', error);
+        if (neteaseUrlStatus) neteaseUrlStatus.textContent = error?.message || 'Play failed.';
+        toast.error('Play failed', error?.message || 'This song is unavailable.');
+      } finally {
+        playButton.disabled = false;
+      }
+    });
+    playCell.append(number, playButton);
+
+    const titleCell = document.createElement('td');
+    titleCell.innerHTML = '<div class="track-title-cell"><span class="track-cover"><img alt=""></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div>';
+    titleCell.querySelector('img').src = song.coverUrl || '';
+    titleCell.querySelector('.track-name').textContent = song.title || 'NetEase song';
+    titleCell.querySelector('.track-artist').textContent = song.artist || 'NetEase Cloud';
+
+    const albumCell = document.createElement('td');
+    albumCell.className = 'track-album';
+    albumCell.textContent = song.album || '';
+    const timeCell = document.createElement('td');
+    timeCell.className = 'track-duration';
+    timeCell.textContent = formatTrackDuration(Number(song.duration) || 0);
+    const actionCell = document.createElement('td');
+    actionCell.className = 'track-actions';
+    actionCell.innerHTML = '<div class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="More actions" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><div class="track-row-menu" hidden><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>Play Next</span></button><button type="button" data-action="add-queue"><span class="material-symbols-outlined">playlist_add</span><span>Add to Queue</span></button></div></div>';
+    const trigger = actionCell.querySelector('.track-row-menu-trigger');
+    const menu = actionCell.querySelector('.track-row-menu');
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      document.querySelectorAll('.track-row-menu').forEach(item => { if (item !== menu) item.hidden = true; });
+      menu.hidden = !menu.hidden;
+      trigger.setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    menu.querySelectorAll('button[data-action]').forEach(button => {
+      button.addEventListener('click', async event => {
+        event.stopPropagation();
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        try {
+          await enqueueNeteaseTrack(song, button.dataset.action === 'play-next' ? 'next' : 'queue');
+        } catch (error) {
+          console.error('netease queue failed', error);
+          toast.error('Add failed', error?.message || 'This song is unavailable.');
+        }
+      });
+    });
+    row.append(playCell, titleCell, albumCell, timeCell, actionCell);
+    tbody.append(row);
+  });
+  neteaseResults.replaceChildren(table);
+  updateNeteasePlaybackRows();
+};
+
+const setNeteaseSearchVisible = visible => {
+  if (neteaseSearchForm) neteaseSearchForm.hidden = !visible;
+  if (neteaseResults) neteaseResults.hidden = false;
+  if (neteaseAccountPanel) neteaseAccountPanel.replaceChildren();
+};
+
+const renderNeteaseSongCollection = (title, songs = [], subtitle = '') => {
+  setNeteaseSearchVisible(false);
+  if (neteaseAccountPanel) {
+    neteaseAccountPanel.innerHTML = `<header class="music-view-header"><div><h2 class="music-view-title">${title}</h2><p class="music-view-subtitle">${subtitle || `${songs.length} songs`}</p></div></header>`;
+  }
+  renderNeteaseResults(songs);
+};
+
+const loadNeteasePlaylists = async () => {
+  const api = getDesktopNetease();
+  if (!api?.getUserPlaylists || !neteaseAccountPanel) return;
+  setNeteaseSearchVisible(false);
+  neteaseResults.innerHTML = '';
+  neteaseAccountPanel.innerHTML = '<p class="netease-empty">Loading playlists...</p>';
+  try {
+    const result = await api.getUserPlaylists({ limit: 50, offset: 0 });
+    if (!result?.ok) throw new Error(result?.message || 'Unable to load playlists.');
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<header class="music-view-header"><div><h2 class="music-view-title">NetEase Playlists</h2><p class="music-view-subtitle"></p></div></header>';
+    wrap.querySelector('.music-view-subtitle').textContent = `${result.playlists.length} playlists`;
+    const grid = document.createElement('div');
+    grid.className = 'netease-account-grid';
+    result.playlists.forEach(playlist => {
+      const card = document.createElement('button');
+      card.className = 'netease-account-card';
+      card.type = 'button';
+      card.innerHTML = '<img alt=""><span style="min-width:0"><strong></strong><span></span></span>';
+      card.querySelector('img').src = playlist.coverUrl || '';
+      card.querySelector('strong').textContent = playlist.name;
+      card.querySelector('span span').textContent = `${playlist.trackCount || 0} tracks`;
+      card.addEventListener('click', async () => {
+        neteaseAccountPanel.innerHTML = '<p class="netease-empty">Loading songs...</p>';
+        const songsResult = await api.getPlaylistSongs({ neteaseId: playlist.neteaseId, limit: 200, offset: 0 });
+        if (!songsResult?.ok) throw new Error(songsResult?.message || 'Unable to load playlist.');
+        renderNeteaseSongCollection(playlist.name, songsResult.songs || [], `${songsResult.songs?.length || 0} songs`);
+      });
+      grid.append(card);
+    });
+    wrap.append(grid);
+    neteaseAccountPanel.replaceChildren(wrap);
+  } catch (error) {
+    console.error('load netease playlists failed', error);
+    neteaseAccountPanel.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load playlists.'}</p>`;
+  }
+};
+
+const loadNeteaseLiked = async () => {
+  const api = getDesktopNetease();
+  if (!api?.getLikedSongs) return;
+  setNeteaseSearchVisible(false);
+  neteaseResults.innerHTML = '<p class="netease-empty">Loading liked songs...</p>';
+  try {
+    const result = await api.getLikedSongs();
+    if (!result?.ok) throw new Error(result?.message || 'Unable to load liked songs.');
+    renderNeteaseSongCollection('Liked Songs', result.songs || [], `${result.total || result.songs?.length || 0} songs`);
+  } catch (error) {
+    console.error('load netease liked failed', error);
+    neteaseResults.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load liked songs.'}</p>`;
+  }
+};
+
+const loadNeteaseHistory = async () => {
+  const api = getDesktopNetease();
+  if (!api?.getHistory) return;
+  setNeteaseSearchVisible(false);
+  neteaseResults.innerHTML = '<p class="netease-empty">Loading history...</p>';
+  try {
+    const result = await api.getHistory({ type: 1 });
+    if (!result?.ok) throw new Error(result?.message || 'Unable to load history.');
+    renderNeteaseSongCollection('NetEase History', result.songs || [], `${result.songs?.length || 0} songs`);
+  } catch (error) {
+    console.error('load netease history failed', error);
+    neteaseResults.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load history.'}</p>`;
+  }
+};
+
+const showNeteaseSection = (view = 'search') => {
+  neteaseActiveView = view;
+  showMusicView('netease');
+  document.querySelectorAll('.netease-sub-item').forEach(item => item.setAttribute('aria-checked', String(item.dataset.neteaseView === view)));
+  if (view === 'search') {
+    setNeteaseSearchVisible(true);
+    if (!neteaseLastSongs.length) neteaseResults.innerHTML = '<p class="netease-empty">Search for a song to start.</p>';
+    else renderNeteaseResults(neteaseLastSongs);
+  }
+  if (view === 'playlists') loadNeteasePlaylists();
+  if (view === 'liked') loadNeteaseLiked();
+  if (view === 'history') loadNeteaseHistory();
+};
+
+const initializeNeteaseView = async () => {
+  const api = getDesktopNetease();
+  if (!api?.getStatus) {
+    setNeteaseStatus('NetEase API is unavailable in this build.');
+    return;
+  }
+  setNeteaseStatus('Checking NetEase status...');
+  try {
+    const status = await api.getStatus();
+    neteaseInitialized = true;
+    if (status?.loggedIn) {
+      const name = status.profile?.nickname ? ` as ${status.profile.nickname}` : '';
+      setNeteaseStatus(`Logged in${name}.`, true);
+    } else {
+      setNeteaseStatus('Anonymous mode. Login may improve availability.', true);
+    }
+  } catch (error) {
+    console.error('netease status failed', error);
+    setNeteaseStatus('Unable to check NetEase status.');
+  }
+};
+
+const pollNeteaseLogin = async () => {
+  const api = getDesktopNetease();
+  if (!api?.loginCheck || !neteaseLoginKey) return;
+  try {
+    const result = await api.loginCheck({ key: neteaseLoginKey });
+    if (result?.code === 803 || result?.loggedIn) {
+      clearInterval(neteaseLoginTimer);
+      neteaseLoginTimer = null;
+      neteaseLoginKey = "";
+      if (neteaseQrCard) neteaseQrCard.hidden = true;
+      toast.success('NetEase login success', result.nickname || '');
+      await initializeNeteaseView();
+      return;
+    }
+    if (result?.code === 800) {
+      clearInterval(neteaseLoginTimer);
+      neteaseLoginTimer = null;
+      if (neteaseQrStatus) neteaseQrStatus.textContent = 'QR code expired. Click Login again.';
+      setNeteaseStatus('QR code expired.');
+      return;
+    }
+    if (neteaseQrStatus) neteaseQrStatus.textContent = result?.message || 'Waiting for scan...';
+  } catch (error) {
+    console.error('netease login check failed', error);
+  }
 };
 
 const hydrateTrackDuration = (track, cell) => {
@@ -617,11 +1131,13 @@ const applyPlaybackState = detail => {
     playbackState = { currentTrackId: null, playing: false };
     syncVisiblePlaylistPlayback();
     syncHistoryPlayback();
+    updateNeteasePlaybackRows();
     return;
   }
   playbackState = { currentTrackId: detail.currentTrackId, playing: detail.playing === true };
   syncVisiblePlaylistPlayback();
   syncHistoryPlayback();
+  updateNeteasePlaybackRows();
 };
 
 window.addEventListener('kairos:music-state-changed', event => applyPlaybackState(event.detail));
@@ -1742,6 +2258,7 @@ document.querySelectorAll('.music-submenu-trigger').forEach(trigger => {
 document.querySelectorAll('.music-sub-item').forEach(button => {
   button.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (button.classList.contains('netease-sub-item')) return;
     document.querySelectorAll('.music-sub-item').forEach(item =>
       item.setAttribute('aria-checked', 'false')
     );
@@ -1769,13 +2286,75 @@ document.querySelectorAll('[data-source]').forEach(button => {
     );
     if (button.dataset.source === 'netease') {
       document.querySelectorAll('.music-sub-item').forEach(item => item.setAttribute('aria-checked', 'false'));
-      showMusicView('netease');
+      button.closest('.music-submenu')?.setAttribute('data-state', 'open');
+      button.setAttribute('aria-expanded', 'true');
+      showNeteaseSection(neteaseActiveView || 'search');
+      if (!neteaseInitialized) initializeNeteaseView();
     } else {
       showMusicView('playlist');
       document.querySelector('[data-view="playlist"]')?.setAttribute('aria-checked', 'true');
     }
   });
 });
+
+document.querySelectorAll('.netease-sub-item').forEach(button => {
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    document.querySelectorAll('[data-source]').forEach(item => item.setAttribute('aria-checked', String(item.dataset.source === 'netease')));
+    document.querySelectorAll('.music-sub-item').forEach(item => item.setAttribute('aria-checked', 'false'));
+    button.setAttribute('aria-checked', 'true');
+    showNeteaseSection(button.dataset.neteaseView || 'search');
+    if (!neteaseInitialized) initializeNeteaseView();
+  });
+});
+
+neteaseLoginButton?.addEventListener('click', async () => {
+  const api = getDesktopNetease();
+  if (!api?.startLogin) return;
+  setNeteaseBusy(true);
+  setNeteaseStatus('Creating login QR code...');
+  try {
+    const result = await api.startLogin();
+    if (!result?.ok || !result.qrImg) throw new Error(result?.message || 'Unable to create login QR code.');
+    neteaseLoginKey = result.key || "";
+    if (neteaseQrImage) neteaseQrImage.src = result.qrImg;
+    if (neteaseQrCard) neteaseQrCard.hidden = false;
+    if (neteaseQrStatus) neteaseQrStatus.textContent = 'Scan with the NetEase Cloud Music app.';
+    setNeteaseStatus('Waiting for QR scan...', true);
+    clearInterval(neteaseLoginTimer);
+    neteaseLoginTimer = setInterval(pollNeteaseLogin, 2400);
+    pollNeteaseLogin();
+  } catch (error) {
+    console.error('netease login failed', error);
+    setNeteaseStatus(error?.message || 'Login failed.');
+    toast.error('Login failed', error?.message || 'Please try again.');
+  } finally {
+    setNeteaseBusy(false);
+  }
+});
+
+neteaseRefreshButton?.addEventListener('click', initializeNeteaseView);
+
+neteaseSearchForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const api = getDesktopNetease();
+  const keyword = neteaseSearchInput?.value?.trim();
+  if (!api?.searchSongs || !keyword) return;
+  setNeteaseBusy(true);
+  if (neteaseResults) neteaseResults.innerHTML = '<p class="netease-empty">Searching...</p>';
+  if (neteaseUrlStatus) neteaseUrlStatus.textContent = '';
+  try {
+    const result = await api.searchSongs({ keyword, limit: 30, offset: 0 });
+    renderNeteaseResults(result?.songs || []);
+  } catch (error) {
+    console.error('netease search failed', error);
+    if (neteaseResults) neteaseResults.innerHTML = '<p class="netease-empty">Search failed. Please try again.</p>';
+    toast.error('Search failed', error?.message || 'Please try again.');
+  } finally {
+    setNeteaseBusy(false);
+  }
+});
+registerNeteaseUrlRefreshListener();
 showMusicView('playlist');
 refreshMusicState().finally(() => {
   try {
@@ -1790,6 +2369,6 @@ refreshMusicState().finally(() => {
 <link href="tweakcn-theme.css?v=9" rel="stylesheet">
 <link href="music-player.css?v=28" rel="stylesheet">
 <script src="stitch-shell.js?v=88"></script>
-<script src="music-player.js?v=36"></script>
+<script src="music-player.js?v=42"></script>
 </body>
 </html>

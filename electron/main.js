@@ -10,6 +10,7 @@ import { ToolRuntime } from "./tool-runtime.js";
 import { AppStateStore, createAppAdapters } from "./app-state.js";
 import { ContextManager } from "./context-manager.js";
 import { MusicLibrary } from "./music-library.js";
+import { NeteaseApiService } from "./netease-api-service.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 dotenv.config({ path: path.join(root, ".env.local"), quiet: true });
@@ -23,7 +24,7 @@ let petMoveTimer = null;
 let petPendingDx = 0;
 let petPendingDy = 0;
 let petVisible = true;
-let aiStore, appStateStore, attachments, toolRuntime, contextManager, appAdapters, musicLibrary;
+let aiStore, appStateStore, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService;
 
 const settingsPath = () => path.join(app.getPath("userData"), "ai-settings.json");
 const petStatePath = () => path.join(app.getPath("userData"), "pet-state.json");
@@ -265,5 +266,14 @@ ipcMain.handle("music:remove-playlist",(_event,id)=>musicLibrary.removePlaylist(
 ipcMain.handle("music:refresh-playlist",(_event,id)=>musicLibrary.refreshPlaylist(id));
 ipcMain.handle("music:remove-tracks-from-playlist",(_event,input)=>musicLibrary.removeTracksFromPlaylist(input?.id,input?.trackIds));
 ipcMain.handle("music:restore-hidden-tracks",(_event,input)=>musicLibrary.restoreHiddenTracks(input?.id,input?.trackPaths));
+ipcMain.handle("netease:get-status",()=>neteaseService.getStatus());
+ipcMain.handle("netease:start-login",()=>neteaseService.startLogin());
+ipcMain.handle("netease:login-check",(_event,input)=>neteaseService.loginCheck(input));
+ipcMain.handle("netease:search-songs",(_event,input)=>neteaseService.searchSongs(input));
+ipcMain.handle("netease:play-song",(_event,input)=>neteaseService.playSong(input));
+ipcMain.handle("netease:get-user-playlists",(_event,input)=>neteaseService.getUserPlaylists(input));
+ipcMain.handle("netease:get-playlist-songs",(_event,input)=>neteaseService.getPlaylistSongs(input));
+ipcMain.handle("netease:get-liked-songs",()=>neteaseService.getLikedSongs());
+ipcMain.handle("netease:get-history",(_event,input)=>neteaseService.getHistory(input));
 
-app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
+app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json")});await neteaseService.initialize();attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
