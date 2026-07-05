@@ -45,9 +45,11 @@ body {
   overflow: hidden;
   padding-bottom: 80px;
 }
+body[data-embedded="true"] { padding-bottom: 0; }
 
 /* Wrapper */
-.music-root { display: flex; height: 100vh; width: 100%; }
+.music-root { display: flex; height: calc(100vh - 80px); width: 100%; }
+body[data-embedded="true"] .music-root { height: 100vh; }
 
 /* Sidebar group */
 .music-sidebar-group { display: none; }
@@ -62,12 +64,13 @@ body {
 
 .music-sidebar-panel {
   position: fixed; inset: 0 auto 0 0; z-index: 10;
-  display: flex; width: var(--sidebar-width); height: 100vh;
+  display: flex; width: var(--sidebar-width); height: auto;
   transition: left .22s cubic-bezier(.2,.8,.2,1);
 }
 [data-state="collapsed"] .music-sidebar-panel { left: calc(var(--sidebar-width) * -1); }
 
 .music-sidebar {
+  position: relative;
   display: flex; flex-direction: column; width: 100%; height: 100%;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-border);
@@ -87,7 +90,7 @@ body {
 /* Sidebar content */
 .music-sidebar-content {
   flex: 1; display: flex; flex-direction: column; gap: 2px;
-  padding: 8px; overflow-y: auto; overflow-x: hidden;
+  min-height: 0; padding: 8px; overflow-y: auto; overflow-x: hidden;
 }
 .music-group-label {
   padding: 8px 10px 4px;
@@ -130,9 +133,42 @@ body {
 
 /* Sidebar footer */
 .music-sidebar-footer {
-  padding: 8px; border-top: 1px solid var(--sidebar-border);
+  flex: 0 0 auto;
+  padding: 5px 8px; border-top: 1px solid var(--sidebar-border);
+  background: var(--sidebar-bg);
 }
+.music-sidebar-footer:has(.music-sidebar-account[hidden]) { display: none; }
 .music-sidebar-footer .music-item { color: var(--sidebar-muted); font-weight: 500; }
+.music-sidebar-account {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 42px; padding: 3px 10px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sidebar-fg);
+  box-shadow: none;
+  overflow: hidden;
+}
+.music-sidebar-account[hidden] { display: none !important; }
+.music-sidebar-avatar,
+.music-sidebar-avatar-fallback {
+  width: 36px; height: 36px; flex: 0 0 36px;
+  border-radius: 999px;
+}
+.music-sidebar-avatar {
+  object-fit: cover;
+  background: rgba(61,59,46,.08);
+}
+.music-sidebar-avatar-fallback {
+  display: grid; place-items: center;
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-fg);
+  font-size: 22px;
+}
+.music-sidebar-account-name {
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 750;
+}
 
 /* Sidebar rail */
 .music-sidebar-rail {
@@ -170,6 +206,9 @@ body {
 .music-placeholder p { font-size: 13px; margin: 0; }
 .netease-view{max-width:980px}
 .netease-panel{display:grid;gap:16px}
+.netease-auth-gate{min-height:calc(100vh - 260px);display:grid;place-content:center;justify-items:center;gap:14px;text-align:center;color:var(--sidebar-fg)}
+.netease-auth-gate[hidden],.netease-content[hidden]{display:none!important}
+.netease-auth-message{margin:0;font-size:15px;font-weight:750;color:var(--sidebar-fg)}
 .netease-status{display:flex;align-items:center;gap:8px;min-height:28px;color:var(--sidebar-muted);font-size:13px;font-weight:650}
 .netease-status-dot{width:8px;height:8px;border-radius:999px;background:#a9a399;box-shadow:0 0 0 4px rgba(169,163,153,.12)}
 .netease-status.is-ready .netease-status-dot{background:var(--sidebar-accent-fg);box-shadow:0 0 0 4px rgba(209,99,60,.14)}
@@ -186,6 +225,23 @@ body {
 .netease-results.playlist-detail-table{margin-top:4px}
 .netease-empty{margin:18px 0;color:var(--sidebar-muted);font-weight:650}
 .netease-debug{margin:0;color:var(--sidebar-muted);font-size:12px;font-weight:650}
+.netease-playlist-group{margin-top:24px}
+.netease-playlist-group-title{margin:0 0 14px;color:var(--sidebar-muted);font:800 12px/1.2 Outfit,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.shimmer{position:relative;overflow:hidden;background:rgba(61,59,46,.08)}
+.shimmer::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.58),transparent);animation:shimmer 1.35s ease-in-out infinite}
+@keyframes shimmer{100%{transform:translateX(100%)}}
+.netease-loading{display:grid;gap:18px;margin-top:8px}
+.netease-loading-line{height:14px;border-radius:999px}
+.netease-loading-line.short{width:140px}.netease-loading-line.medium{width:220px}
+.netease-loading-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,220px));gap:18px;padding:2px 2px 18px}
+.netease-loading-card{height:220px;border-radius:13px;box-shadow:0 14px 34px rgba(61,59,46,.08)}
+.netease-loading-hero{display:grid;grid-template-columns:168px minmax(0,1fr);gap:24px;align-items:end;margin-bottom:26px}
+.netease-loading-cover{width:168px;height:168px;border-radius:13px}
+.netease-loading-copy{display:grid;gap:12px;padding-bottom:6px}
+.netease-loading-button{width:104px;height:36px;border-radius:9px}
+.netease-loading-row{display:grid;grid-template-columns:44px minmax(0,1fr) 190px 70px;align-items:center;gap:16px;height:56px;border-bottom:1px solid rgba(61,59,46,.055)}
+.netease-loading-thumb{width:38px;height:38px;border-radius:8px}
+.netease-loading-table{display:grid;margin-top:8px}
 .music-view[hidden]{display:none!important}
 .music-view-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
 .music-view-title{margin:0;color:var(--sidebar-fg);font-size:22px;line-height:1.2;font-weight:750}
@@ -375,6 +431,11 @@ body {
 </style>
 </head>
 <body class="font-body-md text-body-md overflow-hidden" data-page="music">
+<script>
+if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !== window) {
+  document.body.dataset.embedded = 'true';
+}
+</script>
 
 <div class="music-root">
 
@@ -439,7 +500,13 @@ body {
           </div>
         </div>
 
-        <div class="music-sidebar-footer"></div>
+        <div class="music-sidebar-footer">
+          <div class="music-sidebar-account" id="neteaseSidebarAccount" hidden>
+            <img class="music-sidebar-avatar" id="neteaseSidebarAvatar" alt="">
+            <span class="material-symbols-outlined music-sidebar-avatar-fallback" id="neteaseSidebarAvatarFallback" hidden>person</span>
+            <span class="music-sidebar-account-name" id="neteaseSidebarName">NetEase Cloud</span>
+          </div>
+        </div>
       </div>
       <div class="music-sidebar-rail"></div>
     </div>
@@ -485,46 +552,35 @@ body {
 
       <section class="music-view" data-music-view="netease" hidden>
         <div class="netease-view">
-          <header class="music-view-header">
-            <div>
-              <h1 class="music-view-title">NetEase Cloud</h1>
-              <p class="music-view-subtitle">Search NetEase Cloud Music and play through Kairos.</p>
-            </div>
-          </header>
           <div class="netease-panel">
-            <div class="netease-status" id="neteaseStatus">
-              <span class="netease-status-dot"></span>
-              <span>Checking login...</span>
-            </div>
-            <div class="netease-actions">
+            <div class="netease-auth-gate" id="neteaseAuthGate" hidden>
+              <p class="netease-auth-message">你还没有登录网易云账号，若要使用请先登录</p>
               <button class="netease-button" id="neteaseLoginButton" type="button">
                 <span class="material-symbols-outlined">qr_code_scanner</span>
                 <span>Login</span>
               </button>
-              <button class="netease-button" id="neteaseRefreshButton" type="button">
-                <span class="material-symbols-outlined">refresh</span>
-                <span>Refresh</span>
-              </button>
+              <div class="netease-qr-card" id="neteaseQrCard" hidden>
+                <img id="neteaseQrImage" alt="NetEase Cloud login QR code">
+                <p id="neteaseQrStatus">Scan with the NetEase Cloud Music app.</p>
+              </div>
             </div>
-            <div class="netease-qr-card" id="neteaseQrCard" hidden>
-              <img id="neteaseQrImage" alt="NetEase Cloud login QR code">
-              <p id="neteaseQrStatus">Scan with the NetEase Cloud Music app.</p>
+            <div class="netease-content" id="neteaseContent" hidden>
+              <form class="netease-search" id="neteaseSearchForm">
+                <label class="playlist-input-group">
+                  <span class="playlist-input-addon"><span class="material-symbols-outlined">search</span></span>
+                  <input id="neteaseSearchInput" autocomplete="off" placeholder="Search songs">
+                </label>
+                <button class="netease-button primary" id="neteaseSearchButton" type="submit">
+                  <span class="material-symbols-outlined">search</span>
+                  <span>Search</span>
+                </button>
+              </form>
+              <div id="neteaseAccountPanel"></div>
+              <div id="neteaseResults">
+                <p class="netease-empty">Search for a song to start.</p>
+              </div>
+              <p class="netease-debug" id="neteaseUrlStatus"></p>
             </div>
-            <form class="netease-search" id="neteaseSearchForm">
-              <label class="playlist-input-group">
-                <span class="playlist-input-addon"><span class="material-symbols-outlined">search</span></span>
-                <input id="neteaseSearchInput" autocomplete="off" placeholder="Search songs">
-              </label>
-              <button class="netease-button primary" id="neteaseSearchButton" type="submit">
-                <span class="material-symbols-outlined">search</span>
-                <span>Search</span>
-              </button>
-            </form>
-            <div id="neteaseResults">
-              <p class="netease-empty">Search for a song to start.</p>
-            </div>
-            <div id="neteaseAccountPanel"></div>
-            <p class="netease-debug" id="neteaseUrlStatus"></p>
           </div>
         </div>
       </section>
@@ -562,6 +618,12 @@ const neteaseSearchInput = document.getElementById('neteaseSearchInput');
 const neteaseResults = document.getElementById('neteaseResults');
 const neteaseAccountPanel = document.getElementById('neteaseAccountPanel');
 const neteaseUrlStatus = document.getElementById('neteaseUrlStatus');
+const neteaseAuthGate = document.getElementById('neteaseAuthGate');
+const neteaseContent = document.getElementById('neteaseContent');
+const neteaseSidebarAccount = document.getElementById('neteaseSidebarAccount');
+const neteaseSidebarAvatar = document.getElementById('neteaseSidebarAvatar');
+const neteaseSidebarAvatarFallback = document.getElementById('neteaseSidebarAvatarFallback');
+const neteaseSidebarName = document.getElementById('neteaseSidebarName');
 const KEY = 'kairos-music-sidebar';
 const PLAYLIST_ORDER_KEY = 'kairos-music-playlist-orders';
 const LIKED_PLAYLIST_ID = '__liked_songs__';
@@ -712,6 +774,26 @@ const setNeteaseStatus = (message, ready = false) => {
   if (text) text.textContent = message;
 };
 
+const renderNeteaseSidebarProfile = profile => {
+  if (!neteaseSidebarAccount) return;
+  const hasProfile = Boolean(profile?.nickname || profile?.avatarUrl || profile?.userId);
+  neteaseSidebarAccount.hidden = !hasProfile;
+  if (!hasProfile) return;
+  if (neteaseSidebarName) neteaseSidebarName.textContent = profile.nickname || 'NetEase Cloud';
+  const avatarUrl = String(profile.avatarUrl || '').trim();
+  if (neteaseSidebarAvatar) {
+    neteaseSidebarAvatar.hidden = !avatarUrl;
+    if (avatarUrl) neteaseSidebarAvatar.src = avatarUrl;
+    else neteaseSidebarAvatar.removeAttribute('src');
+  }
+  if (neteaseSidebarAvatarFallback) neteaseSidebarAvatarFallback.hidden = Boolean(avatarUrl);
+};
+
+const setNeteaseAuthenticated = loggedIn => {
+  if (neteaseAuthGate) neteaseAuthGate.hidden = Boolean(loggedIn);
+  if (neteaseContent) neteaseContent.hidden = !loggedIn;
+};
+
 const setNeteaseBusy = busy => {
   [neteaseLoginButton, neteaseRefreshButton, neteaseSearchForm?.querySelector('button')].forEach(button => {
     if (button) button.disabled = Boolean(busy);
@@ -823,6 +905,41 @@ const closeNeteaseRowMenus = () => {
     menu.parentElement?.querySelector('.track-row-menu-trigger')?.setAttribute('aria-expanded', 'false');
   });
 };
+
+const shimmerLine = (className = 'medium') => `<span class="netease-loading-line shimmer ${className}"></span>`;
+const renderPlaylistLoading = () => `
+  <div class="netease-loading" aria-busy="true" aria-label="Loading playlists">
+    ${shimmerLine('medium')}
+    <div class="netease-loading-card-grid">
+      ${Array.from({ length: 4 }, () => '<span class="netease-loading-card shimmer"></span>').join('')}
+    </div>
+  </div>
+`;
+const renderSongDetailLoading = () => `
+  <div class="netease-loading" aria-busy="true" aria-label="Loading songs">
+    <div class="netease-loading-hero">
+      <span class="netease-loading-cover shimmer"></span>
+      <span class="netease-loading-copy">
+        ${shimmerLine('short')}
+        ${shimmerLine('medium')}
+        ${shimmerLine('medium')}
+        <span class="netease-loading-button shimmer"></span>
+      </span>
+    </div>
+  </div>
+`;
+const renderSongRowsLoading = (label = 'Loading songs') => `
+  <div class="netease-loading-table" aria-busy="true" aria-label="${label}">
+    ${Array.from({ length: 6 }, () => `
+      <span class="netease-loading-row">
+        <span class="netease-loading-thumb shimmer"></span>
+        ${shimmerLine('medium')}
+        ${shimmerLine('medium')}
+        ${shimmerLine('short')}
+      </span>
+    `).join('')}
+  </div>
+`;
 
 const ensureNeteaseLikedIds = async (force = false) => {
   if (neteaseLikedIdsLoaded && !force) return neteaseLikedIds;
@@ -1222,7 +1339,7 @@ const loadNeteasePlaylists = async () => {
   const requestId = ++neteaseAccountRequestId;
   setNeteaseSearchVisible(false);
   neteaseResults.innerHTML = '';
-  neteaseAccountPanel.innerHTML = '<p class="netease-empty">Loading playlists...</p>';
+  neteaseAccountPanel.innerHTML = renderPlaylistLoading();
   try {
     const result = await api.getUserPlaylists({ offset: 0 });
     if (neteaseActiveView !== 'playlists' || requestId !== neteaseAccountRequestId) return;
@@ -1231,8 +1348,6 @@ const loadNeteasePlaylists = async () => {
     wrap.innerHTML = '<header class="music-view-header"><div><h2 class="music-view-title">NetEase Playlists</h2><p class="music-view-subtitle"></p></div></header>';
     const totalTracks = result.playlists.reduce((sum, playlist) => sum + (Number(playlist.trackCount) || 0), 0);
     wrap.querySelector('.music-view-subtitle').textContent = `${result.playlists.length} playlist${result.playlists.length === 1 ? '' : 's'} \u00b7 ${totalTracks} track${totalTracks === 1 ? '' : 's'}`;
-    const grid = document.createElement('div');
-    grid.className = 'local-playlist-list';
     if (!result.playlists.length) {
       const empty = document.createElement('p');
       empty.className = 'netease-empty';
@@ -1241,7 +1356,7 @@ const loadNeteasePlaylists = async () => {
       neteaseAccountPanel.replaceChildren(wrap);
       return;
     }
-    result.playlists.forEach(playlist => {
+    const makePlaylistCard = playlist => {
       const card = document.createElement('div');
       card.className = 'playlist-tilted-card';
       card.tabIndex = 0;
@@ -1264,7 +1379,8 @@ const loadNeteasePlaylists = async () => {
       attachTiltedCard(card);
       const openPlaylist = async () => {
         const detailRequestId = ++neteaseAccountRequestId;
-        neteaseAccountPanel.innerHTML = '<p class="netease-empty">Loading songs...</p>';
+        neteaseAccountPanel.innerHTML = renderSongDetailLoading();
+        neteaseResults.innerHTML = renderSongRowsLoading();
         try {
           const songsResult = await api.getPlaylistSongs({ neteaseId: playlist.neteaseId, offset: 0 });
           if (neteaseActiveView !== 'playlists' || detailRequestId !== neteaseAccountRequestId) return;
@@ -1281,6 +1397,7 @@ const loadNeteasePlaylists = async () => {
         } catch (error) {
           if (neteaseActiveView !== 'playlists' || detailRequestId !== neteaseAccountRequestId) return;
           console.error('load netease playlist failed', error);
+          neteaseResults.innerHTML = '';
           neteaseAccountPanel.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load playlist.'}</p>`;
         }
       };
@@ -1293,9 +1410,30 @@ const loadNeteasePlaylists = async () => {
         event.preventDefault();
         await openPlaylist();
       });
-      grid.append(card);
-    });
-    wrap.append(grid);
+      return card;
+    };
+    const appendPlaylistGroup = (title, playlists) => {
+      const section = document.createElement('section');
+      section.className = 'netease-playlist-group';
+      section.innerHTML = `<h3 class="netease-playlist-group-title">${title}</h3>`;
+      if (!playlists.length) {
+        const empty = document.createElement('p');
+        empty.className = 'netease-empty';
+        empty.textContent = title === 'Created Playlists' ? 'No created playlists found.' : 'No saved playlists found.';
+        section.append(empty);
+        wrap.append(section);
+        return;
+      }
+      const grid = document.createElement('div');
+      grid.className = 'local-playlist-list';
+      playlists.forEach(playlist => grid.append(makePlaylistCard(playlist)));
+      section.append(grid);
+      wrap.append(section);
+    };
+    const createdGroup = Array.isArray(result.createdPlaylists) ? result.createdPlaylists : result.playlists;
+    const savedGroup = Array.isArray(result.savedPlaylists) ? result.savedPlaylists : [];
+    appendPlaylistGroup('Created Playlists', createdGroup || []);
+    appendPlaylistGroup('Saved Playlists', savedGroup || []);
     neteaseAccountPanel.replaceChildren(wrap);
   } catch (error) {
     if (neteaseActiveView !== 'playlists' || requestId !== neteaseAccountRequestId) return;
@@ -1309,7 +1447,8 @@ const loadNeteaseLiked = async () => {
   if (!api?.getLikedSongs) return;
   const requestId = ++neteaseAccountRequestId;
   setNeteaseSearchVisible(false);
-  neteaseResults.innerHTML = '<p class="netease-empty">Loading liked songs...</p>';
+  neteaseAccountPanel.innerHTML = renderSongDetailLoading();
+  neteaseResults.innerHTML = renderSongRowsLoading('Loading liked songs');
   try {
     const result = await api.getLikedSongs();
     if (neteaseActiveView !== 'liked' || requestId !== neteaseAccountRequestId) return;
@@ -1317,14 +1456,17 @@ const loadNeteaseLiked = async () => {
     neteaseLikedIds = new Set((result.ids || []).map(id => String(id)));
     neteaseLikedIdsLoaded = true;
     const total = result.total || result.songs?.length || 0;
-    renderNeteaseSongCollection('Liked Songs', result.songs || [], `${total} track${total === 1 ? '' : 's'}`, {
+    const playlist = result.playlist || {};
+    renderNeteaseSongCollection(playlist.name || 'Liked Songs', result.songs || [], `${total} track${total === 1 ? '' : 's'}`, {
       kind: 'liked',
-      kicker: 'Like',
+      kicker: 'Playlist',
+      coverUrl: playlist.coverUrl || '',
       emptyMessage: 'No liked songs yet.'
     });
   } catch (error) {
     if (neteaseActiveView !== 'liked' || requestId !== neteaseAccountRequestId) return;
     console.error('load netease liked failed', error);
+    neteaseAccountPanel.replaceChildren();
     neteaseResults.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load liked songs.'}</p>`;
   }
 };
@@ -1334,7 +1476,8 @@ const loadNeteaseHistory = async () => {
   if (!api?.getHistory) return;
   const requestId = ++neteaseAccountRequestId;
   setNeteaseSearchVisible(false);
-  neteaseResults.innerHTML = '<p class="netease-empty">Loading history...</p>';
+  neteaseAccountPanel.innerHTML = renderSongDetailLoading();
+  neteaseResults.innerHTML = renderSongRowsLoading('Loading history');
   try {
     const result = await api.getHistory({ type: 1 });
     if (neteaseActiveView !== 'history' || requestId !== neteaseAccountRequestId) return;
@@ -1350,6 +1493,7 @@ const loadNeteaseHistory = async () => {
   } catch (error) {
     if (neteaseActiveView !== 'history' || requestId !== neteaseAccountRequestId) return;
     console.error('load netease history failed', error);
+    neteaseAccountPanel.replaceChildren();
     neteaseResults.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load history.'}</p>`;
   }
 };
@@ -1372,6 +1516,8 @@ const initializeNeteaseView = async () => {
   const api = getDesktopNetease();
   if (!api?.getStatus) {
     setNeteaseStatus('NetEase API is unavailable in this build.');
+    renderNeteaseSidebarProfile(null);
+    setNeteaseAuthenticated(false);
     return;
   }
   const requestId = ++neteaseStatusRequestId;
@@ -1383,17 +1529,23 @@ const initializeNeteaseView = async () => {
     if (status?.loggedIn) {
       const name = status.profile?.nickname ? ` as ${status.profile.nickname}` : '';
       setNeteaseStatus(`Logged in${name}.`, true);
+      renderNeteaseSidebarProfile(status.profile);
+      setNeteaseAuthenticated(true);
       await ensureNeteaseLikedIds(true).catch(() => {});
       if (requestId !== neteaseStatusRequestId) return;
     } else {
       neteaseLikedIds = new Set();
       neteaseLikedIdsLoaded = false;
       setNeteaseStatus('Anonymous mode. Login may improve availability.', true);
+      renderNeteaseSidebarProfile(null);
+      setNeteaseAuthenticated(false);
     }
   } catch (error) {
     if (requestId !== neteaseStatusRequestId) return;
     console.error('netease status failed', error);
     setNeteaseStatus('Unable to check NetEase status.');
+    renderNeteaseSidebarProfile(null);
+    setNeteaseAuthenticated(false);
   }
 };
 
@@ -1403,7 +1555,7 @@ const searchNeteaseSongs = async keyword => {
   if (!api?.searchSongs || !query) return false;
   const requestId = ++neteaseSearchRequestId;
   setNeteaseBusy(true);
-  if (neteaseResults) neteaseResults.innerHTML = '<p class="netease-empty">Searching...</p>';
+  if (neteaseResults) neteaseResults.innerHTML = renderSongRowsLoading('Searching songs');
   if (neteaseUrlStatus) neteaseUrlStatus.textContent = '';
   try {
     const result = await api.searchSongs({ keyword: query, limit: 30, offset: 0 });
@@ -2801,6 +2953,7 @@ neteaseSearchForm?.addEventListener('submit', async event => {
 });
 registerNeteaseUrlRefreshListener();
 showMusicView('playlist');
+initializeNeteaseView();
 refreshMusicState().finally(() => {
   try {
     window.dispatchEvent(new CustomEvent('kairos:music-content-ready'));

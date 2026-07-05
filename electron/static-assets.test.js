@@ -41,6 +41,26 @@ test("embedded music pages rely on the shell player instance", async () => {
     /<script src="music-player\.js\?v=\d+"><\/script>/,
     "music.html may load the player script, relying on the embed guard for single-instance behavior"
   );
+  assert.match(
+    musicHtml,
+    /document\.body\.dataset\.embedded = 'true';/,
+    "embedded music pages should mark themselves for iframe-specific layout"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-embedded="true"\] \{ padding-bottom: 0; \}/,
+    "embedded music pages should remove inner player padding after the shell already reserved it"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-embedded="true"\] \.music-root \{ height: 100vh; \}/,
+    "embedded music pages should let the sidebar fill the iframe height"
+  );
+  assert.doesNotMatch(
+    musicHtml,
+    /\.music-sidebar-footer \{[\s\S]*?position:\s*absolute[\s\S]*?bottom:\s*80px/,
+    "sidebar footer should use flex layout instead of a second hard-coded player offset"
+  );
 });
 
 test("NetEase playback stays isolated from local queue persistence", async () => {
@@ -456,6 +476,36 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
+    /<div class="music-sidebar-footer">[\s\S]*?id="neteaseSidebarAccount"[\s\S]*?id="neteaseSidebarAvatar"[\s\S]*?id="neteaseSidebarName"/,
+    "NetEase account profile should render in the sidebar footer"
+  );
+  assert.doesNotMatch(
+    musicHtml,
+    /<div class="netease-status" id="neteaseStatus">/,
+    "NetEase login status should not be shown at the top of the page body"
+  );
+  assert.match(
+    musicHtml,
+    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccount\.hidden = !hasProfile;[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| 'NetEase Cloud';[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
+    "NetEase status refresh should update sidebar avatar and nickname"
+  );
+  assert.match(
+    musicHtml,
+    /setNeteaseStatus\(`Logged in[$]\{name\}\.`, true\);[\s\S]*?renderNeteaseSidebarProfile\(status\.profile\);/,
+    "successful NetEase login should populate the sidebar profile"
+  );
+  assert.match(
+    musicHtml,
+    /showMusicView\('playlist'\);\s*initializeNeteaseView\(\);/,
+    "Music startup should check NetEase status so the sidebar profile appears before opening NetEase Cloud"
+  );
+  assert.match(
+    musicHtml,
+    /setNeteaseStatus\('Anonymous mode\. Login may improve availability\.', true\);[\s\S]*?renderNeteaseSidebarProfile\(null\);/,
+    "anonymous NetEase status should hide the sidebar profile"
+  );
+  assert.match(
+    musicHtml,
     /let neteaseStatusRequestId = 0;/,
     "NetEase status refresh should track request order"
   );
@@ -541,18 +591,23 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /<button class="netease-button" id="neteaseRefreshButton" type="button">[\s\S]*?<span>Refresh<\/span>/,
-    "NetEase refresh button copy should match its content-refresh behavior"
+    /<div class="netease-auth-gate" id="neteaseAuthGate" hidden>[\s\S]*?你还没有登录网易云账号，若要使用请先登录[\s\S]*?<button class="netease-button" id="neteaseLoginButton" type="button">/,
+    "NetEase signed-out view should show only the centered login prompt and login button"
+  );
+  assert.doesNotMatch(
+    musicHtml,
+    /<header class="music-view-header">[\s\S]*?<h1 class="music-view-title">NetEase Cloud<\/h1>[\s\S]*?Search NetEase Cloud Music and play through Kairos\./,
+    "NetEase page should not keep the old top title and status area"
+  );
+  assert.doesNotMatch(
+    musicHtml,
+    /id="neteaseRefreshButton"/,
+    "NetEase page should not show the old top Refresh button"
   );
   assert.match(
     musicHtml,
     /let refreshLabel = \{ playlists: 'Playlists', liked: 'Liked Songs', history: 'History', search: 'Search' \}\[neteaseActiveView\] \|\| 'NetEase';[\s\S]*?toast\.message\(`[$]\{refreshLabel\} refreshed`\);/,
     "NetEase refresh toast should identify which view was refreshed"
-  );
-  assert.match(
-    musicHtml,
-    /neteaseRefreshButton\?\.addEventListener\('click', refreshNeteaseCurrentView\);/,
-    "NetEase refresh button should refresh visible content instead of only checking login status"
   );
   assert.match(
     musicHtml,
@@ -611,8 +666,8 @@ test("NetEase collection empty states stay contextual", async () => {
   );
   assert.match(
     musicHtml,
-    /renderNeteaseSongCollection\('Liked Songs'[\s\S]*?emptyMessage: 'No liked songs yet\.'/,
-    "NetEase liked songs should use a liked-specific empty state"
+    /const playlist = result\.playlist \|\| \{\};[\s\S]*?renderNeteaseSongCollection\(playlist\.name \|\| 'Liked Songs'[\s\S]*?coverUrl: playlist\.coverUrl \|\| ''[\s\S]*?emptyMessage: 'No liked songs yet\.'/,
+    "NetEase liked view should render the account red-heart playlist instead of a synthetic liked collection"
   );
   assert.match(
     musicHtml,
@@ -946,20 +1001,26 @@ test("NetEase account song collections are not capped to tiny preview slices", a
     /while \(songs\.length < \(targetLimit \|\| MAX_ACCOUNT_SONGS\)\) \{[\s\S]*?playlist_track_all/,
     "NetEase playlist songs should be fetched in pages for full-account playlist playback"
   );
-  assert.doesNotMatch(
+  assert.match(
     neteaseService,
-    /ids\.slice\(0,\s*100\)/,
-    "NetEase liked songs should not be capped to the first 100 ids"
+    /async getLikedPlaylist\(profile\) \{[\s\S]*?neteaseApi\.user_playlist_create[\s\S]*?page\.find\(isLikedPlaylist\)/,
+    "NetEase liked view should find the account red-heart playlist from created playlists"
   );
   assert.match(
     neteaseService,
-    /for \(const part of chunks\(limitedIds, PAGE_SIZE\)\) \{[\s\S]*?await neteaseApi\.song_detail/,
-    "NetEase liked songs should fetch song details in stable sequential batches"
+    /async getLikedSongs\(\) \{[\s\S]*?const playlist = await this\.getLikedPlaylist\(auth\.profile\);[\s\S]*?const result = await this\.getPlaylistSongs\(\{ neteaseId: playlist\.neteaseId \}\);/,
+    "NetEase liked view should load songs from the red-heart playlist instead of rebuilding a synthetic list"
+  );
+  assert.doesNotMatch(
+    neteaseService,
+    /for \(const part of chunks\(limitedIds, PAGE_SIZE\)\)|await neteaseApi\.song_detail\(this\.withCookie\(\{ ids: part\.join/,
+    "NetEase liked view should not aggregate liked ids through song_detail batches"
   );
 });
 
 test("NetEase playlist cards reuse local tilted-card interaction", async () => {
   const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const neteaseService = await fs.readFile(path.join(root, "electron/netease-api-service.js"), "utf8");
 
   assert.match(
     musicHtml,
@@ -985,5 +1046,75 @@ test("NetEase playlist cards reuse local tilted-card interaction", async () => {
     musicHtml,
     /card\.className = 'playlist-tilted-card';[\s\S]*?card\.querySelector\('\.playlist-card-meta'\)\.textContent = `\$\{playlist\.trackCount \|\| 0\} tracks`;[\s\S]*?attachTiltedCard\(card\);/,
     "NetEase playlist cards should use the same tilted hover behavior as local playlist cards"
+  );
+  assert.match(
+    neteaseService,
+    /fetchPages\(neteaseApi\.user_playlist_create\),[\s\S]*?fetchPages\(neteaseApi\.user_playlist_collect\)/,
+    "NetEase playlist grouping should use the API's created and collected playlist endpoints directly"
+  );
+  assert.match(
+    neteaseService,
+    /function playlistRows\(body = \{\}\) \{[\s\S]*?if \(Array\.isArray\(body\.data\)\) return body\.data;[\s\S]*?body\.createdPlaylist[\s\S]*?body\.collectPlaylist[\s\S]*?body\.data\?\.createdPlaylist[\s\S]*?body\.data\?\.collectPlaylist/,
+    "NetEase playlist grouping should parse the created and collected endpoint response shapes"
+  );
+  assert.doesNotMatch(
+    neteaseService,
+    /neteaseApi\.user_playlist\(/,
+    "NetEase playlist grouping should not fetch one mixed user playlist and infer ownership in the UI"
+  );
+  assert.match(
+    neteaseService,
+    /createdPlaylists = createdResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(normalizePlaylist\);[\s\S]*?savedPlaylists = savedResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(normalizePlaylist\);/,
+    "NetEase playlist service should only filter the red-heart playlist, not infer created vs collected groups"
+  );
+  assert.match(
+    musicHtml,
+    /const createdGroup = Array\.isArray\(result\.createdPlaylists\) \? result\.createdPlaylists : result\.playlists;[\s\S]*?const savedGroup = Array\.isArray\(result\.savedPlaylists\) \? result\.savedPlaylists : \[\];[\s\S]*?appendPlaylistGroup\('Created Playlists', createdGroup \|\| \[\]\);[\s\S]*?appendPlaylistGroup\('Saved Playlists', savedGroup \|\| \[\]\);/,
+    "NetEase playlist view should render API-provided groups and avoid an empty grouped page while the main process is still on an older response shape"
+  );
+  assert.match(
+    musicHtml,
+    /<div id="neteaseAccountPanel"><\/div>[\s\S]*?<div id="neteaseResults">/,
+    "NetEase account and playlist detail hero should render above the song result table"
+  );
+});
+
+test("NetEase loading states use shimmer placeholders", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+
+  assert.match(
+    musicHtml,
+    /\.shimmer\{[\s\S]*?animation:shimmer 1\.35s ease-in-out infinite[\s\S]*?@keyframes shimmer/,
+    "NetEase loading placeholders should have a visible shimmer animation"
+  );
+  assert.match(
+    musicHtml,
+    /const renderPlaylistLoading = \(\) => `[\s\S]*?netease-loading-card-grid[\s\S]*?netease-loading-card shimmer/,
+    "playlist loading should show shimmering playlist cards"
+  );
+  assert.match(
+    musicHtml,
+    /const renderSongDetailLoading = \(\) => `[\s\S]*?netease-loading-hero[\s\S]*?netease-loading-cover shimmer/,
+    "playlist detail loading should show a shimmering hero cover area"
+  );
+  assert.match(
+    musicHtml,
+    /const renderSongRowsLoading = \(label = 'Loading songs'\) => `[\s\S]*?netease-loading-row[\s\S]*?netease-loading-thumb shimmer/,
+    "song loading should show shimmering table rows"
+  );
+  assert.match(
+    musicHtml,
+    /neteaseAccountPanel\.innerHTML = renderPlaylistLoading\(\);/,
+    "loading playlists should use shimmer instead of static text"
+  );
+  assert.match(
+    musicHtml,
+    /neteaseAccountPanel\.innerHTML = renderSongDetailLoading\(\);[\s\S]*?neteaseResults\.innerHTML = renderSongRowsLoading\(\);/,
+    "loading playlist songs should use shimmer in both hero and song rows"
+  );
+  assert.match(
+    musicHtml,
+    /neteaseResults\.innerHTML = renderSongRowsLoading\('Searching songs'\);/,
+    "searching songs should use shimmering rows"
   );
 });

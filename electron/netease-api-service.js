@@ -41,10 +41,22 @@ function normalizePlaylist(playlist = {}) {
   };
 }
 
-function chunks(values, size) {
-  const result = [];
-  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
-  return result;
+function playlistRows(body = {}) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body.data)) return body.data;
+  return body.playlist
+    || body.playlists
+    || body.createdPlaylist
+    || body.collectPlaylist
+    || body.data?.playlist
+    || body.data?.playlists
+    || body.data?.createdPlaylist
+    || body.data?.collectPlaylist
+    || [];
+}
+
+function isLikedPlaylist(playlist = {}) {
+  return playlist.specialType === 5 || /喜欢|liked/i.test(playlist.name || "");
 }
 
 function publicStatus(cookie) {
@@ -137,23 +149,40 @@ export class NeteaseApiService {
     const auth = await this.requireProfile();
     if (!auth.ok) return auth;
     const targetLimit = Math.max(0, Number(limit) || 0);
-    const playlists = [];
-    let currentOffset = Math.max(0, Number(offset) || 0);
-    let raw = null;
-    while (playlists.length < (targetLimit || MAX_ACCOUNT_PLAYLISTS)) {
-      const pageLimit = targetLimit ? Math.min(PAGE_SIZE, targetLimit - playlists.length) : PAGE_SIZE;
-      const result = await neteaseApi.user_playlist(this.withCookie({
-        uid: auth.profile.userId,
-        limit: pageLimit,
-        offset: currentOffset
-      }));
-      raw = result.body;
-      const page = result.body?.playlist || [];
-      playlists.push(...page);
-      if (page.length < pageLimit || result.body?.more === false) break;
-      currentOffset += page.length;
-    }
-    return { ok: true, playlists: playlists.map(normalizePlaylist), total: playlists.length, profile: auth.profile, raw };
+    const fetchPages = async method => {
+      const playlists = [];
+      let currentOffset = Math.max(0, Number(offset) || 0);
+      let raw = null;
+      while (playlists.length < (targetLimit || MAX_ACCOUNT_PLAYLISTS)) {
+        const pageLimit = targetLimit ? Math.min(PAGE_SIZE, targetLimit - playlists.length) : PAGE_SIZE;
+        const result = await method(this.withCookie({
+          uid: auth.profile.userId,
+          limit: pageLimit,
+          offset: currentOffset
+        }));
+        raw = result.body;
+        const page = playlistRows(result.body);
+        playlists.push(...page);
+        if (page.length < pageLimit || result.body?.more === false) break;
+        currentOffset += page.length;
+      }
+      return { playlists, raw };
+    };
+    const [createdResult, savedResult] = await Promise.all([
+      fetchPages(neteaseApi.user_playlist_create),
+      fetchPages(neteaseApi.user_playlist_collect)
+    ]);
+    const createdPlaylists = createdResult.playlists.filter(playlist => !isLikedPlaylist(playlist)).map(normalizePlaylist);
+    const savedPlaylists = savedResult.playlists.filter(playlist => !isLikedPlaylist(playlist)).map(normalizePlaylist);
+    return {
+      ok: true,
+      playlists: [...createdPlaylists, ...savedPlaylists],
+      createdPlaylists,
+      savedPlaylists,
+      total: createdPlaylists.length + savedPlaylists.length,
+      profile: auth.profile,
+      raw: { created: createdResult.raw, saved: savedResult.raw }
+    };
   }
 
   async getPlaylistSongs({ id, neteaseId, limit = 0, offset = 0 } = {}) {
@@ -179,20 +208,42 @@ export class NeteaseApiService {
     return { ok: true, songs: songs.map(normalizeSong), total: songs.length, raw };
   }
 
+  async getLikedPlaylist(profile) {
+    const userId = profile?.userId;
+    if (!userId) return null;
+    let currentOffset = 0;
+    while (currentOffset < MAX_ACCOUNT_PLAYLISTS) {
+      const result = await neteaseApi.user_playlist_create(this.withCookie({
+        uid: userId,
+        limit: PAGE_SIZE,
+        offset: currentOffset
+      }));
+      const page = playlistRows(result.body);
+      const liked = page.find(isLikedPlaylist);
+      if (liked) return normalizePlaylist(liked);
+      if (page.length < PAGE_SIZE || result.body?.more === false) break;
+      currentOffset += page.length;
+    }
+    return null;
+  }
+
   async getLikedSongs() {
     const auth = await this.requireProfile();
     if (!auth.ok) return auth;
-    const likedResult = await neteaseApi.likelist(this.withCookie({ uid: auth.profile.userId }));
-    const ids = likedResult.body?.ids || [];
-    if (!ids.length) return { ok: true, songs: [], profile: auth.profile };
-    const limitedIds = ids.slice(0, MAX_ACCOUNT_SONGS);
-    const byId = new Map();
-    for (const part of chunks(limitedIds, PAGE_SIZE)) {
-      const result = await neteaseApi.song_detail(this.withCookie({ ids: part.join(",") }));
-      (result.body?.songs || []).forEach(song => byId.set(String(song.id), song));
-    }
-    const songs = limitedIds.map(id => byId.get(String(id))).filter(Boolean);
-    return { ok: true, songs: songs.map(song => ({ ...normalizeSong(song), liked: true })), total: ids.length, ids, profile: auth.profile };
+    const playlist = await this.getLikedPlaylist(auth.profile);
+    if (!playlist) return { ok: true, songs: [], total: 0, ids: [], profile: auth.profile, playlist: null };
+    const result = await this.getPlaylistSongs({ neteaseId: playlist.neteaseId });
+    if (!result?.ok) return result;
+    const songs = (result.songs || []).map(song => ({ ...song, liked: true }));
+    return {
+      ok: true,
+      songs,
+      total: result.total || songs.length,
+      ids: songs.map(song => song.neteaseId).filter(Boolean),
+      profile: auth.profile,
+      playlist,
+      raw: result.raw
+    };
   }
 
   async getLikedSongIds() {
