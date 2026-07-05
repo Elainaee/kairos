@@ -10,6 +10,9 @@ import { ToolRuntime } from "./tool-runtime.js";
 import { AppStateStore, createAppAdapters } from "./app-state.js";
 import { ContextManager } from "./context-manager.js";
 import { MusicLibrary } from "./music-library.js";
+import { searchEsportsMatches } from "./esports-search.js";
+import { fetchUrlText } from "./web-source.js";
+import { runKairosLangChainAgent } from "./agent/kairos-agent.js";
 import { NeteaseApiService } from "./netease-api-service.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -220,23 +223,42 @@ ipcMain.handle("ai:send", async (_event, payload) => {
   queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { const requestMessages=[...(payload.messages||[])],images=[];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});if(prepared.mode==="image"){const bytes=await fs.readFile(prepared.localPath);images.push({dataUrl:`data:${prepared.attachment.mimeType};base64,${bytes.toString("base64")}`});}}broadcastAiStream({ requestId, type: "started" }); for await (const event of streamProviderRequest({ ...payload, messages:requestMessages,images,provider,model,apiKey:decryptKey(entry,provider),signal:controller.signal })) { if(event.type==="text_delta")output+=event.delta;if(event.type==="completed")usage=event.usage;if(event.type==="stopped")status="stopped";broadcastAiStream({ requestId, ...event }); } } catch (error) { status="failed";errorValue={code:error.code||"unknown",message:error.message};broadcastAiStream({ requestId, type: "failed", ...errorValue }); } finally { if(conversationId){await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model}).then(message=>errorValue?aiStore.updateMessage(message.id,{error:errorValue}):message);if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0});}controllers.delete(requestId); } }); return { requestId };
 });
 ipcMain.handle("ai:stop", (_event, requestId) => { controllers.get(requestId)?.abort(); return { ok: true }; });
-ipcMain.handle("ai:extract-schedules", async (_event, payload) => {
+async function extractSchedulesFromPayload(payload) {
   const settings=await readSettings();const provider=payload.provider||settings.defaultProvider;const entry=settings.providers[provider]||{};const model=payload.model||entry.model||PROVIDERS[provider]?.defaultModel;
   const capabilities=PROVIDERS[provider]?.capabilities||[],images=[],sources=[];
+  if(payload.sourceText)sources.push(`${payload.sourceLabel||"用户提供文本"}:\n${String(payload.sourceText).slice(0,60000)}`);
   for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,capabilities);if(prepared.mode==="extracted_text")sources.push(`${prepared.attachment.name}:\n${prepared.chunks.map(x=>`[${x.location}]\n${x.text}`).join("\n\n")}`);if(prepared.mode==="image"){const bytes=await fs.readFile(prepared.localPath);images.push({dataUrl:`data:${prepared.attachment.mimeType};base64,${bytes.toString("base64")}`});}}
-  const today=new Date().toISOString().slice(0,10);const prompt=`你是 Kairos 日程提取器。根据用户要求以及附件内容，找出明确的日程、课程、任务、截止日期或活动。只返回 JSON，不要解释。格式：{"schedules":[{"title":"标题","date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","start_time":"HH:mm 或空字符串","end_time":"HH:mm 或空字符串","all_day":true,"type":"task|deadline|event|other","priority":"low|medium|high","status":"todo","reminder":"none","notes":"来源或必要说明"}]}。今天是 ${today}。不确定的日期不要猜测；没有可提取项目时返回 {"schedules":[]}。\n\n用户要求：${payload.text||"整理为日程"}\n\n附件文本：\n${sources.join("\n\n")}`;
+  const today=new Date().toISOString().slice(0,10);const prompt=`你是 Kairos 日程提取器。根据用户要求以及附件内容，找出明确的日程、课程、任务、截止日期、比赛赛程或活动。只返回 JSON，不要解释。格式：{"schedules":[{"title":"标题","date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","start_time":"HH:mm 或空字符串","end_time":"HH:mm 或空字符串","all_day":true,"type":"task|deadline|event|match|other","priority":"low|medium|high","status":"todo","reminder":"none","notes":"来源或必要说明"}]}。今天是 ${today}。不确定的日期不要猜测；没有可提取项目时返回 {"schedules":[]}。\n\n用户要求：${payload.text||"整理为日程"}\n\n附件文本：\n${sources.join("\n\n")}`;
   let output="";for await(const event of streamProviderRequest({provider,model,apiKey:decryptKey(entry,provider),messages:[{role:"user",content:prompt}],images,signal:new AbortController().signal})){if(event.type==="text_delta")output+=event.delta;}
   const cleaned=output.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");let parsed;try{parsed=JSON.parse(cleaned);}catch{throw new ProviderError("invalid_schedule_output","模型没有返回有效的日程结构");}
   const rows=Array.isArray(parsed)?parsed:parsed.schedules;if(!Array.isArray(rows))throw new ProviderError("invalid_schedule_output","模型没有返回日程列表");
-  const validTypes=new Set(["task","deadline","event","other"]),validPriorities=new Set(["low","medium","high"]);return rows.slice(0,50).filter(x=>x&&typeof x.title==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x.date||"")).map(x=>({title:x.title.trim().slice(0,120),date:x.date,end_date:/^\d{4}-\d{2}-\d{2}$/.test(x.end_date||"")?x.end_date:x.date,start_time:/^\d{2}:\d{2}$/.test(x.start_time||"")?x.start_time:"",end_time:/^\d{2}:\d{2}$/.test(x.end_time||"")?x.end_time:"",all_day:Boolean(x.all_day)||!x.start_time,type:validTypes.has(x.type)?x.type:"event",priority:validPriorities.has(x.priority)?x.priority:"medium",status:"todo",reminder:x.reminder||"none",notes:String(x.notes||"").slice(0,500),source:"ai_attachment"}));
+  const validTypes=new Set(["task","deadline","event","match","other"]),validPriorities=new Set(["low","medium","high"]);return rows.slice(0,50).filter(x=>x&&typeof x.title==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x.date||"")).map(x=>({title:x.title.trim().slice(0,120),date:x.date,end_date:/^\d{4}-\d{2}-\d{2}$/.test(x.end_date||"")?x.end_date:x.date,start_time:/^\d{2}:\d{2}$/.test(x.start_time||"")?x.start_time:"",end_time:/^\d{2}:\d{2}$/.test(x.end_time||"")?x.end_time:"",all_day:Boolean(x.all_day)||!x.start_time,type:validTypes.has(x.type)?x.type:"event",priority:validPriorities.has(x.priority)?x.priority:"medium",status:"todo",reminder:x.reminder||"none",notes:String(x.notes||"").slice(0,500),source:"ai_attachment"}));
+}
+ipcMain.handle("ai:agent:run", async (_event, input) => {
+  const settings = await readSettings();
+  const provider = input.provider || settings.defaultProvider || "doubao";
+  const entry = settings.providers[provider] || {};
+  const model = input.model || entry.model || PROVIDERS[provider]?.defaultModel;
+  return runKairosLangChainAgent({ ...input, provider, model }, {
+    apiKey: decryptKey(entry, provider),
+    permissions: toolRuntime,
+    searchEsportsMatches,
+    fetchUrlText,
+    extractSchedules: extractSchedulesFromPayload
+  });
 });
+ipcMain.handle("ai:extract-schedules", (_event, payload) => extractSchedulesFromPayload(payload));
 
 ipcMain.handle("ai:conversations:list",()=>aiStore.listConversations());
 ipcMain.handle("ai:conversations:create",(_event,input)=>aiStore.createConversation(input));
 ipcMain.handle("ai:conversations:get",(_event,id)=>aiStore.getConversation(id));
 ipcMain.handle("ai:conversations:update",(_event,{id,patch})=>aiStore.updateConversation(id,patch));
+ipcMain.handle("ai:conversations:add-message",(_event,input)=>aiStore.addMessage(input));
 ipcMain.handle("ai:conversations:delete",async(_event,id)=>{const files=await aiStore.deleteConversation(id);await attachments.removeConversationFiles(files);return{ok:true};});
 ipcMain.handle("ai:usage",(_event,filters)=>aiStore.usageSummary(filters));
+async function ensureExternalSearchAllowed(){const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch!=="read")throw new Error("permission_denied");}
+ipcMain.handle("ai:external:search-esports-matches",async(_event,input)=>{await ensureExternalSearchAllowed();return searchEsportsMatches(input);});
+ipcMain.handle("ai:external:fetch-url-text",async(_event,input)=>{await ensureExternalSearchAllowed();return fetchUrlText(input);});
 ipcMain.handle("ai:attachments:save",(_event,input)=>attachments.save(input));
 ipcMain.handle("ai:attachments:remove",(_event,id)=>attachments.remove(id));
 ipcMain.handle("ai:attachments:prepare",(_event,{id,provider})=>attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]).then(result=>({...result,localPath:undefined})));
@@ -274,6 +296,8 @@ ipcMain.handle("netease:play-song",(_event,input)=>neteaseService.playSong(input
 ipcMain.handle("netease:get-user-playlists",(_event,input)=>neteaseService.getUserPlaylists(input));
 ipcMain.handle("netease:get-playlist-songs",(_event,input)=>neteaseService.getPlaylistSongs(input));
 ipcMain.handle("netease:get-liked-songs",()=>neteaseService.getLikedSongs());
+ipcMain.handle("netease:get-liked-song-ids",()=>neteaseService.getLikedSongIds());
+ipcMain.handle("netease:set-song-liked",(_event,input)=>neteaseService.setSongLiked(input));
 ipcMain.handle("netease:get-history",(_event,input)=>neteaseService.getHistory(input));
 
 app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json")});await neteaseService.initialize();attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });

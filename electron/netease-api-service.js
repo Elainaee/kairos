@@ -6,6 +6,9 @@ const require = createRequire(import.meta.url);
 const neteaseApi = require("NeteaseCloudMusicApi");
 
 const DEFAULT_LEVEL = "standard";
+const PAGE_SIZE = 200;
+const MAX_ACCOUNT_SONGS = 5000;
+const MAX_ACCOUNT_PLAYLISTS = 500;
 
 function artistsText(song) {
   const artists = song?.ar || song?.artists || [];
@@ -36,6 +39,12 @@ function normalizePlaylist(playlist = {}) {
     playCount: playlist.playCount || 0,
     creator: playlist.creator?.nickname || ""
   };
+}
+
+function chunks(values, size) {
+  const result = [];
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  return result;
 }
 
 function publicStatus(cookie) {
@@ -124,28 +133,50 @@ export class NeteaseApiService {
     return { ok: true, songs: songs.map(normalizeSong), raw: result.body };
   }
 
-  async getUserPlaylists({ limit = 50, offset = 0 } = {}) {
+  async getUserPlaylists({ limit = 0, offset = 0 } = {}) {
     const auth = await this.requireProfile();
     if (!auth.ok) return auth;
-    const result = await neteaseApi.user_playlist(this.withCookie({
-      uid: auth.profile.userId,
-      limit,
-      offset
-    }));
-    const playlists = result.body?.playlist || [];
-    return { ok: true, playlists: playlists.map(normalizePlaylist), profile: auth.profile };
+    const targetLimit = Math.max(0, Number(limit) || 0);
+    const playlists = [];
+    let currentOffset = Math.max(0, Number(offset) || 0);
+    let raw = null;
+    while (playlists.length < (targetLimit || MAX_ACCOUNT_PLAYLISTS)) {
+      const pageLimit = targetLimit ? Math.min(PAGE_SIZE, targetLimit - playlists.length) : PAGE_SIZE;
+      const result = await neteaseApi.user_playlist(this.withCookie({
+        uid: auth.profile.userId,
+        limit: pageLimit,
+        offset: currentOffset
+      }));
+      raw = result.body;
+      const page = result.body?.playlist || [];
+      playlists.push(...page);
+      if (page.length < pageLimit || result.body?.more === false) break;
+      currentOffset += page.length;
+    }
+    return { ok: true, playlists: playlists.map(normalizePlaylist), total: playlists.length, profile: auth.profile, raw };
   }
 
-  async getPlaylistSongs({ id, neteaseId, limit = 100, offset = 0 } = {}) {
+  async getPlaylistSongs({ id, neteaseId, limit = 0, offset = 0 } = {}) {
     const playlistId = String(neteaseId || id || "").replace(/^netease-playlist:/, "");
     if (!playlistId) return { ok: false, message: "Missing NetEase playlist id." };
-    const result = await neteaseApi.playlist_track_all(this.withCookie({
-      id: playlistId,
-      limit,
-      offset
-    }));
-    const songs = result.body?.songs || [];
-    return { ok: true, songs: songs.map(normalizeSong), raw: result.body };
+    const targetLimit = Math.max(0, Number(limit) || 0);
+    const songs = [];
+    let currentOffset = Math.max(0, Number(offset) || 0);
+    let raw = null;
+    while (songs.length < (targetLimit || MAX_ACCOUNT_SONGS)) {
+      const pageLimit = targetLimit ? Math.min(PAGE_SIZE, targetLimit - songs.length) : PAGE_SIZE;
+      const result = await neteaseApi.playlist_track_all(this.withCookie({
+        id: playlistId,
+        limit: pageLimit,
+        offset: currentOffset
+      }));
+      raw = result.body;
+      const page = result.body?.songs || [];
+      songs.push(...page);
+      if (page.length < pageLimit) break;
+      currentOffset += page.length;
+    }
+    return { ok: true, songs: songs.map(normalizeSong), total: songs.length, raw };
   }
 
   async getLikedSongs() {
@@ -154,9 +185,31 @@ export class NeteaseApiService {
     const likedResult = await neteaseApi.likelist(this.withCookie({ uid: auth.profile.userId }));
     const ids = likedResult.body?.ids || [];
     if (!ids.length) return { ok: true, songs: [], profile: auth.profile };
-    const detailResult = await neteaseApi.song_detail(this.withCookie({ ids: ids.slice(0, 100).join(",") }));
-    const songs = detailResult.body?.songs || [];
-    return { ok: true, songs: songs.map(normalizeSong), total: ids.length, profile: auth.profile };
+    const limitedIds = ids.slice(0, MAX_ACCOUNT_SONGS);
+    const byId = new Map();
+    for (const part of chunks(limitedIds, PAGE_SIZE)) {
+      const result = await neteaseApi.song_detail(this.withCookie({ ids: part.join(",") }));
+      (result.body?.songs || []).forEach(song => byId.set(String(song.id), song));
+    }
+    const songs = limitedIds.map(id => byId.get(String(id))).filter(Boolean);
+    return { ok: true, songs: songs.map(song => ({ ...normalizeSong(song), liked: true })), total: ids.length, ids, profile: auth.profile };
+  }
+
+  async getLikedSongIds() {
+    const auth = await this.requireProfile();
+    if (!auth.ok) return auth;
+    const likedResult = await neteaseApi.likelist(this.withCookie({ uid: auth.profile.userId }));
+    return { ok: true, ids: likedResult.body?.ids || [], profile: auth.profile };
+  }
+
+  async setSongLiked({ id, neteaseId, liked = true } = {}) {
+    const songId = String(neteaseId || id || "").replace(/^netease:/, "");
+    if (!songId) return { ok: false, message: "Missing NetEase song id." };
+    const auth = await this.requireProfile();
+    if (!auth.ok) return auth;
+    const result = await neteaseApi.like(this.withCookie({ id: songId, like: liked ? "true" : "false" }));
+    const code = result.body?.code;
+    return { ok: code === 200 || code === 201, liked: Boolean(liked), raw: result.body };
   }
 
   async getHistory({ type = 1 } = {}) {
@@ -186,13 +239,17 @@ export class NeteaseApiService {
     if (!urlData.url) {
       return { ok: false, message: urlData.message || "No playable URL returned for this song.", data: urlData };
     }
+    const fetchedAt = Date.now();
+    const expiresIn = Number(urlData.expi || 0);
     const track = {
       ...normalizeSong(song),
       playUrl: urlData.url,
       duration: Number(urlData.time || 0) / 1000 || Number(song.dt || 0) / 1000 || 0,
       bitrate: urlData.br || 0,
       level: urlData.level || level,
-      expiresIn: urlData.expi || 0
+      expiresIn,
+      urlFetchedAt: fetchedAt,
+      urlExpiresAt: expiresIn > 0 ? fetchedAt + expiresIn * 1000 : 0
     };
     return { ok: true, track, data: urlData };
   }

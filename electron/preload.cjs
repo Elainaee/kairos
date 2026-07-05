@@ -8,14 +8,16 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   testProvider: (provider, sessionKey = "") => ipcRenderer.invoke("ai:test-provider", { provider, sessionKey }),
   closeAiWindow: () => ipcRenderer.invoke("ai-window:close"),
   sendMessage: (payload) => ipcRenderer.invoke("ai:send", payload),
+  agent: Object.freeze({ run:(input)=>ipcRenderer.invoke("ai:agent:run",input) }),
   extractSchedules: (payload) => ipcRenderer.invoke("ai:extract-schedules", payload),
   stopMessage: (requestId) => ipcRenderer.invoke("ai:stop", requestId),
-  conversations: Object.freeze({ list:()=>ipcRenderer.invoke("ai:conversations:list"),create:(input)=>ipcRenderer.invoke("ai:conversations:create",input),get:(id)=>ipcRenderer.invoke("ai:conversations:get",id),update:(id,patch)=>ipcRenderer.invoke("ai:conversations:update",{id,patch}),delete:(id)=>ipcRenderer.invoke("ai:conversations:delete",id) }),
+  conversations: Object.freeze({ list:()=>ipcRenderer.invoke("ai:conversations:list"),create:(input)=>ipcRenderer.invoke("ai:conversations:create",input),get:(id)=>ipcRenderer.invoke("ai:conversations:get",id),update:(id,patch)=>ipcRenderer.invoke("ai:conversations:update",{id,patch}),addMessage:(input)=>ipcRenderer.invoke("ai:conversations:add-message",input),delete:(id)=>ipcRenderer.invoke("ai:conversations:delete",id) }),
   getUsage: (filters={}) => ipcRenderer.invoke("ai:usage",filters),
   attachments: Object.freeze({ save:(input)=>ipcRenderer.invoke("ai:attachments:save",input),remove:(id)=>ipcRenderer.invoke("ai:attachments:remove",id),prepare:(id,provider)=>ipcRenderer.invoke("ai:attachments:prepare",{id,provider}) }),
   context: Object.freeze({ assess:(conversationId,provider,limit)=>ipcRenderer.invoke("ai:context:assess",{conversationId,provider,limit}),resolve:(conversationId,action,carrySummary=false)=>ipcRenderer.invoke("ai:context:resolve",{conversationId,action,carrySummary}) }),
   permissions: Object.freeze({ get:()=>ipcRenderer.invoke("ai:permissions:get"),set:(input)=>ipcRenderer.invoke("ai:permissions:set",input) }),
   tools: Object.freeze({ query:(domain,query={})=>ipcRenderer.invoke("ai:tools:query",{domain,query}),propose:(input)=>ipcRenderer.invoke("ai:tools:propose",input),decide:(input)=>ipcRenderer.invoke("ai:tools:decide",input) }),
+  external: Object.freeze({ searchEsportsMatches:(input)=>ipcRenderer.invoke("ai:external:search-esports-matches",input),fetchUrlText:(input)=>ipcRenderer.invoke("ai:external:fetch-url-text",input) }),
   appState: Object.freeze({ initialize:(legacy)=>ipcRenderer.invoke("app:initialize",legacy),save:(state)=>ipcRenderer.invoke("app:save",state),get:()=>ipcRenderer.invoke("app:get"),onChanged:(handler)=>{const listener=(_event,state)=>handler(state);ipcRenderer.on("app:state-changed",listener);return()=>ipcRenderer.removeListener("app:state-changed",listener);} }),
   music: Object.freeze({
     getState: () => ipcRenderer.invoke("music:get-state"),
@@ -45,6 +47,8 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     getUserPlaylists: (input) => ipcRenderer.invoke("netease:get-user-playlists", input),
     getPlaylistSongs: (input) => ipcRenderer.invoke("netease:get-playlist-songs", input),
     getLikedSongs: () => ipcRenderer.invoke("netease:get-liked-songs"),
+    getLikedSongIds: () => ipcRenderer.invoke("netease:get-liked-song-ids"),
+    setSongLiked: (input) => ipcRenderer.invoke("netease:set-song-liked", input),
     getHistory: (input) => ipcRenderer.invoke("netease:get-history", input)
   }),
   onStreamEvent: (handler) => {

@@ -188,36 +188,93 @@
     }
   };
 
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+  const sourceRefsFor = row => {
+    const refs = Array.isArray(row.sourceRefs) ? row.sourceRefs : [];
+    const sourceUrl = row.sourceUrl || refs[0]?.url || '';
+    const merged = refs.length ? refs : sourceUrl ? [{ source: row.source || 'source', url: sourceUrl }] : [];
+    const seen = new Set();
+    return merged.filter(ref => {
+      const key = ref.url || `${ref.source}:${ref.name}`;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const sourceRefLabel = ref => {
+    if (ref.source || ref.name) return ref.source || ref.name;
+    try { return new URL(ref.url).hostname; } catch { return ref.url || 'source'; }
+  };
   const renderScheduleCards = rows => {
     if (!rows.length) { appendSystem('没有从附件中识别到明确的日程项目'); return; }
     const group = document.createElement('section'); group.className = 'ai-schedule-proposals';
     const heading = document.createElement('strong'); heading.textContent = `识别到 ${rows.length} 项日程，请确认后保存`; group.append(heading);
+    const actions = document.createElement('div'); actions.className = 'ai-schedule-bulk-actions';
+    actions.innerHTML = '<button type="button" data-save-high>仅确认高置信度</button><button type="button" data-save-all>全部确认</button><button type="button" data-skip-all>全部忽略</button>';
+    group.append(actions);
+    const pendingCards = () => [...group.querySelectorAll('.ai-schedule-card:not([data-saved="true"])')];
+    const submitCards = async cards => {
+      for (const card of cards) {
+        if (!card.isConnected || card.dataset.saved === 'true') continue;
+        if (!card.reportValidity()) break;
+        card.requestSubmit();
+        await new Promise(resolve => {
+          const started = Date.now();
+          const wait = () => {
+            if (!card.isConnected || card.dataset.saved === 'true' || card.dataset.saving !== 'true' || Date.now() - started > 15000) resolve();
+            else setTimeout(wait, 120);
+          };
+          wait();
+        });
+      }
+    };
+    actions.querySelector('[data-save-high]').onclick = () => submitCards(pendingCards().filter(card => card.dataset.confidence === 'high'));
+    actions.querySelector('[data-save-all]').onclick = async () => {
+      if (!window.confirm('确认写入当前所有候选日程吗？低置信度项目仍会逐条再次确认。')) return;
+      await submitCards(pendingCards());
+    };
+    actions.querySelector('[data-skip-all]').onclick = () => {
+      if (!window.confirm('确认忽略当前所有候选日程吗？')) return;
+      pendingCards().forEach(card => card.remove());
+    };
     rows.forEach((row, index) => {
       const card = document.createElement('form'); card.className = 'ai-schedule-card';
-      card.innerHTML = '<label>标题<input name="title" required></label><div><label>日期<input name="date" type="date" required></label><label>开始<input name="start_time" type="time"></label><label>结束<input name="end_time" type="time"></label></div><label>备注<textarea name="notes" rows="2"></textarea></label><footer><button type="button" data-skip>忽略</button><button type="submit">确认写入日程</button></footer>';
-      card.elements.title.value = row.title; card.elements.date.value = row.date; card.elements.start_time.value = row.start_time || ''; card.elements.end_time.value = row.end_time || ''; card.elements.notes.value = row.notes || '';
+      const confidence = row.confidence || (row.date && (row.sourceUrl || row.sourceRefs?.length) ? 'medium' : 'low');
+      card.dataset.confidence = confidence;
+      const sourceRefs = sourceRefsFor(row);
+      const sourceSummary = sourceRefs.length ? `${sourceRefs.length} 个来源` : '缺少来源';
+      const sourceLinks = sourceRefs.map(ref => `<a href="${escapeHtml(ref.url)}" title="${escapeHtml(ref.url)}">${escapeHtml(sourceRefLabel(ref))}</a>`).join('');
+      const conflicts = Array.isArray(row.conflicts) ? row.conflicts : [];
+      const warnings = [];
+      if (confidence === 'low') warnings.push('低置信度：请核对后再保存');
+      if (!sourceRefs.length) warnings.push('缺少来源链接');
+      if (sourceRefs.length > 1) warnings.push('多来源已合并，请核对是否为同一场比赛');
+      if (conflicts.length) warnings.push('来源存在冲突，请选择你确认后的字段值');
+      card.innerHTML = '<label>标题<input name="title" required></label><div class="ai-schedule-time-grid"><label>日期<input name="date" type="date" required></label><label>开始<input name="start_time" type="time"></label><label>结束<input name="end_time" type="time"></label></div><div class="ai-match-meta-grid"><label>对手<input name="opponent"></label><label>赛事<input name="event"></label></div><label>来源链接<input name="sourceUrl" type="url"></label><label>备注<textarea name="notes" rows="2"></textarea></label><footer><button type="button" data-skip>忽略</button><button type="submit">确认写入日程</button></footer>';
+      card.elements.title.value = row.title; card.elements.date.value = row.date; card.elements.start_time.value = row.start_time || ''; card.elements.end_time.value = row.end_time || ''; card.elements.opponent.value = row.opponent || ''; card.elements.event.value = row.event || ''; card.elements.sourceUrl.value = row.sourceUrl || row.sourceRefs?.[0]?.url || ''; card.elements.notes.value = row.notes || '';
       card.querySelector('[data-skip]').onclick = () => card.remove();
       card.onsubmit = async event => {
         event.preventDefault(); const button = card.querySelector('[type="submit"]'); button.disabled = true;
+        card.dataset.saving = 'true';
         try {
+          if ((confidence === 'low' || conflicts.length) && !window.confirm('这个候选项置信度较低、缺少来源或存在来源冲突。确认仍要写入日程吗？')) { button.disabled = false; return; }
           const permissions = await desktop.permissions.get();
           if (permissions.schedules !== 'write') { if (!window.confirm('保存日程需要授权 AI 读写日程数据。是否授权并继续？')) { button.disabled = false; return; } await desktop.permissions.set({ schedules: 'write' }); }
-          const payload = { ...row, title: card.elements.title.value.trim(), date: card.elements.date.value, end_date: card.elements.date.value, start_time: card.elements.start_time.value, end_time: card.elements.end_time.value, all_day: !card.elements.start_time.value, notes: card.elements.notes.value.trim() };
+          const payload = { ...row, title: card.elements.title.value.trim(), date: card.elements.date.value, end_date: card.elements.date.value, start_time: card.elements.start_time.value, end_time: card.elements.end_time.value, all_day: !card.elements.start_time.value, opponent: card.elements.opponent.value.trim(), event: card.elements.event.value.trim(), sourceUrl: card.elements.sourceUrl.value.trim(), sourceRefs, confidence, notes: card.elements.notes.value.trim() };
           const proposal = await desktop.tools.propose({ conversationId: active.id, domain: 'schedules', operation: 'create', payload });
           await desktop.tools.decide({ id: proposal.id, approved: true, payload }); card.dataset.saved = 'true'; button.textContent = '已写入';
         } catch (error) { button.disabled = false; appendSystem(`日程保存失败：${error.message}`); }
+        finally { card.dataset.saving = 'false'; }
       };
-      const number = document.createElement('small'); number.textContent = `候选 ${index + 1}`; card.prepend(number); group.append(card);
+      const meta = document.createElement('div'); meta.className = 'ai-schedule-card-meta'; meta.innerHTML = `<small>候选 ${index + 1}</small><span data-confidence="${escapeHtml(confidence)}">${confidence === 'high' ? '高置信度' : confidence === 'medium' ? '中置信度' : '低置信度'}</span><span>${escapeHtml(sourceSummary)}</span>`;
+      card.prepend(meta);
+      if (sourceLinks) { const sources = document.createElement('div'); sources.className = 'ai-schedule-sources'; sources.innerHTML = sourceLinks; card.insertBefore(sources, card.querySelector('label')); }
+      if (conflicts.length) { const conflict = document.createElement('div'); conflict.className = 'ai-schedule-conflicts'; conflict.innerHTML = conflicts.map(item => `<div><strong>${escapeHtml(item.label || item.field)}</strong><span>${(item.values || []).map(escapeHtml).join(' / ')}</span></div>`).join(''); card.insertBefore(conflict, card.querySelector('label')); }
+      if (warnings.length) { const warning = document.createElement('div'); warning.className = 'ai-schedule-warning'; warning.textContent = warnings.join('；'); card.insertBefore(warning, card.querySelector('label')); }
+      group.append(card);
     });
     messages.append(group); messages.scrollTop = messages.scrollHeight;
   };
-  const maybeExtractSchedules = async request => {
-    if (!request?.attachmentIds?.length || !/日程|安排|课表|时间表|导入|整理|截止/.test(request.text || '')) return;
-    const status = appendSystem('正在从附件中提取日程候选…');
-    try { const rows = await desktop.extractSchedules({ provider: request.provider, model: request.model, text: request.text, attachmentIds: request.attachmentIds }); status.remove(); renderScheduleCards(rows); }
-    catch (error) { status.textContent = `日程提取失败：${error.message}`; }
-  };
-
   const finishRequest = (status, errorMessage = '') => {
     const completedRequest = lastRequest;
     if (streamArticle) {
@@ -226,7 +283,6 @@
     }
     if (active && streamText) active.messages.push({ role: 'assistant', content: streamText, status, createdAt: new Date().toISOString(), error: errorMessage ? { message: errorMessage } : null });
     currentRequestId = null; waitingForRequest = false; streamArticle = null; streamText = ''; updateComposer(); updateUsage();
-    if (status === 'completed') maybeExtractSchedules(completedRequest);
   };
   desktop?.onStreamEvent(event => {
     if (waitingForRequest && !currentRequestId) currentRequestId = event.requestId;
@@ -246,6 +302,35 @@
     } catch (error) { finishRequest('failed', error.message); }
   };
   const retryLast = () => { if (!currentRequestId && lastRequest) startRequest({ ...lastRequest, isRetry: true }); };
+  const persistAgentHandledMessages = async (request, assistantText = '') => {
+    await desktop.conversations.addMessage({ conversationId: active.id, role: 'user', content: request.text, provider: request.provider, model: request.model, attachmentIds: request.attachmentIds, attachmentNames: request.attachmentNames });
+    if (assistantText) {
+      active.messages.push({ role: 'assistant', content: assistantText, status: 'completed', createdAt: new Date().toISOString() });
+      await desktop.conversations.addMessage({ conversationId: active.id, role: 'assistant', content: assistantText, provider: request.provider, model: request.model });
+    }
+  };
+  const handleAgentResult = async (result, request, retryOnPermission = true) => {
+    if (!result || result.type === 'pass') return false;
+    if (result.type === 'permission_required' && result.permission === 'externalSearch') {
+      if (!retryOnPermission || !window.confirm(result.message || '需要授权 AI 读取外部公开来源。是否授权并继续？')) { await persistAgentHandledMessages(request); return true; }
+      await desktop.permissions.set({ externalSearch: 'read' });
+      return handleAgentResult(await desktop.agent.run(request), request, false);
+    }
+    if (result.type === 'schedule_cards') {
+      const message = result.message || `找到 ${result.cards?.length || 0} 项候选，请确认后保存。`;
+      appendSystem(message);
+      renderScheduleCards(result.cards || []);
+      await persistAgentHandledMessages(request, message);
+      return true;
+    }
+    if (result.type === 'clarification' || result.type === 'tool_error' || result.type === 'chat') {
+      const message = result.message || (result.type === 'tool_error' ? 'Agent 工具执行失败。' : '');
+      if (message) appendMessage('assistant', message);
+      await persistAgentHandledMessages(request, message);
+      return true;
+    }
+    return false;
+  };
   const submit = async () => {
     if (currentRequestId) { await desktop.stopMessage(currentRequestId); return; }
     const text = input.value.trim(); if (!text || !active || !desktop) return;
@@ -263,6 +348,11 @@
     const history = active.messages.filter(item => ['user', 'assistant'].includes(item.role) && item.content).map(item => ({ role: item.role, content: item.content }));
     const attachmentIds = pendingAttachments.filter(item => item.status === 'ready').map(item => item.id);
     lastRequest = { history, attachmentIds, attachmentNames, text, provider: ui.provider.value, model: ui.model.value }; pendingAttachments = []; renderAttachments(); updateComposer();
+    try {
+      if (await handleAgentResult(await desktop.agent.run(lastRequest), lastRequest)) return;
+    } catch (error) {
+      appendSystem(`Agent 暂时不可用，已切换为普通助手流程：${error.message}`);
+    }
     await startRequest(lastRequest);
   };
 
