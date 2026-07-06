@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -291,10 +291,21 @@ ipcMain.handle("music:restore-hidden-tracks",(_event,input)=>musicLibrary.restor
 ipcMain.handle("netease:get-status",()=>neteaseService.getStatus());
 ipcMain.handle("netease:start-login",()=>neteaseService.startLogin());
 ipcMain.handle("netease:login-check",(_event,input)=>neteaseService.loginCheck(input));
+ipcMain.handle("netease:send-captcha",(_event,input)=>neteaseService.sendCaptcha(input));
+ipcMain.handle("netease:login-with-phone",(_event,input)=>neteaseService.loginWithPhone(input));
+ipcMain.handle("netease:open-verification", async (_event, url) => {
+  const target = String(url || "");
+  if (!/^https:\/\/(?:st\.music\.163\.com|music\.163\.com)\//.test(target)) return { ok: false };
+  await shell.openExternal(target);
+  return { ok: true };
+});
+ipcMain.handle("netease:logout",()=>neteaseService.logout());
 ipcMain.handle("netease:search-songs",(_event,input)=>neteaseService.searchSongs(input));
+ipcMain.handle("netease:get-search-home",(_event,input)=>neteaseService.getSearchHome(input));
 ipcMain.handle("netease:play-song",(_event,input)=>neteaseService.playSong(input));
 ipcMain.handle("netease:get-user-playlists",(_event,input)=>neteaseService.getUserPlaylists(input));
 ipcMain.handle("netease:get-playlist-songs",(_event,input)=>neteaseService.getPlaylistSongs(input));
+ipcMain.handle("netease:set-playlist-subscribed",(_event,input)=>neteaseService.setPlaylistSubscribed(input));
 ipcMain.handle("netease:get-liked-songs",()=>neteaseService.getLikedSongs());
 ipcMain.handle("netease:get-liked-song-ids",()=>neteaseService.getLikedSongIds());
 ipcMain.handle("netease:set-song-liked",(_event,input)=>neteaseService.setSongLiked(input));

@@ -108,6 +108,9 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 }
 .music-item:hover { background: rgba(27,28,24,.06); }
 .music-item[aria-checked="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-fg); }
+.music-item-icon-img {
+  width: 22px; height: 22px; object-fit: contain; flex: 0 0 24px;
+}
 
 /* Submenu */
 .music-submenu-trigger { position: relative; padding-right: 28px; }
@@ -126,6 +129,12 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .music-submenu[data-state="open"] .music-submenu-list {
   max-height: 150px;
 }
+.music-source-list{display:grid;gap:0}
+.music-submenu[draggable="true"]{cursor:grab}
+.music-submenu[draggable="true"]:active{cursor:grabbing}
+.music-submenu.is-source-dragging{opacity:.42}
+.music-submenu.source-drop-before{box-shadow:inset 0 2px 0 var(--sidebar-accent-fg)}
+.music-submenu.source-drop-after{box-shadow:inset 0 -2px 0 var(--sidebar-accent-fg)}
 .music-sub-item {
   padding-left: 38px;
   font-weight: 500;
@@ -137,18 +146,29 @@ body[data-embedded="true"] .music-root { height: 100vh; }
   padding: 5px 8px; border-top: 1px solid var(--sidebar-border);
   background: var(--sidebar-bg);
 }
-.music-sidebar-footer:has(.music-sidebar-account[hidden]) { display: none; }
+.music-sidebar-footer:has(.music-sidebar-account-wrap[hidden]) { display: none; }
 .music-sidebar-footer .music-item { color: var(--sidebar-muted); font-weight: 500; }
 .music-sidebar-account {
   display: flex; align-items: center; gap: 10px;
   width: 100%; min-height: 42px; padding: 3px 10px;
+  border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--sidebar-fg);
   box-shadow: none;
+  cursor: pointer;
   overflow: hidden;
 }
+.music-sidebar-account:hover { background: transparent!important; box-shadow: none!important; }
+body[data-page="music"] button.music-sidebar-account:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.music-sidebar-account:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.music-sidebar-account[aria-expanded="true"]:not(.kairos-create):not(.habit-primary):not(.play):not(.send) {
+  background: transparent!important; background-color: transparent!important;
+  box-shadow: none!important; filter: none!important; transform: none!important;
+  color: var(--sidebar-fg)!important;
+}
 .music-sidebar-account[hidden] { display: none !important; }
+.music-sidebar-account:disabled { cursor: default; opacity: 1; }
 .music-sidebar-avatar,
 .music-sidebar-avatar-fallback {
   width: 36px; height: 36px; flex: 0 0 36px;
@@ -160,7 +180,7 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 }
 .music-sidebar-avatar-fallback {
   display: grid; place-items: center;
-  background: var(--sidebar-accent);
+  background: rgba(61,59,46,.1);
   color: var(--sidebar-accent-fg);
   font-size: 22px;
 }
@@ -168,6 +188,33 @@ body[data-embedded="true"] .music-root { height: 100vh; }
   min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 13px; font-weight: 750;
+}
+.music-sidebar-account-service {
+  width: 15px; height: 15px; object-fit: contain; flex: 0 0 15px;
+}
+.music-sidebar-account-service[hidden],
+.music-sidebar-account-chevron[hidden] { display: none!important; }
+.music-sidebar-account-chevron {
+  margin-left: auto; color: var(--sidebar-muted); font-size: 18px; width: 18px;
+  transition: transform .16s ease;
+}
+.music-sidebar-account[aria-expanded="true"] .music-sidebar-account-chevron { transform: rotate(180deg); }
+.music-sidebar-account-wrap { position: relative; }
+.music-sidebar-account-menu {
+  position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); z-index: 35;
+  display: grid; gap: 4px; padding: 6px;
+  border: 1px solid rgba(61,59,46,.12); border-radius: 10px;
+  background: rgba(255,255,255,.96); box-shadow: 0 16px 40px rgba(27,28,24,.14);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.music-sidebar-account-menu[hidden] { display: none!important; }
+.music-sidebar-account-menu button {
+  display: flex; align-items: center; gap: 9px; width: 100%; height: 34px; padding: 0 9px;
+  border: 0; border-radius: 7px; background: transparent; color: #ba1a1a;
+  font: 750 12px/1 Outfit,system-ui,sans-serif; text-align: left; cursor: pointer;
+}
+.music-sidebar-account-menu button:hover {
+  background: rgba(186,26,26,.08)!important; box-shadow: none!important; transform: none!important;
 }
 
 /* Sidebar rail */
@@ -206,8 +253,41 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .music-placeholder p { font-size: 13px; margin: 0; }
 .netease-view{max-width:980px}
 .netease-panel{display:grid;gap:16px}
-.netease-auth-gate{min-height:calc(100vh - 260px);display:grid;place-content:center;justify-items:center;gap:14px;text-align:center;color:var(--sidebar-fg)}
+.netease-auth-gate{min-height:calc(100vh - 260px);display:grid;place-content:center;justify-items:center;text-align:center;color:var(--sidebar-fg)}
 .netease-auth-gate[hidden],.netease-content[hidden]{display:none!important}
+.netease-login-card{display:grid;justify-items:center;width:min(460px,calc(100vw - 56px));padding:28px 24px 18px;background:transparent;color:var(--sidebar-fg)}
+.netease-login-mode{display:grid;justify-items:center;width:100%}
+.netease-login-mode[hidden]{display:none!important}
+.netease-login-title{margin:0;color:#111827;font:850 20px/1.2 Outfit,system-ui,sans-serif}
+.netease-login-subtitle{margin:10px 0 14px;color:#7f7a70;font-size:14px;font-weight:550}
+.netease-login-qr{display:grid;place-items:center;width:170px;height:170px;margin:0 auto 18px;background:#fff}
+.netease-login-qr img{width:168px;height:168px;border-radius:0;background:white}
+.netease-login-qr-empty{width:168px;height:168px;display:grid;place-items:center;color:#9b9485;font-size:12px;font-weight:700;background:#fff}
+.netease-login-hint{display:flex;align-items:center;justify-content:center;gap:4px;margin:0 0 8px;color:#9b9485;font-size:13px;font-weight:500}
+.netease-login-hint img{width:16px;height:16px;object-fit:contain}
+.netease-login-app{color:#1d8cf8;font-weight:650}.netease-login-wechat{color:#27b35f;font-weight:650}
+.netease-login-link{height:30px;padding:0 14px;border:1px solid rgba(61,59,46,.22);border-radius:999px;background:#fff;color:#3d3b2e;font:650 13px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.netease-login-link:hover{background:#fff!important;box-shadow:none!important;transform:none!important}
+.netease-phone-form{display:grid!important;justify-items:stretch!important;width:320px;gap:20px;margin-top:6px}
+.netease-phone-row{display:flex;align-items:center;gap:8px;width:100%}
+.netease-phone-field{display:flex;align-items:center;height:36px;border:1px solid rgba(61,59,46,.14);border-radius:999px;background:#fff;color:#9b9485;box-shadow:0 1px 2px rgba(61,59,46,.04)}
+.netease-phone-field.full{width:100%}.netease-phone-field.code{flex:1}
+.netease-country-code{display:inline-flex;align-items:center;gap:4px;padding:0 10px;color:#5f5a50;font-size:13px;font-weight:550;border-right:1px solid rgba(61,59,46,.1)}
+.netease-country-code .material-symbols-outlined{font-size:16px;width:16px}
+.netease-phone-field input{min-width:0;width:100%;height:100%;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;padding:0 14px;color:#3d3b2e;font:550 14px/1 Outfit,system-ui,sans-serif}
+.netease-phone-field:focus-within{border-color:rgba(255,61,70,.42);box-shadow:0 0 0 3px rgba(255,61,70,.08)}
+.netease-phone-field input:focus{border:0!important;outline:0!important;box-shadow:none!important}
+.netease-phone-field input::placeholder{color:#b6b0a7}
+.netease-captcha-button{flex:0 0 120px;height:36px;border:0;border-radius:999px;background:#ff3d46;color:#fff;font:850 13px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.netease-captcha-button:hover,.netease-phone-submit:hover{background:#ff3d46!important;color:#fff!important;box-shadow:none!important;transform:none!important}
+.netease-captcha-button:disabled{opacity:.62;cursor:not-allowed}
+.netease-phone-submit{width:100%;height:36px;border:0;border-radius:999px;background:#ff3d46;color:#fff;font:850 14px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.netease-phone-secondary{justify-self:start;margin-top:26px;border:0;background:transparent;color:#3d3b2e;font:550 12px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.netease-phone-secondary:hover{background:transparent!important;box-shadow:none!important;transform:none!important}
+.netease-verification-panel{display:grid;gap:8px;justify-items:center;margin-top:2px;padding:12px 14px;border-radius:16px;background:rgba(255,61,70,.06);color:#5d564d;font:650 12px/1.45 Outfit,system-ui,sans-serif}
+.netease-verification-panel[hidden]{display:none!important}
+.netease-verification-button{height:30px;border:0;border-radius:999px;padding:0 14px;background:#ff3d46;color:#fff;font:800 12px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.netease-verification-button:hover{background:#ff3d46!important;color:#fff!important;box-shadow:none!important;transform:none!important}
 .netease-auth-message{margin:0;font-size:15px;font-weight:750;color:var(--sidebar-fg)}
 .netease-status{display:flex;align-items:center;gap:8px;min-height:28px;color:var(--sidebar-muted);font-size:13px;font-weight:650}
 .netease-status-dot{width:8px;height:8px;border-radius:999px;background:#a9a399;box-shadow:0 0 0 4px rgba(169,163,153,.12)}
@@ -217,12 +297,27 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .netease-button:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(61,59,46,.1)}
 .netease-button.primary{border-color:transparent;background:var(--sidebar-accent-fg);color:white}
 .netease-button:disabled{opacity:.55;cursor:not-allowed;transform:none}
-.netease-search{display:flex;align-items:center;gap:10px;max-width:640px}
-.netease-search .playlist-input-group{width:min(420px,100%);height:36px}
+.netease-search{display:flex;align-items:center;gap:12px;max-width:640px}
+.netease-search .playlist-input-group{position:relative;width:min(420px,100%);height:40px;border:1px solid rgba(86,102,94,.18);border-radius:7px;background:rgba(248,252,249,.78);box-shadow:inset 0 1px 0 rgba(255,255,255,.72),0 1px 3px rgba(33,44,38,.08);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.netease-search .playlist-input-group:focus-within{border-color:rgba(86,102,94,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.82),0 0 0 2px rgba(86,102,94,.08)}
+.netease-search .playlist-input-addon{position:absolute;right:7px;left:auto;top:50%;transform:translateY(-50%);z-index:1;display:grid;place-items:center;width:30px;height:30px;padding:0!important;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;color:#1f2a27;cursor:pointer;box-shadow:none!important;filter:none!important;appearance:none!important;-webkit-appearance:none!important;outline:0!important}
+.netease-search .playlist-input-addon .material-symbols-outlined{font-size:22px;width:22px}
+.netease-search .playlist-input-addon:hover,.netease-search .playlist-input-addon:focus,.netease-search .playlist-input-addon:focus-visible,.netease-search .playlist-input-addon:active{border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;outline:0!important;transform:translateY(-50%)!important}
+.netease-search .playlist-input-group input{width:100%;height:100%;padding:0 42px 0 14px;border:0!important;background:transparent!important;box-shadow:none!important;color:#2f3b36;font:650 14px/1 Outfit,system-ui,sans-serif}
+.netease-search .playlist-input-group input::placeholder{color:#6f7b75}
+.netease-search .playlist-input-group input:focus{outline:0!important;border:0!important;box-shadow:none!important}
+.netease-content #neteaseAccountPanel{margin-top:12px}
+.playlist-detail-back.netease-search-back{margin:0 0 20px 0;border-radius:999px;background:rgba(27,28,24,.06);padding:0 13px}
 .netease-qr-card{width:max-content;display:grid;gap:10px;padding:14px;border:1px solid rgba(61,59,46,.12);border-radius:16px;background:rgba(255,255,255,.72);box-shadow:0 18px 48px rgba(61,59,46,.12);backdrop-filter:blur(18px)}
 .netease-qr-card img{width:180px;height:180px;border-radius:10px;background:white}
 .netease-qr-card p{margin:0;color:var(--sidebar-muted);font-size:12px;font-weight:650;text-align:center}
 .netease-results.playlist-detail-table{margin-top:4px}
+.netease-search-home{display:grid;gap:28px;margin-top:26px}
+.netease-home-section{display:grid;gap:14px}
+.netease-home-section-head{display:flex;align-items:end;justify-content:space-between;gap:12px}
+.netease-home-title{margin:0;color:var(--sidebar-fg);font:850 18px/1.2 Outfit,system-ui,sans-serif}
+.netease-home-subtitle{margin:4px 0 0;color:var(--sidebar-muted);font:650 12px/1.4 Outfit,system-ui,sans-serif}
+.netease-home-section .playlist-detail-table{margin-top:0}
 .netease-empty{margin:18px 0;color:var(--sidebar-muted);font-weight:650}
 .netease-debug{margin:0;color:var(--sidebar-muted);font-size:12px;font-weight:650}
 .netease-playlist-group{margin-top:24px}
@@ -312,9 +407,14 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .playlist-detail-actions{display:flex;align-items:center;gap:10px;margin-top:22px}
 .playlist-play-all{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 15px;border:0;border-radius:9px;background:#ff4761;color:#fff;font:800 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:0 10px 22px rgba(255,71,97,.2)}
 .playlist-play-all:hover{transform:translateY(-1px)}
+.playlist-subscribe-button{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border:1px solid rgba(61,59,46,.14);border-radius:999px;background:rgba(255,255,255,.62);color:var(--sidebar-fg);font:800 13px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:none}
+.playlist-subscribe-button .material-symbols-outlined{font-size:20px;width:20px}
+.playlist-subscribe-button[aria-pressed="true"]{color:#ff4761}
+.playlist-subscribe-button[aria-pressed="true"] .material-symbols-outlined{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.playlist-subscribe-button:hover,.playlist-subscribe-button:focus-visible{background:rgba(255,255,255,.76);box-shadow:none;transform:none}
 .playlist-manage{position:relative;display:inline-block}
 .playlist-manage-trigger{display:inline-grid;place-items:center;width:54px;height:36px;padding:0;border:1px solid rgba(61,59,46,.12);border-radius:10px;background:rgba(255,255,255,.38);color:var(--sidebar-fg);cursor:pointer;transition:background .16s,border-color .16s,box-shadow .16s}
-.playlist-manage-trigger:hover,.playlist-manage-trigger[aria-expanded="true"]{background:rgba(255,255,255,.58);border-color:rgba(61,59,46,.18);box-shadow:0 8px 18px rgba(27,28,24,.08)}
+.playlist-manage-trigger:hover,.playlist-manage-trigger[aria-expanded="true"]{background:transparent!important;background-color:transparent!important;border-color:rgba(61,59,46,.18);box-shadow:none!important}
 .playlist-manage-trigger .material-symbols-outlined{font-size:22px;width:22px}
 .playlist-menu{position:absolute;left:0;top:calc(100% + 7px);z-index:20;min-width:190px;padding:5px;border:1px solid rgba(61,59,46,.12);border-radius:8px;background:rgba(255,255,255,.96);box-shadow:0 18px 42px rgba(27,28,24,.16);backdrop-filter:blur(12px)}
 .playlist-menu[hidden]{display:none}
@@ -336,6 +436,18 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .playlist-detail-tabs{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:10px;border-bottom:1px solid rgba(61,59,46,.08)}
 .playlist-detail-tab{position:relative;height:38px;display:inline-flex;align-items:center;color:var(--sidebar-fg);font-size:14px;font-weight:850}
 .playlist-detail-tab::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:#ff4761}
+.playlist-detail-tab-row{display:flex;align-items:center;height:38px}
+.netease-history-tabs{position:relative;display:inline-flex;align-items:center;align-self:stretch;gap:18px;height:38px;margin-left:22px;padding:0;border:0;background:transparent}
+.netease-history-tab{position:relative;height:38px;padding:0;border:0;border-radius:0;background:transparent;color:var(--sidebar-muted);font:850 14px/1 Outfit,system-ui,sans-serif;cursor:pointer;transition:color .18s ease}
+.netease-history-tab:hover,.netease-history-tab:focus,.netease-history-tab:active{background:transparent!important;box-shadow:none!important;outline:0}
+body[data-page="music"] .netease-history-tabs button.netease-history-tab:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] .netease-history-tabs button.netease-history-tab:focus:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] .netease-history-tabs button.netease-history-tab:active:not(.kairos-create):not(.habit-primary):not(.play):not(.send){background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var(--sidebar-muted)!important;transform:none!important}
+body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pressed="true"]:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pressed="true"]:focus:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pressed="true"]:active:not(.kairos-create):not(.habit-primary):not(.play):not(.send){color:var(--sidebar-fg)!important}
+.netease-history-tab[aria-pressed="true"]{color:var(--sidebar-fg)}
+.netease-history-indicator{position:absolute;left:0;bottom:-1px;width:0;height:2px;border-radius:2px;background:#ff4761;transform:translateX(0);transition:transform .24s cubic-bezier(.2,.8,.2,1),width .24s cubic-bezier(.2,.8,.2,1)}
 .playlist-input-group{display:flex;align-items:center;width:260px;height:34px;border:0;border-radius:0;background:transparent;color:var(--sidebar-muted);box-shadow:none}
 .playlist-input-group:focus-within{box-shadow:none}
 .playlist-input-addon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:100%;color:var(--sidebar-muted);flex:0 0 32px}
@@ -373,14 +485,14 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .playlist-detail-table tbody tr.is-playing .track-number{opacity:0}
 .playlist-detail-table tbody tr.is-playing .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%) scale(1)}
 .playlist-detail-table tbody tr .track-play-cell button.track-play-button:hover,.playlist-detail-table tbody tr .track-play-cell button.track-play-button:focus-visible{border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#162236!important}
-.track-play-button:hover svg,.track-play-button:focus-visible svg{filter:drop-shadow(0 4px 5px rgba(20,28,40,.34));transform:translateY(-1px)}
+.track-play-button:hover svg,.track-play-button:focus-visible svg{filter:none!important;transform:none!important}
 .track-title-cell{display:flex;align-items:center;gap:10px;min-width:0}
 .track-cover{width:38px;height:38px;border-radius:6px;overflow:hidden;display:grid;place-items:center;background:#ECE7D9;color:#676556;flex:0 0 38px}
 .track-cover img{width:100%;height:100%;object-fit:cover}
-.track-main{min-width:0}
-.track-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sidebar-fg);font-weight:750}
-.track-artist{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;color:var(--sidebar-muted);font-size:11px;font-weight:600}
-.track-album{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6f6a5f}
+.track-main{display:flex;align-items:baseline;gap:4px;min-width:0;max-width:100%;overflow:hidden;flex-wrap:wrap;line-height:1.18}
+.track-name{display:inline-block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sidebar-fg);font-weight:750;flex:0 1 auto}
+.track-artist{display:inline-block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sidebar-muted);font-size:11px;font-weight:600;flex:0 1 auto}
+.track-album{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6f6a5f;vertical-align:middle}
 .track-like{width:62px;text-align:center!important;color:#ff4761}
 .track-like-button{display:inline-grid;place-items:center;width:30px;height:30px;border:0;background:transparent;color:#9b9485;cursor:pointer}
 .track-like-button .material-symbols-outlined{font-size:22px;width:22px}
@@ -389,7 +501,18 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .track-row-menu-wrap{position:relative;display:inline-block}
 .track-row-menu-trigger{display:inline-grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#827c70;cursor:pointer;opacity:0;transition:opacity .14s,background .14s,color .14s}
 .playlist-detail-table tbody tr:hover .track-row-menu-trigger,.track-row-menu-trigger[aria-expanded="true"]{opacity:1}
-.track-row-menu-trigger:hover{background:rgba(27,28,24,.06);color:var(--sidebar-fg)}
+.track-row-menu-trigger:hover{background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var(--sidebar-fg)}
+.track-like-button:hover,.track-like-button:focus-visible,.track-row-menu-trigger:hover,.track-row-menu-trigger:focus-visible,.playlist-manage-trigger:hover,.playlist-manage-trigger:focus-visible{background:transparent!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;transform:none!important}
+body[data-page="music"] .playlist-detail-table button.track-play-button:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] .playlist-detail-table button.track-play-button:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.track-like-button:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.track-like-button:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.track-row-menu-trigger:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.track-row-menu-trigger:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.playlist-manage-trigger:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] button.playlist-manage-trigger:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send){background:transparent!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;transform:none!important}
+body[data-page="music"] .playlist-detail-table button.track-play-button:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
+body[data-page="music"] .playlist-detail-table button.track-play-button:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send){transform:translate(-50%,-50%) scale(1)!important}
 .track-row-menu-trigger .material-symbols-outlined{font-size:20px;width:20px}
 .track-row-menu{position:absolute;right:0;top:calc(100% + 5px);z-index:30;min-width:178px;padding:5px;border:1px solid rgba(61,59,46,.12);border-radius:8px;background:rgba(255,255,255,.97);box-shadow:0 14px 34px rgba(27,28,24,.16);backdrop-filter:blur(10px)}
 .track-row-menu[hidden]{display:none}
@@ -398,6 +521,12 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .track-row-menu button.danger{color:#ba1a1a}.track-row-menu button.danger:hover{background:rgba(186,26,26,.08)}
 .track-row-menu .material-symbols-outlined{font-size:17px;width:17px}
 .track-duration{width:74px;color:#8f8a7d}
+body[data-page="music"] .netease-search button#neteaseSearchButton{all:unset!important;position:absolute!important;right:9px!important;left:auto!important;top:50%!important;transform:translateY(-50%)!important;z-index:2!important;display:grid!important;place-items:center!important;width:24px!important;height:24px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;color:#1f2a27!important;cursor:pointer!important;appearance:none!important;-webkit-appearance:none!important;box-sizing:border-box!important}
+body[data-page="music"] .netease-search button#neteaseSearchButton:hover,
+body[data-page="music"] .netease-search button#neteaseSearchButton:focus,
+body[data-page="music"] .netease-search button#neteaseSearchButton:focus-visible,
+body[data-page="music"] .netease-search button#neteaseSearchButton:active{all:unset!important;position:absolute!important;right:9px!important;left:auto!important;top:50%!important;transform:translateY(-50%)!important;z-index:2!important;display:grid!important;place-items:center!important;width:24px!important;height:24px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;color:#1f2a27!important;cursor:pointer!important;appearance:none!important;-webkit-appearance:none!important;box-sizing:border-box!important}
+body[data-page="music"] .netease-search button#neteaseSearchButton .material-symbols-outlined{font-size:22px!important;width:22px!important;height:22px!important;line-height:1!important}
 
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined' !important;
@@ -450,61 +579,70 @@ if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !
         <div class="music-sidebar-content">
           <div class="music-group-label">Source</div>
 
-          <!-- Local with submenu -->
-          <div class="music-submenu" data-state="open">
-            <button class="music-item music-submenu-trigger" data-source="local" aria-checked="true" aria-expanded="true">
-              <span class="material-symbols-outlined">folder</span>
-              <span>Local</span>
-              <span class="music-submenu-chevron">&#8250;</span>
-            </button>
-            <div class="music-submenu-list">
-              <button class="music-item music-sub-item" data-view="playlist" aria-checked="true">
-                <span class="material-symbols-outlined">queue_music</span>
-                <span>Playlist</span>
+          <div class="music-source-list" id="musicSourceList">
+            <!-- Local with submenu -->
+            <div class="music-submenu" data-source-group="local" data-state="open" draggable="true">
+              <button class="music-item music-submenu-trigger" data-source="local" aria-checked="true" aria-expanded="true">
+                <span class="material-symbols-outlined">folder</span>
+                <span>Local</span>
+                <span class="music-submenu-chevron">&#8250;</span>
               </button>
-              <button class="music-item music-sub-item" data-view="liked" aria-checked="false">
-                <span class="material-symbols-outlined">favorite</span>
-                <span>Like</span>
-              </button>
-              <button class="music-item music-sub-item" data-view="history" aria-checked="false">
-                <span class="material-symbols-outlined">history</span>
-                <span>History</span>
-              </button>
+              <div class="music-submenu-list">
+                <button class="music-item music-sub-item" data-view="playlist" aria-checked="true">
+                  <span class="material-symbols-outlined">queue_music</span>
+                  <span>Playlist</span>
+                </button>
+                <button class="music-item music-sub-item" data-view="liked" aria-checked="false">
+                  <span class="material-symbols-outlined">favorite</span>
+                  <span>Like</span>
+                </button>
+                <button class="music-item music-sub-item" data-view="history" aria-checked="false">
+                  <span class="material-symbols-outlined">history</span>
+                  <span>History</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div class="music-submenu" data-state="closed">
-            <button class="music-item music-submenu-trigger" data-source="netease" aria-checked="false" aria-expanded="false">
-              <span class="material-symbols-outlined">cloud</span>
-              <span>NetEase Cloud</span>
-              <span class="music-submenu-chevron">&#8250;</span>
-            </button>
-            <div class="music-submenu-list">
-              <button class="music-item music-sub-item netease-sub-item" data-netease-view="search" aria-checked="false">
-                <span class="material-symbols-outlined">search</span>
-                <span>Search</span>
+            <div class="music-submenu" data-source-group="netease" data-state="closed" draggable="true">
+              <button class="music-item music-submenu-trigger" data-source="netease" aria-checked="false" aria-expanded="false">
+                <img class="music-item-icon-img" src="assets/netease-format.ico" alt="" aria-hidden="true">
+                <span>Netease Music</span>
+                <span class="music-submenu-chevron">&#8250;</span>
               </button>
-              <button class="music-item music-sub-item netease-sub-item" data-netease-view="playlists" aria-checked="false">
-                <span class="material-symbols-outlined">queue_music</span>
-                <span>Playlists</span>
-              </button>
-              <button class="music-item music-sub-item netease-sub-item" data-netease-view="liked" aria-checked="false">
-                <span class="material-symbols-outlined">favorite</span>
-                <span>Liked</span>
-              </button>
-              <button class="music-item music-sub-item netease-sub-item" data-netease-view="history" aria-checked="false">
-                <span class="material-symbols-outlined">history</span>
-                <span>History</span>
-              </button>
+              <div class="music-submenu-list">
+                <button class="music-item music-sub-item netease-sub-item" data-netease-view="search" aria-checked="false">
+                  <span class="material-symbols-outlined">search</span>
+                  <span>Search</span>
+                </button>
+                <button class="music-item music-sub-item netease-sub-item" data-netease-view="playlists" aria-checked="false">
+                  <span class="material-symbols-outlined">queue_music</span>
+                  <span>Playlist</span>
+                </button>
+                <button class="music-item music-sub-item netease-sub-item" data-netease-view="liked" aria-checked="false">
+                  <span class="material-symbols-outlined">favorite</span>
+                  <span>Like</span>
+                </button>
+                <button class="music-item music-sub-item netease-sub-item" data-netease-view="history" aria-checked="false">
+                  <span class="material-symbols-outlined">history</span>
+                  <span>History</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="music-sidebar-footer">
-          <div class="music-sidebar-account" id="neteaseSidebarAccount" hidden>
-            <img class="music-sidebar-avatar" id="neteaseSidebarAvatar" alt="">
-            <span class="material-symbols-outlined music-sidebar-avatar-fallback" id="neteaseSidebarAvatarFallback" hidden>person</span>
-            <span class="music-sidebar-account-name" id="neteaseSidebarName">NetEase Cloud</span>
+          <div class="music-sidebar-account-wrap" id="neteaseSidebarAccountWrap">
+            <button class="music-sidebar-account" id="neteaseSidebarAccount" type="button" aria-haspopup="menu" aria-expanded="false">
+              <img class="music-sidebar-avatar" id="neteaseSidebarAvatar" alt="" hidden>
+              <span class="music-sidebar-avatar-fallback" id="neteaseSidebarAvatarFallback"></span>
+              <span class="music-sidebar-account-name" id="neteaseSidebarName">&#x672A;&#x767B;&#x5F55;</span>
+              <img class="music-sidebar-account-service" src="assets/netease-format.ico" alt="" aria-hidden="true" hidden>
+              <span class="material-symbols-outlined music-sidebar-account-chevron" aria-hidden="true" hidden>expand_more</span>
+            </button>
+            <div class="music-sidebar-account-menu" id="neteaseSidebarAccountMenu" role="menu" hidden>
+              <button type="button" role="menuitem" data-action="logout"><span class="material-symbols-outlined">logout</span><span>Log Out</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -554,26 +692,54 @@ if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !
         <div class="netease-view">
           <div class="netease-panel">
             <div class="netease-auth-gate" id="neteaseAuthGate" hidden>
-              <p class="netease-auth-message">你还没有登录网易云账号，若要使用请先登录</p>
-              <button class="netease-button" id="neteaseLoginButton" type="button">
-                <span class="material-symbols-outlined">qr_code_scanner</span>
-                <span>Login</span>
-              </button>
-              <div class="netease-qr-card" id="neteaseQrCard" hidden>
-                <img id="neteaseQrImage" alt="NetEase Cloud login QR code">
-                <p id="neteaseQrStatus">Scan with the NetEase Cloud Music app.</p>
+              <div class="netease-login-card">
+                <div class="netease-login-mode" id="neteaseQrLoginMode" data-login-mode="qr">
+                  <h2 class="netease-login-title">&#x767B;&#x5F55;&#x83B7;&#x53D6;&#x66F4;&#x61C2;&#x4F60;&#x7684;&#x597D;&#x97F3;&#x4E50;</h2>
+                  <p class="netease-login-subtitle">&#x626B;&#x7801;&#x767B;&#x5F55;</p>
+                  <div class="netease-login-qr" id="neteaseQrCard">
+                    <span class="netease-login-qr-empty" id="neteaseQrEmpty">&#x6B63;&#x5728;&#x751F;&#x6210;&#x4E8C;&#x7EF4;&#x7801;...</span>
+                    <img id="neteaseQrImage" alt="Netease Music login QR code" hidden>
+                  </div>
+                  <p class="netease-login-hint">
+                    <span>&#x4F7F;&#x7528;</span>
+                    <img src="assets/netease-format.ico" alt="" aria-hidden="true">
+                    <span class="netease-login-app">&#x7F51;&#x6613;&#x4E91;&#x97F3;&#x4E50;APP</span>
+                    <span>&#x6216;</span>
+                    <span class="netease-login-wechat">&#x5FAE;&#x4FE1;</span>
+                    <span>&#x626B;&#x7801;&#x767B;&#x5F55;</span>
+                  </p>
+                  <button class="netease-login-link" id="neteaseLoginButton" type="button">&#x5237;&#x65B0;&#x4E8C;&#x7EF4;&#x7801;</button>
+                  <button class="netease-login-link" id="neteaseOtherLoginButton" type="button">&#x9009;&#x62E9;&#x5176;&#x4ED6;&#x767B;&#x5F55;&#x6A21;&#x5F0F;</button>
+                  <p id="neteaseQrStatus" class="netease-login-subtitle">&#x7B49;&#x5F85;&#x626B;&#x7801;&#x4E2D;...</p>
+                </div>
+                <form class="netease-login-mode netease-phone-form" id="neteasePhoneLoginForm" data-login-mode="phone" hidden>
+                  <label class="netease-phone-field full">
+                    <span class="netease-country-code">+86 <span class="material-symbols-outlined">expand_more</span></span>
+                    <input id="neteasePhoneInput" inputmode="tel" autocomplete="tel" placeholder="&#x8BF7;&#x8F93;&#x5165;&#x624B;&#x673A;&#x53F7;">
+                  </label>
+                  <div class="netease-phone-row">
+                    <label class="netease-phone-field code">
+                      <input id="neteaseCaptchaInput" inputmode="numeric" autocomplete="one-time-code" placeholder="&#x8BF7;&#x8F93;&#x5165;&#x77ED;&#x4FE1;&#x9A8C;&#x8BC1;&#x7801;">
+                    </label>
+                    <button class="netease-captcha-button" id="neteaseSendCaptchaButton" type="button">&#x83B7;&#x53D6;&#x9A8C;&#x8BC1;&#x7801;</button>
+                  </div>
+                  <button class="netease-phone-submit" type="submit">&#x767B;&#x5F55;</button>
+                  <div class="netease-verification-panel" id="neteaseVerificationPanel" hidden>
+                    <span id="neteaseVerificationText">&#x5F53;&#x524D;&#x767B;&#x5F55;&#x9700;&#x8981;&#x5B8C;&#x6210;&#x5B89;&#x5168;&#x9A8C;&#x8BC1;</span>
+                    <button class="netease-verification-button" id="neteaseVerificationButton" type="button">&#x6253;&#x5F00;&#x5B89;&#x5168;&#x9A8C;&#x8BC1;</button>
+                  </div>
+                  <button class="netease-phone-secondary" id="neteaseQrLoginButton" type="button">&#x626B;&#x7801;&#x767B;&#x5F55;</button>
+                </form>
               </div>
             </div>
             <div class="netease-content" id="neteaseContent" hidden>
               <form class="netease-search" id="neteaseSearchForm">
                 <label class="playlist-input-group">
-                  <span class="playlist-input-addon"><span class="material-symbols-outlined">search</span></span>
                   <input id="neteaseSearchInput" autocomplete="off" placeholder="Search songs">
+                  <button class="playlist-input-addon" id="neteaseSearchButton" type="submit" aria-label="Search">
+                    <span class="material-symbols-outlined">search</span>
+                  </button>
                 </label>
-                <button class="netease-button primary" id="neteaseSearchButton" type="submit">
-                  <span class="material-symbols-outlined">search</span>
-                  <span>Search</span>
-                </button>
               </form>
               <div id="neteaseAccountPanel"></div>
               <div id="neteaseResults">
@@ -609,9 +775,20 @@ const historyList = document.getElementById('historyList');
 const historyStatus = document.getElementById('historyStatus');
 const neteaseStatus = document.getElementById('neteaseStatus');
 const neteaseLoginButton = document.getElementById('neteaseLoginButton');
+const neteaseOtherLoginButton = document.getElementById('neteaseOtherLoginButton');
+const neteaseQrLoginButton = document.getElementById('neteaseQrLoginButton');
+const neteaseQrLoginMode = document.getElementById('neteaseQrLoginMode');
+const neteasePhoneLoginForm = document.getElementById('neteasePhoneLoginForm');
+const neteasePhoneInput = document.getElementById('neteasePhoneInput');
+const neteaseCaptchaInput = document.getElementById('neteaseCaptchaInput');
+const neteaseSendCaptchaButton = document.getElementById('neteaseSendCaptchaButton');
+const neteaseVerificationPanel = document.getElementById('neteaseVerificationPanel');
+const neteaseVerificationText = document.getElementById('neteaseVerificationText');
+const neteaseVerificationButton = document.getElementById('neteaseVerificationButton');
 const neteaseRefreshButton = document.getElementById('neteaseRefreshButton');
 const neteaseQrCard = document.getElementById('neteaseQrCard');
 const neteaseQrImage = document.getElementById('neteaseQrImage');
+const neteaseQrEmpty = document.getElementById('neteaseQrEmpty');
 const neteaseQrStatus = document.getElementById('neteaseQrStatus');
 const neteaseSearchForm = document.getElementById('neteaseSearchForm');
 const neteaseSearchInput = document.getElementById('neteaseSearchInput');
@@ -620,11 +797,15 @@ const neteaseAccountPanel = document.getElementById('neteaseAccountPanel');
 const neteaseUrlStatus = document.getElementById('neteaseUrlStatus');
 const neteaseAuthGate = document.getElementById('neteaseAuthGate');
 const neteaseContent = document.getElementById('neteaseContent');
+const neteaseSidebarAccountWrap = document.getElementById('neteaseSidebarAccountWrap');
 const neteaseSidebarAccount = document.getElementById('neteaseSidebarAccount');
+const neteaseSidebarAccountMenu = document.getElementById('neteaseSidebarAccountMenu');
 const neteaseSidebarAvatar = document.getElementById('neteaseSidebarAvatar');
 const neteaseSidebarAvatarFallback = document.getElementById('neteaseSidebarAvatarFallback');
 const neteaseSidebarName = document.getElementById('neteaseSidebarName');
+const musicSourceList = document.getElementById('musicSourceList');
 const KEY = 'kairos-music-sidebar';
+const SOURCE_ORDER_KEY = 'kairos-music-source-order';
 const PLAYLIST_ORDER_KEY = 'kairos-music-playlist-orders';
 const LIKED_PLAYLIST_ID = '__liked_songs__';
 const LIKED_COVER_KEY = 'kairos-music-liked-cover';
@@ -650,10 +831,18 @@ let neteaseInitialized = false;
 let neteaseLoginKey = "";
 let neteaseLoginTimer = null;
 let neteaseLoginRequestId = 0;
+let neteaseLoginMode = 'qr';
+let neteaseLoginInFlight = false;
+let neteaseLoginCooldownUntil = 0;
+let neteaseCaptchaTimer = null;
+let neteaseCaptchaSeconds = 0;
+let neteaseVerificationUrl = "";
 let neteaseLastSongs = [];
 let neteaseLastSearchKeyword = "";
+let neteaseSearchHomeLoaded = false;
 let neteaseVisibleSongs = [];
 let neteaseActiveView = 'search';
+let neteaseHistoryType = 1;
 let neteaseSearchRequestId = 0;
 let neteaseStatusRequestId = 0;
 let neteaseAccountRequestId = 0;
@@ -675,6 +864,97 @@ const getDesktopNetease = () => {
   } catch {
     return null;
   }
+};
+
+const readMusicSourceOrder = () => {
+  try {
+    const order = JSON.parse(localStorage.getItem(SOURCE_ORDER_KEY) || '[]');
+    return Array.isArray(order) ? order.filter(id => id === 'local' || id === 'netease') : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeMusicSourceOrder = () => {
+  if (!musicSourceList) return;
+  const order = Array.from(musicSourceList.querySelectorAll('[data-source-group]'))
+    .map(item => item.dataset.sourceGroup)
+    .filter(Boolean);
+  localStorage.setItem(SOURCE_ORDER_KEY, JSON.stringify(order));
+};
+
+const initMusicSourceSort = () => {
+  if (!musicSourceList) return;
+  let draggedSource = null;
+  let suppressSourceClickUntil = 0;
+  const items = () => Array.from(musicSourceList.querySelectorAll('[data-source-group]'));
+  const order = readMusicSourceOrder();
+  order.forEach(id => {
+    const item = musicSourceList.querySelector(`[data-source-group="${id}"]`);
+    if (item) musicSourceList.append(item);
+  });
+  musicSourceList.addEventListener('dragstart', event => {
+    const item = event.target.closest('[data-source-group]');
+    if (!item || !musicSourceList.contains(item)) return;
+    draggedSource = item;
+    item.classList.add('is-source-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.dataset.sourceGroup || '');
+  });
+  musicSourceList.addEventListener('dragover', event => {
+    if (!draggedSource) return;
+    const target = event.target.closest('[data-source-group]');
+    items().forEach(item => item.classList.remove('source-drop-before', 'source-drop-after'));
+    if (!target || target === draggedSource) return;
+    event.preventDefault();
+    const rect = target.getBoundingClientRect();
+    target.classList.add(event.clientY < rect.top + rect.height / 2 ? 'source-drop-before' : 'source-drop-after');
+  });
+  musicSourceList.addEventListener('drop', event => {
+    if (!draggedSource) return;
+    const target = event.target.closest('[data-source-group]');
+    items().forEach(item => item.classList.remove('source-drop-before', 'source-drop-after'));
+    if (!target || target === draggedSource) return;
+    event.preventDefault();
+    const rect = target.getBoundingClientRect();
+    if (event.clientY < rect.top + rect.height / 2) {
+      musicSourceList.insertBefore(draggedSource, target);
+    } else {
+      musicSourceList.insertBefore(draggedSource, target.nextSibling);
+    }
+    writeMusicSourceOrder();
+  });
+  musicSourceList.addEventListener('dragend', () => {
+    items().forEach(item => item.classList.remove('is-source-dragging', 'source-drop-before', 'source-drop-after'));
+    draggedSource = null;
+    suppressSourceClickUntil = Date.now() + 250;
+  });
+  musicSourceList.addEventListener('click', event => {
+    if (Date.now() > suppressSourceClickUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+};
+
+const showInitialMusicSource = () => {
+  const firstSource = musicSourceList?.querySelector('[data-source-group]')?.dataset.sourceGroup || 'local';
+  document.querySelectorAll('[data-source]').forEach(item =>
+    item.setAttribute('aria-checked', String(item.dataset.source === firstSource))
+  );
+  document.querySelectorAll('.music-sub-item').forEach(item => item.setAttribute('aria-checked', 'false'));
+  document.querySelectorAll('.music-submenu').forEach(submenu => {
+    const isFirst = submenu.dataset.sourceGroup === firstSource;
+    submenu.dataset.state = isFirst ? 'open' : 'closed';
+    submenu.querySelector('.music-submenu-trigger')?.setAttribute('aria-expanded', String(isFirst));
+  });
+  if (firstSource === 'netease') {
+    const view = neteaseActiveView || 'search';
+    document.querySelector(`[data-netease-view="${view}"]`)?.setAttribute('aria-checked', 'true');
+    showNeteaseSection(view);
+    return;
+  }
+  document.querySelector('[data-view="playlist"]')?.setAttribute('aria-checked', 'true');
+  showMusicView('playlist');
 };
 
 const notifyMusicPlayer = (detail = {}) => {
@@ -774,11 +1054,57 @@ const setNeteaseStatus = (message, ready = false) => {
   if (text) text.textContent = message;
 };
 
+const isNeteaseViewVisible = () => {
+  const view = document.querySelector('[data-music-view="netease"]');
+  return Boolean(view && !view.hidden);
+};
+
+const setNeteaseVerification = (result = null) => {
+  neteaseVerificationUrl = result?.redirectUrl || "";
+  const shouldShow = Boolean(result?.needsVerification && neteaseVerificationUrl);
+  if (neteaseVerificationPanel) neteaseVerificationPanel.hidden = !shouldShow;
+  if (neteaseVerificationText) {
+    neteaseVerificationText.textContent = shouldShow
+      ? 'NetEase blocked this login for account security. Complete verification, then try again.'
+      : '';
+  }
+};
+
+const setNeteaseLoginMode = mode => {
+  neteaseLoginMode = mode === 'phone' ? 'phone' : 'qr';
+  setNeteaseVerification(null);
+  if (neteaseLoginMode === 'phone') {
+    clearInterval(neteaseLoginTimer);
+    neteaseLoginTimer = null;
+    neteaseLoginKey = "";
+  }
+  if (neteaseQrLoginMode) neteaseQrLoginMode.hidden = neteaseLoginMode !== 'qr';
+  if (neteasePhoneLoginForm) neteasePhoneLoginForm.hidden = neteaseLoginMode !== 'phone';
+  if (neteaseLoginMode === 'qr' && isNeteaseViewVisible() && !neteaseLoginKey && !neteaseLoginInFlight && Date.now() >= neteaseLoginCooldownUntil) {
+    setTimeout(() => startNeteaseLoginFlow(), 0);
+  }
+};
+
 const renderNeteaseSidebarProfile = profile => {
-  if (!neteaseSidebarAccount) return;
+  if (!neteaseSidebarAccountWrap) return;
   const hasProfile = Boolean(profile?.nickname || profile?.avatarUrl || profile?.userId);
-  neteaseSidebarAccount.hidden = !hasProfile;
-  if (!hasProfile) return;
+  neteaseSidebarAccountWrap.hidden = false;
+  if (neteaseSidebarAccount) neteaseSidebarAccount.setAttribute('aria-expanded', 'false');
+  if (neteaseSidebarAccountMenu) neteaseSidebarAccountMenu.hidden = true;
+  if (neteaseSidebarAccount) neteaseSidebarAccount.disabled = !hasProfile;
+  const serviceIcon = document.querySelector('.music-sidebar-account-service');
+  const chevron = document.querySelector('.music-sidebar-account-chevron');
+  if (serviceIcon) serviceIcon.hidden = !hasProfile;
+  if (chevron) chevron.hidden = !hasProfile;
+  if (!hasProfile) {
+    if (neteaseSidebarName) neteaseSidebarName.textContent = '\u672a\u767b\u5f55';
+    if (neteaseSidebarAvatar) {
+      neteaseSidebarAvatar.hidden = true;
+      neteaseSidebarAvatar.removeAttribute('src');
+    }
+    if (neteaseSidebarAvatarFallback) neteaseSidebarAvatarFallback.hidden = false;
+    return;
+  }
   if (neteaseSidebarName) neteaseSidebarName.textContent = profile.nickname || 'NetEase Cloud';
   const avatarUrl = String(profile.avatarUrl || '').trim();
   if (neteaseSidebarAvatar) {
@@ -792,6 +1118,7 @@ const renderNeteaseSidebarProfile = profile => {
 const setNeteaseAuthenticated = loggedIn => {
   if (neteaseAuthGate) neteaseAuthGate.hidden = Boolean(loggedIn);
   if (neteaseContent) neteaseContent.hidden = !loggedIn;
+  if (!loggedIn) setNeteaseLoginMode(neteaseLoginMode);
 };
 
 const setNeteaseBusy = busy => {
@@ -899,6 +1226,16 @@ const updateNeteaseLikeRows = () => {
   });
 };
 
+const updateNeteasePlayerLikeState = song => {
+  const id = neteaseNumericId(song);
+  if (!id) return;
+  notifyMusicPlayer({
+    tracks: [{ ...makeNeteaseTrackShell(song), liked: isNeteaseSongLiked(song) }],
+    likedTrackId: `netease:${id}`,
+    liked: isNeteaseSongLiked(song)
+  });
+};
+
 const closeNeteaseRowMenus = () => {
   neteaseResults?.querySelectorAll('.track-row-menu:not([hidden])').forEach(menu => {
     menu.hidden = true;
@@ -978,6 +1315,7 @@ const toggleNeteaseLike = async (song, button = null) => {
   try {
     const result = await api.setSongLiked({ id, liked: nextLiked });
     if (!result?.ok) throw new Error(result?.message || 'Unable to update NetEase liked songs.');
+    updateNeteasePlayerLikeState(song);
     toast[nextLiked ? 'success' : 'message'](nextLiked ? 'Added to NetEase liked songs' : 'Removed from NetEase liked songs');
     if (!nextLiked && neteaseActiveView === 'liked') {
       neteaseLastSongs = neteaseLastSongs.filter(item => neteaseNumericId(item) !== id);
@@ -998,6 +1336,7 @@ const toggleNeteaseLike = async (song, button = null) => {
     syncNeteaseCachedLike(id, !nextLiked);
     if (song) song.liked = !nextLiked;
     updateNeteaseLikeRows();
+    updateNeteasePlayerLikeState(song);
     toast.error('Like failed', error?.message || 'Please login and try again.');
   } finally {
     if (button) button.disabled = false;
@@ -1012,6 +1351,7 @@ const makeNeteaseTrackShell = song => ({
   album: song.album || '',
   coverUrl: song.coverUrl || '',
   duration: Number(song.duration) || 0,
+  liked: isNeteaseSongLiked(song),
   source: 'netease'
 });
 
@@ -1241,8 +1581,15 @@ const renderNeteaseResults = (songs, options = {}) => {
   if (options.withFilter) {
     const tabs = document.createElement('div');
     tabs.className = 'playlist-detail-tabs';
+    const historyToggle = options.historyType === 0 || options.historyType === 1
+      ? `<span class="netease-history-tabs" role="group" aria-label="History range">
+          <button class="netease-history-tab" type="button" data-history-type="1" aria-pressed="${options.historyType === 1}">最近一周</button>
+          <button class="netease-history-tab" type="button" data-history-type="0" aria-pressed="${options.historyType === 0}">所有时间</button>
+          <span class="netease-history-indicator" aria-hidden="true"></span>
+        </span>`
+      : '';
     tabs.innerHTML = `
-      <div class="playlist-detail-tab">Songs <sup>${songs.length}</sup></div>
+      <div class="playlist-detail-tab-row"><div class="playlist-detail-tab">Songs <sup>${songs.length}</sup></div>${historyToggle}</div>
       <label class="playlist-input-group">
         <span class="playlist-input-addon"><span class="material-symbols-outlined">search</span></span>
         <input type="search" placeholder="Search">
@@ -1251,6 +1598,14 @@ const renderNeteaseResults = (songs, options = {}) => {
     `;
     const input = tabs.querySelector('input');
     const resultsLabel = tabs.querySelector('.playlist-input-results');
+    const positionHistoryIndicator = () => {
+      const group = tabs.querySelector('.netease-history-tabs');
+      const indicator = tabs.querySelector('.netease-history-indicator');
+      const active = tabs.querySelector('.netease-history-tab[aria-pressed="true"]');
+      if (!group || !indicator || !active) return;
+      indicator.style.width = `${active.offsetWidth}px`;
+      indicator.style.transform = `translateX(${active.offsetLeft}px)`;
+    };
     input.addEventListener('input', () => {
       const query = input.value.trim().toLowerCase();
       tbody.querySelectorAll('tr[data-id]').forEach(row => {
@@ -1261,6 +1616,17 @@ const renderNeteaseResults = (songs, options = {}) => {
       resultsLabel.textContent = `${visible} result${visible === 1 ? '' : 's'}`;
       updateNeteasePlaybackRows();
     });
+    tabs.querySelectorAll('[data-history-type]').forEach(button => {
+      button.addEventListener('click', () => {
+        const nextType = Number(button.dataset.historyType);
+        if (nextType === neteaseHistoryType) return;
+        tabs.querySelectorAll('[data-history-type]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+        positionHistoryIndicator();
+        neteaseHistoryType = nextType;
+        loadNeteaseHistory(nextType);
+      });
+    });
+    requestAnimationFrame(positionHistoryIndicator);
     neteaseResults.replaceChildren(tabs, table);
   } else {
     neteaseResults.replaceChildren(table);
@@ -1280,6 +1646,238 @@ const setNeteaseSearchVisible = visible => {
   if (neteaseAccountPanel) neteaseAccountPanel.replaceChildren();
 };
 
+const updatePlaylistSubscribeButton = (button, subscribed) => {
+  if (!button) return;
+  button.dataset.subscribed = String(Boolean(subscribed));
+  button.setAttribute('aria-pressed', String(Boolean(subscribed)));
+  button.querySelector('.material-symbols-outlined').textContent = subscribed ? 'favorite' : 'favorite_border';
+  button.querySelector('span:last-child').textContent = subscribed ? 'Unsave' : 'Save';
+};
+
+const toggleNeteasePlaylistSubscribed = async (playlist, button) => {
+  const api = getDesktopNetease();
+  if (!api?.setPlaylistSubscribed || !playlist?.neteaseId) return;
+  const nextSubscribed = button?.dataset.subscribed !== 'true';
+  updatePlaylistSubscribeButton(button, nextSubscribed);
+  if (button) button.disabled = true;
+  try {
+    const result = await api.setPlaylistSubscribed({ neteaseId: playlist.neteaseId, subscribed: nextSubscribed });
+    if (!result?.ok) throw new Error(result?.message || 'Unable to update playlist collection.');
+    playlist.subscribed = nextSubscribed;
+    toast[nextSubscribed ? 'success' : 'message'](nextSubscribed ? 'Playlist saved' : 'Playlist unsaved', playlist.name || '');
+  } catch (error) {
+    updatePlaylistSubscribeButton(button, !nextSubscribed);
+    toast.error('Playlist update failed', error?.message || 'Please login and try again.');
+  } finally {
+    if (button) button.disabled = false;
+  }
+};
+
+const openNeteasePlaylistDetail = async (playlist, backTo = 'search-home') => {
+  const api = getDesktopNetease();
+  if (!api?.getPlaylistSongs || !playlist?.neteaseId) return;
+  const detailRequestId = ++neteaseAccountRequestId;
+  neteaseAccountPanel.replaceChildren();
+  neteaseResults.innerHTML = renderSongRowsLoading();
+  try {
+    const songsResult = await api.getPlaylistSongs({ neteaseId: playlist.neteaseId, offset: 0 });
+    if (neteaseActiveView !== 'search' && neteaseActiveView !== 'playlists') return;
+    if (detailRequestId !== neteaseAccountRequestId) return;
+    if (!songsResult?.ok) throw new Error(songsResult?.message || 'Unable to load playlist.');
+    playlist.subscribed = playlist.subscribed === true || songsResult.subscribed === true;
+    await ensureNeteaseLikedIds().catch(() => {});
+    if (detailRequestId !== neteaseAccountRequestId) return;
+    const trackCount = songsResult.songs?.length || 0;
+    renderNeteaseSongCollection(playlist.name, songsResult.songs || [], `${trackCount} track${trackCount === 1 ? '' : 's'} \u00b7 ${playlist.creator || 'NetEase Music'}`, {
+      coverUrl: playlist.coverUrl,
+      kicker: 'Playlist',
+      backTo,
+      playlist
+    });
+  } catch (error) {
+    console.error('load netease playlist failed', error);
+    neteaseResults.innerHTML = '';
+    neteaseAccountPanel.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load playlist.'}</p>`;
+  }
+};
+
+const makeNeteasePlaylistCard = (playlist, backTo = 'search-home') => {
+  const card = document.createElement('div');
+  card.className = 'playlist-tilted-card';
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-label', `Open ${playlist.name || 'NetEase playlist'}`);
+  card.innerHTML = `
+    <span class="playlist-tilted-inner">
+      <span class="playlist-card-cover"></span>
+      <span class="playlist-card-overlay"></span>
+      <span class="playlist-card-badge"><span class="material-symbols-outlined" style="font-size:16px;width:16px">queue_music</span>${playlist.trackCount || 0}</span>
+      <span class="playlist-card-info">
+        <span class="playlist-card-title"></span>
+        <span class="playlist-card-meta"></span>
+      </span>
+    </span>
+  `;
+  renderCoverNode(card.querySelector('.playlist-card-cover'), playlist.coverUrl || '', 'playlist-card');
+  card.querySelector('.playlist-card-title').textContent = playlist.name || 'NetEase playlist';
+  card.querySelector('.playlist-card-meta').textContent = `${playlist.trackCount || 0} tracks`;
+  attachTiltedCard(card);
+  const open = () => openNeteasePlaylistDetail(playlist, backTo);
+  card.addEventListener('click', event => {
+    event.stopPropagation();
+    open();
+  });
+  card.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    open();
+  });
+  return card;
+};
+
+const createNeteaseHomeSongTable = songs => {
+  const table = document.createElement('table');
+  table.className = 'playlist-detail-table netease-results netease-home-table';
+  table.innerHTML = '<tbody></tbody>';
+  const tbody = table.querySelector('tbody');
+  songs.forEach((song, index) => {
+    const row = document.createElement('tr');
+    row.dataset.id = song.id;
+    row.dataset.neteaseId = neteaseNumericId(song);
+    row.dataset.liked = String(isNeteaseSongLiked(song));
+    row.dataset.searchText = `${song.title || ''} ${song.artist || ''} ${song.album || ''}`.toLowerCase();
+    row.innerHTML = `
+      <td class="track-play-cell"><span class="track-number">${String(index + 1).padStart(2, '0')}</span><button class="track-play-button" type="button" aria-label="Play track" data-state="play">${trackPlayIcon()}</button></td>
+      <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div></td>
+      <td class="track-album"></td>
+      <td class="track-like"><button class="track-like-button" type="button" aria-label="${isNeteaseSongLiked(song) ? 'Remove from NetEase liked songs' : 'Add to NetEase liked songs'}" aria-pressed="${isNeteaseSongLiked(song)}"><span class="material-symbols-outlined">favorite</span></button></td>
+      <td class="track-duration">${formatTrackDuration(Number(song.duration) || 0)}</td>
+      <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="More actions" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>Play Next</span></button><button type="button" data-action="add-queue"><span class="material-symbols-outlined">playlist_add</span><span>Add to Queue</span></button><button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${isNeteaseSongLiked(song) ? 'Remove from Liked' : 'Like'}</span></button></span></span></td>
+    `;
+    const number = row.querySelector('.track-number');
+    number.dataset.indexLabel = number.textContent;
+    const cover = row.querySelector('.track-cover');
+    if (song.coverUrl) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = song.coverUrl;
+      cover.append(img);
+    } else {
+      cover.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">music_note</span>';
+    }
+    row.querySelector('.track-name').textContent = song.title || 'NetEase song';
+    row.querySelector('.track-artist').textContent = song.artist || 'NetEase Music';
+    row.querySelector('.track-album').textContent = song.album || '';
+    row.querySelector('.track-play-button').addEventListener('click', async event => {
+      event.stopPropagation();
+      try {
+        await playNeteaseTrack(song, songs);
+      } catch (error) {
+        toast.error('Play failed', error?.message || 'This song is unavailable.');
+      }
+    });
+    const likeButton = row.querySelector('.track-like-button');
+    likeButton.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      await toggleNeteaseLike(song, likeButton);
+    });
+    const trigger = row.querySelector('.track-row-menu-trigger');
+    const menu = row.querySelector('.track-row-menu');
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      document.querySelectorAll('.track-row-menu').forEach(item => { if (item !== menu) item.hidden = true; });
+      menu.hidden = !menu.hidden;
+      trigger.setAttribute('aria-expanded', String(!menu.hidden));
+    });
+    menu.querySelectorAll('button[data-action]').forEach(button => {
+      button.addEventListener('click', async event => {
+        event.stopPropagation();
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        try {
+          if (button.dataset.action === 'like') await toggleNeteaseLike(song, likeButton);
+          else await enqueueNeteaseTrack(song, button.dataset.action === 'play-next' ? 'next' : 'queue');
+        } catch (error) {
+          toast.error('Add failed', error?.message || 'This song is unavailable.');
+        }
+      });
+    });
+    tbody.append(row);
+  });
+  return table;
+};
+
+const showNeteaseSearchBack = () => {
+  if (!neteaseAccountPanel) return;
+  const back = document.createElement('button');
+  back.className = 'playlist-detail-back netease-search-back';
+  back.type = 'button';
+  back.innerHTML = '<span class="material-symbols-outlined">arrow_back</span><span>Back</span>';
+  back.addEventListener('click', () => {
+    if (neteaseSearchInput) neteaseSearchInput.value = '';
+    loadNeteaseSearchHome({ force: true });
+  });
+  neteaseAccountPanel.replaceChildren(back);
+};
+
+const loadNeteaseSearchHome = async ({ force = false } = {}) => {
+  const api = getDesktopNetease();
+  if (!api?.getSearchHome || !neteaseResults) return;
+  if (neteaseSearchHomeLoaded && !force && neteaseResults.querySelector('.netease-search-home')) return;
+  const requestId = ++neteaseSearchRequestId;
+  setNeteaseSearchVisible(true);
+  if (neteaseAccountPanel) neteaseAccountPanel.replaceChildren();
+  neteaseLastSongs = [];
+  neteaseLastSearchKeyword = "";
+  neteaseVisibleSongs = [];
+  neteaseResults.innerHTML = renderPlaylistLoading();
+  try {
+    const result = await api.getSearchHome({ songLimit: 8, playlistLimit: 8 });
+    if (neteaseActiveView !== 'search' || requestId !== neteaseSearchRequestId) return;
+    if (!result?.ok) throw new Error(result?.message || 'Unable to load NetEase home.');
+    await ensureNeteaseLikedIds().catch(() => {});
+    if (neteaseActiveView !== 'search' || requestId !== neteaseSearchRequestId) return;
+    const dailySongs = result.dailySongs || [];
+    const hotPlaylists = result.hotPlaylists || [];
+    neteaseVisibleSongs = dailySongs;
+    const home = document.createElement('div');
+    home.className = 'netease-search-home';
+    const daily = document.createElement('section');
+    daily.className = 'netease-home-section';
+    daily.innerHTML = '<div class="netease-home-section-head"><div><h2 class="netease-home-title">Daily Recommended Songs</h2><p class="netease-home-subtitle">Fresh picks from your NetEase Music taste.</p></div></div>';
+    if (!dailySongs.length) {
+      const empty = document.createElement('p');
+      empty.className = 'netease-empty';
+      empty.textContent = 'No daily recommendations available.';
+      daily.append(empty);
+    } else {
+      daily.append(createNeteaseHomeSongTable(dailySongs));
+    }
+    const playlists = document.createElement('section');
+    playlists.className = 'netease-home-section';
+    playlists.innerHTML = '<div class="netease-home-section-head"><div><h2 class="netease-home-title">Hot Playlists</h2><p class="netease-home-subtitle">Popular playlists to start with.</p></div></div>';
+    const grid = document.createElement('div');
+    grid.className = 'local-playlist-list';
+    if (!hotPlaylists.length) {
+      const empty = document.createElement('p');
+      empty.className = 'netease-empty';
+      empty.textContent = 'No hot playlists available.';
+      grid.append(empty);
+    }
+    hotPlaylists.forEach(playlist => grid.append(makeNeteasePlaylistCard(playlist, 'search-home')));
+    playlists.append(grid);
+    home.append(daily, playlists);
+    neteaseResults.replaceChildren(home);
+    neteaseSearchHomeLoaded = true;
+    updateNeteasePlaybackRows();
+  } catch (error) {
+    if (neteaseActiveView !== 'search' || requestId !== neteaseSearchRequestId) return;
+    console.error('load netease search home failed', error);
+    neteaseResults.innerHTML = `<p class="netease-empty">${error?.message || 'Unable to load NetEase home.'}</p>`;
+  }
+};
+
 const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options = {}) => {
   setNeteaseSearchVisible(false);
   if (neteaseAccountPanel) {
@@ -1296,6 +1894,7 @@ const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options =
         <p class="playlist-detail-meta"></p>
         <div class="playlist-detail-actions">
           <button class="playlist-play-all" type="button"><span class="material-symbols-outlined">play_arrow</span><span>Play All</span></button>
+          ${options.playlist ? '<button class="playlist-subscribe-button" type="button" aria-pressed="false" data-subscribed="false"><span class="material-symbols-outlined">favorite_border</span><span>Save</span></button>' : ''}
         </div>
       </div>
     `;
@@ -1319,6 +1918,11 @@ const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options =
         playAll.disabled = !songs.length;
       }
     });
+    const subscribeButton = hero.querySelector('.playlist-subscribe-button');
+    if (subscribeButton && options.playlist) {
+      updatePlaylistSubscribeButton(subscribeButton, options.playlist.subscribed === true);
+      subscribeButton.addEventListener('click', () => toggleNeteasePlaylistSubscribed(options.playlist, subscribeButton));
+    }
     if (options.backTo === 'playlists') {
       const back = document.createElement('button');
       back.className = 'playlist-detail-back';
@@ -1326,11 +1930,18 @@ const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options =
       back.innerHTML = '<span class="material-symbols-outlined">arrow_back</span><span>Back</span>';
       back.addEventListener('click', () => loadNeteasePlaylists());
       neteaseAccountPanel.replaceChildren(back, hero);
+    } else if (options.backTo === 'search-home') {
+      const back = document.createElement('button');
+      back.className = 'playlist-detail-back';
+      back.type = 'button';
+      back.innerHTML = '<span class="material-symbols-outlined">arrow_back</span><span>Back</span>';
+      back.addEventListener('click', () => loadNeteaseSearchHome({ force: true }));
+      neteaseAccountPanel.replaceChildren(back, hero);
     } else {
       neteaseAccountPanel.replaceChildren(hero);
     }
   }
-  renderNeteaseResults(songs, { remember: false, queueSongs: songs, withFilter: true, showPlayCount: options.showPlayCount === true, emptyMessage: options.emptyMessage });
+  renderNeteaseResults(songs, { remember: false, queueSongs: songs, withFilter: true, showPlayCount: options.showPlayCount === true, historyType: options.historyType, emptyMessage: options.emptyMessage });
 };
 
 const loadNeteasePlaylists = async () => {
@@ -1384,15 +1995,18 @@ const loadNeteasePlaylists = async () => {
         try {
           const songsResult = await api.getPlaylistSongs({ neteaseId: playlist.neteaseId, offset: 0 });
           if (neteaseActiveView !== 'playlists' || detailRequestId !== neteaseAccountRequestId) return;
-          if (!songsResult?.ok) throw new Error(songsResult?.message || 'Unable to load playlist.');
-          await ensureNeteaseLikedIds().catch(() => {});
+    if (!songsResult?.ok) throw new Error(songsResult?.message || 'Unable to load playlist.');
+    playlist.subscribed = playlist.subscribed === true || songsResult.subscribed === true;
+    await ensureNeteaseLikedIds().catch(() => {});
           if (neteaseActiveView !== 'playlists' || detailRequestId !== neteaseAccountRequestId) return;
           const trackCount = songsResult.songs?.length || 0;
           const creator = playlist.creator || 'NetEase Cloud';
+          playlist.subscribed = playlist.subscribed === true || songsResult.subscribed === true;
           renderNeteaseSongCollection(playlist.name, songsResult.songs || [], `${trackCount} track${trackCount === 1 ? '' : 's'} \u00b7 ${creator}`, {
             coverUrl: playlist.coverUrl,
             kicker: 'Playlist',
-            backTo: 'playlists'
+            backTo: 'playlists',
+            playlist
           });
         } catch (error) {
           if (neteaseActiveView !== 'playlists' || detailRequestId !== neteaseAccountRequestId) return;
@@ -1471,15 +2085,16 @@ const loadNeteaseLiked = async () => {
   }
 };
 
-const loadNeteaseHistory = async () => {
+const loadNeteaseHistory = async (type = neteaseHistoryType) => {
   const api = getDesktopNetease();
   if (!api?.getHistory) return;
+  neteaseHistoryType = type === 0 ? 0 : 1;
   const requestId = ++neteaseAccountRequestId;
   setNeteaseSearchVisible(false);
   neteaseAccountPanel.innerHTML = renderSongDetailLoading();
   neteaseResults.innerHTML = renderSongRowsLoading('Loading history');
   try {
-    const result = await api.getHistory({ type: 1 });
+    const result = await api.getHistory({ type: neteaseHistoryType });
     if (neteaseActiveView !== 'history' || requestId !== neteaseAccountRequestId) return;
     if (!result?.ok) throw new Error(result?.message || 'Unable to load history.');
     await ensureNeteaseLikedIds().catch(() => {});
@@ -1488,6 +2103,7 @@ const loadNeteaseHistory = async () => {
     renderNeteaseSongCollection('NetEase History', result.songs || [], `${total} track${total === 1 ? '' : 's'}`, {
       kicker: 'History',
       showPlayCount: true,
+      historyType: neteaseHistoryType,
       emptyMessage: 'No NetEase listening history yet.'
     });
   } catch (error) {
@@ -1501,10 +2117,11 @@ const loadNeteaseHistory = async () => {
 const showNeteaseSection = (view = 'search') => {
   neteaseActiveView = view;
   showMusicView('netease');
+  if (neteaseAuthGate && !neteaseAuthGate.hidden) setNeteaseLoginMode(neteaseLoginMode);
   document.querySelectorAll('.netease-sub-item').forEach(item => item.setAttribute('aria-checked', String(item.dataset.neteaseView === view)));
   if (view === 'search') {
     setNeteaseSearchVisible(true);
-    if (!neteaseLastSongs.length) neteaseResults.innerHTML = '<p class="netease-empty">Search for a song to start.</p>';
+    if (!neteaseLastSongs.length) loadNeteaseSearchHome();
     else renderNeteaseResults(neteaseLastSongs);
   }
   if (view === 'playlists') loadNeteasePlaylists();
@@ -1552,7 +2169,11 @@ const initializeNeteaseView = async () => {
 const searchNeteaseSongs = async keyword => {
   const api = getDesktopNetease();
   const query = String(keyword || '').trim();
-  if (!api?.searchSongs || !query) return false;
+  if (!query) {
+    await loadNeteaseSearchHome({ force: true });
+    return true;
+  }
+  if (!api?.searchSongs) return false;
   const requestId = ++neteaseSearchRequestId;
   setNeteaseBusy(true);
   if (neteaseResults) neteaseResults.innerHTML = renderSongRowsLoading('Searching songs');
@@ -1564,6 +2185,7 @@ const searchNeteaseSongs = async keyword => {
     if (neteaseActiveView !== 'search' || requestId !== neteaseSearchRequestId) return false;
     neteaseLastSearchKeyword = query;
     renderNeteaseResults(result?.songs || []);
+    showNeteaseSearchBack();
     return true;
   } catch (error) {
     if (neteaseActiveView !== 'search' || requestId !== neteaseSearchRequestId) return false;
@@ -1608,7 +2230,6 @@ const pollNeteaseLogin = async () => {
       clearInterval(neteaseLoginTimer);
       neteaseLoginTimer = null;
       neteaseLoginKey = "";
-      if (neteaseQrCard) neteaseQrCard.hidden = true;
       toast.success('NetEase login success', result.nickname || '');
       await initializeNeteaseView();
       return;
@@ -1699,6 +2320,18 @@ window.addEventListener('kairos:toast', event => {
 });
 
 const applyPlaybackState = detail => {
+  if (Array.isArray(detail?.tracks)) {
+    detail.tracks.forEach(track => {
+      const id = neteaseNumericId(track);
+      if (!id || track.liked === undefined) return;
+      track.liked === true ? neteaseLikedIds.add(id) : neteaseLikedIds.delete(id);
+      syncNeteaseCachedLike(id, track.liked === true);
+    });
+    if (detail.tracks.some(track => String(track?.id || '').startsWith('netease:') && track.liked !== undefined)) {
+      neteaseLikedIdsLoaded = true;
+      updateNeteaseLikeRows();
+    }
+  }
   if (!detail?.currentTrackId) {
     playbackState = { currentTrackId: null, playing: false };
     syncPlaybackRows();
@@ -2852,6 +3485,7 @@ document.addEventListener('keydown', (e) => {
 
 const saved = localStorage.getItem(KEY);
 if (saved) group.dataset.state = saved;
+initMusicSourceSort();
 
 // Submenu toggle
 document.querySelectorAll('.music-submenu-trigger').forEach(trigger => {
@@ -2894,8 +3528,12 @@ document.querySelectorAll('[data-source]').forEach(button => {
       item.setAttribute('aria-checked', String(item === button))
     );
     if (button.dataset.source === 'netease') {
+      const submenu = button.closest('.music-submenu');
+      if (submenu?.dataset.state !== 'open') {
+        button.setAttribute('aria-expanded', 'false');
+        return;
+      }
       document.querySelectorAll('.music-sub-item').forEach(item => item.setAttribute('aria-checked', 'false'));
-      button.closest('.music-submenu')?.setAttribute('data-state', 'open');
       button.setAttribute('aria-expanded', 'true');
       showNeteaseSection(neteaseActiveView || 'search');
       if (!neteaseInitialized) initializeNeteaseView();
@@ -2917,20 +3555,64 @@ document.querySelectorAll('.netease-sub-item').forEach(button => {
   });
 });
 
-neteaseLoginButton?.addEventListener('click', async () => {
+const startNeteaseLoginFlow = async ({ force = false } = {}) => {
   const api = getDesktopNetease();
   if (!api?.startLogin) return;
+  if (neteaseLoginInFlight || (neteaseLoginKey && !force)) return;
+  const now = Date.now();
+  if (now < neteaseLoginCooldownUntil) {
+    const seconds = Math.ceil((neteaseLoginCooldownUntil - now) / 1000);
+    const message = `\u64cd\u4f5c\u9891\u7e41\uff0c\u8bf7 ${seconds}s \u540e\u518d\u8bd5`;
+    if (neteaseQrEmpty) {
+      neteaseQrEmpty.hidden = false;
+      neteaseQrEmpty.textContent = message;
+    }
+    if (neteaseQrStatus) neteaseQrStatus.textContent = message;
+    return;
+  }
+  neteaseLoginInFlight = true;
+  if (force) {
+    clearInterval(neteaseLoginTimer);
+    neteaseLoginTimer = null;
+    neteaseLoginKey = "";
+  }
+  setNeteaseLoginMode('qr');
   const requestId = ++neteaseLoginRequestId;
   setNeteaseBusy(true);
   setNeteaseStatus('Creating login QR code...');
+  if (neteaseQrImage) {
+    neteaseQrImage.hidden = true;
+    neteaseQrImage.removeAttribute('src');
+  }
+  if (neteaseQrEmpty) {
+    neteaseQrEmpty.hidden = false;
+    neteaseQrEmpty.textContent = '\u6b63\u5728\u751f\u6210\u4e8c\u7ef4\u7801...';
+  }
+  if (neteaseQrStatus) neteaseQrStatus.textContent = '\u6b63\u5728\u751f\u6210\u4e8c\u7ef4\u7801...';
   try {
     const result = await api.startLogin();
     if (requestId !== neteaseLoginRequestId) return;
-    if (!result?.ok || !result.qrImg) throw new Error(result?.message || 'Unable to create login QR code.');
+    if (!result?.ok || !result.qrImg) {
+      if (result?.code === 406 || result?.retryAfter) {
+        neteaseLoginCooldownUntil = Date.now() + (Number(result.retryAfter) || 60000);
+      }
+      const message = result?.message || 'Unable to create login QR code.';
+      if (neteaseQrEmpty) {
+        neteaseQrEmpty.hidden = false;
+        neteaseQrEmpty.textContent = message;
+      }
+      if (neteaseQrStatus) neteaseQrStatus.textContent = message;
+      toast.error('Login QR unavailable', message);
+      return;
+    }
     neteaseLoginKey = result.key || "";
-    if (neteaseQrImage) neteaseQrImage.src = result.qrImg;
-    if (neteaseQrCard) neteaseQrCard.hidden = false;
-    if (neteaseQrStatus) neteaseQrStatus.textContent = 'Scan with the NetEase Cloud Music app.';
+    neteaseLoginCooldownUntil = 0;
+    if (neteaseQrImage) {
+      neteaseQrImage.src = result.qrImg;
+      neteaseQrImage.hidden = false;
+    }
+    if (neteaseQrEmpty) neteaseQrEmpty.hidden = true;
+    if (neteaseQrStatus) neteaseQrStatus.textContent = '\u7b49\u5f85\u626b\u7801\u4e2d...';
     setNeteaseStatus('Waiting for QR scan...', true);
     clearInterval(neteaseLoginTimer);
     neteaseLoginTimer = setInterval(pollNeteaseLogin, 2400);
@@ -2941,8 +3623,149 @@ neteaseLoginButton?.addEventListener('click', async () => {
     setNeteaseStatus(error?.message || 'Login failed.');
     toast.error('Login failed', error?.message || 'Please try again.');
   } finally {
+    neteaseLoginInFlight = false;
     if (requestId === neteaseLoginRequestId) setNeteaseBusy(false);
   }
+};
+
+const closeNeteaseAccountMenu = () => {
+  if (neteaseSidebarAccountMenu) neteaseSidebarAccountMenu.hidden = true;
+  if (neteaseSidebarAccount) neteaseSidebarAccount.setAttribute('aria-expanded', 'false');
+};
+
+const resetNeteaseSessionUi = () => {
+  clearInterval(neteaseLoginTimer);
+  neteaseLoginTimer = null;
+  neteaseLoginKey = "";
+  clearInterval(neteaseCaptchaTimer);
+  neteaseCaptchaTimer = null;
+  neteaseCaptchaSeconds = 0;
+  setNeteaseVerification(null);
+  if (neteaseSendCaptchaButton) neteaseSendCaptchaButton.textContent = '\u83b7\u53d6\u9a8c\u8bc1\u7801';
+  neteaseInitialized = false;
+  neteaseLikedIds = new Set();
+  neteaseLikedIdsLoaded = false;
+  neteaseSearchHomeLoaded = false;
+  neteaseLastSongs = [];
+  neteaseVisibleSongs = [];
+  renderNeteaseSidebarProfile(null);
+  setNeteaseAuthenticated(false);
+  if (neteaseQrImage) {
+    neteaseQrImage.hidden = true;
+    neteaseQrImage.removeAttribute('src');
+  }
+  if (neteaseQrEmpty) {
+    neteaseQrEmpty.hidden = false;
+    neteaseQrEmpty.textContent = '\u6b63\u5728\u751f\u6210\u4e8c\u7ef4\u7801...';
+  }
+  if (neteaseResults) neteaseResults.innerHTML = '<p class="netease-empty">Search for a song to start.</p>';
+  if (neteaseAccountPanel) neteaseAccountPanel.replaceChildren();
+};
+
+neteaseLoginButton?.addEventListener('click', () => startNeteaseLoginFlow({ force: true }));
+
+const startCaptchaCountdown = () => {
+  clearInterval(neteaseCaptchaTimer);
+  neteaseCaptchaSeconds = 60;
+  const tick = () => {
+    if (!neteaseSendCaptchaButton) return;
+    neteaseSendCaptchaButton.disabled = neteaseCaptchaSeconds > 0;
+    neteaseSendCaptchaButton.textContent = neteaseCaptchaSeconds > 0 ? `${neteaseCaptchaSeconds}s` : '\u83b7\u53d6\u9a8c\u8bc1\u7801';
+    if (neteaseCaptchaSeconds <= 0) {
+      clearInterval(neteaseCaptchaTimer);
+      neteaseCaptchaTimer = null;
+      return;
+    }
+    neteaseCaptchaSeconds -= 1;
+  };
+  tick();
+  neteaseCaptchaTimer = setInterval(tick, 1000);
+};
+
+neteaseOtherLoginButton?.addEventListener('click', () => setNeteaseLoginMode('phone'));
+neteaseQrLoginButton?.addEventListener('click', () => setNeteaseLoginMode('qr'));
+neteaseVerificationButton?.addEventListener('click', async () => {
+  if (!neteaseVerificationUrl) return;
+  const api = getDesktopNetease();
+  if (api?.openVerification) await api.openVerification(neteaseVerificationUrl);
+  else window.open(neteaseVerificationUrl, '_blank', 'noopener');
+});
+
+neteaseSendCaptchaButton?.addEventListener('click', async () => {
+  const api = getDesktopNetease();
+  const phone = neteasePhoneInput?.value?.trim() || '';
+  if (!api?.sendCaptcha || !phone) {
+    toast.error('Phone required', 'Please enter your phone number.');
+    return;
+  }
+  neteaseSendCaptchaButton.disabled = true;
+  try {
+    const result = await api.sendCaptcha({ phone, countrycode: '86' });
+    if (!result?.ok) throw new Error(result?.message || 'Unable to send verification code.');
+    toast.success('Verification code sent');
+    startCaptchaCountdown();
+  } catch (error) {
+    neteaseSendCaptchaButton.disabled = false;
+    toast.error('Send failed', error?.message || 'Please try again.');
+  }
+});
+
+neteasePhoneLoginForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const api = getDesktopNetease();
+  const phone = neteasePhoneInput?.value?.trim() || '';
+  const captcha = neteaseCaptchaInput?.value?.trim() || '';
+  if (!api?.loginWithPhone || !phone || !captcha) {
+    toast.error('Login failed', 'Please enter your phone number and verification code.');
+    return;
+  }
+  setNeteaseBusy(true);
+  setNeteaseVerification(null);
+  try {
+    const result = await api.loginWithPhone({ phone, captcha, countrycode: '86' });
+    if (!result?.ok) {
+      setNeteaseVerification(result);
+      toast.error('Login failed', result?.message || 'Phone login failed.');
+      return;
+    }
+    clearInterval(neteaseCaptchaTimer);
+    neteaseCaptchaTimer = null;
+    neteaseLoginKey = "";
+    await initializeNeteaseView();
+    if (neteaseActiveView === 'search') await loadNeteaseSearchHome({ force: true });
+    toast.success('Logged in', result.profile?.nickname || 'Netease Music');
+  } catch (error) {
+    toast.error('Login failed', error?.message || 'Please check the verification code.');
+  } finally {
+    setNeteaseBusy(false);
+  }
+});
+
+neteaseSidebarAccount?.addEventListener('click', event => {
+  event.stopPropagation();
+  if (neteaseSidebarAccount.disabled) return;
+  const next = neteaseSidebarAccountMenu?.hidden !== false;
+  if (neteaseSidebarAccountMenu) neteaseSidebarAccountMenu.hidden = !next;
+  neteaseSidebarAccount.setAttribute('aria-expanded', String(next));
+});
+
+neteaseSidebarAccountMenu?.addEventListener('click', async event => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  event.stopPropagation();
+  const api = getDesktopNetease();
+  closeNeteaseAccountMenu();
+  if (button.dataset.action === 'logout') {
+    await api?.logout?.();
+    resetNeteaseSessionUi();
+    setNeteaseStatus('Logged out.');
+    toast.message('Logged out');
+  }
+});
+
+document.addEventListener('pointerdown', event => {
+  if (neteaseSidebarAccountWrap?.contains(event.target)) return;
+  closeNeteaseAccountMenu();
 });
 
 neteaseRefreshButton?.addEventListener('click', refreshNeteaseCurrentView);
@@ -2952,7 +3775,7 @@ neteaseSearchForm?.addEventListener('submit', async event => {
   await searchNeteaseSongs(neteaseSearchInput?.value || '');
 });
 registerNeteaseUrlRefreshListener();
-showMusicView('playlist');
+showInitialMusicSource();
 initializeNeteaseView();
 refreshMusicState().finally(() => {
   try {
@@ -2966,7 +3789,7 @@ refreshMusicState().finally(() => {
 <link href="stitch-layout.css?v=24" rel="stylesheet">
 <link href="tweakcn-theme.css?v=9" rel="stylesheet">
 <link href="music-player.css?v=28" rel="stylesheet">
-<script src="stitch-shell.js?v=88"></script>
+<script src="stitch-shell.js?v=91"></script>
 <script src="music-player.js?v=42"></script>
 </body>
 </html>

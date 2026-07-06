@@ -3,6 +3,7 @@
   const ICONS=[['📚','Reading'],['🏋️','Exercise'],['🧠','Study'],['🌙','Sleep'],['💧','Hydration'],['🧘','Meditation'],['✍️','Writing'],['🥗','Healthy Eating'],['🏃','Running'],['🧹','Cleaning']];
   const LEGACY_ICONS={menu_book:'📚',fitness_center:'🏋️',school:'🧠',bedtime:'🌙',water_drop:'💧',self_improvement:'🧘',edit_note:'✍️',nutrition:'🥗',directions_run:'🏃',cleaning_services:'🧹',routine:'📚'};
   let state;
+  let lastHabitCompletionRate=null,habitCompletionFrame=0;
   const pad=n=>String(n).padStart(2,'0');
   const dateKey=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const today=()=>dateKey(new Date());
@@ -20,6 +21,26 @@
   });
   const streak=habit=>{const dates=new Set(habit.dates);let cursor=today();if(!dates.has(cursor))cursor=shift(cursor,-1);let count=0;while(dates.has(cursor)){count++;cursor=shift(cursor,-1)}return count};
   const best=habit=>{let maximum=0,count=0,last='';for(const date of habit.dates){count=last&&shift(last,1)===date?count+1:1;maximum=Math.max(maximum,count);last=date}return maximum};
+  const easeOutCubic=t=>1-Math.pow(1-t,3);
+  function animateHabitCompletion(target){
+    const node=document.querySelector('[data-habit-countup]'),ring=document.querySelector('[data-habit-progress-ring]');if(!node)return;
+    const previous=lastHabitCompletionRate;
+    const from=previous===null?0:previous;
+    cancelAnimationFrame(habitCompletionFrame);
+    if(target===from){node.textContent=`${target}%`;if(ring)ring.style.setProperty('--progress',`${target*3.6}deg`);lastHabitCompletionRate=target;return}
+    node.classList.remove('is-counting');void node.offsetWidth;node.classList.add('is-counting');
+    ring?.classList.remove('is-progressing');if(ring){void ring.offsetWidth;ring.classList.add('is-progressing')}
+    const start=performance.now(),duration=900;
+    const tick=now=>{
+      const progress=Math.min(1,(now-start)/duration),value=Math.round(from+(target-from)*easeOutCubic(progress));
+      const ringValue=from+(target-from)*easeOutCubic(progress);
+      node.textContent=`${value}%`;
+      if(ring)ring.style.setProperty('--progress',`${ringValue*3.6}deg`);
+      if(progress<1)habitCompletionFrame=requestAnimationFrame(tick);
+      else{node.textContent=`${target}%`;if(ring){ring.style.setProperty('--progress',`${target*3.6}deg`);ring.classList.remove('is-progressing')}node.classList.remove('is-counting');lastHabitCompletionRate=target}
+    };
+    habitCompletionFrame=requestAnimationFrame(tick);
+  }
 
   async function load(){
     let local={};try{local=JSON.parse(localStorage.getItem(KEY)||'{}')}catch{}
@@ -41,22 +62,25 @@
   }
   function card(habit){
     const done=habit.dates.includes(today());
-    return `<article class="real-habit-card" data-id="${habit.id}"><button class="habit-drag-handle" type="button" draggable="true" aria-label="Drag to reorder"><span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span></button><button class="habit-check-button ${done?'done':''}" data-toggle="${habit.id}" aria-label="${done?'Mark incomplete':'Mark complete'}"><span aria-hidden="true">${done?'✓':''}</span></button><div class="habit-card-copy"><span class="habit-card-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><div><h3>${escape(habit.name)}</h3><p>${escape(habit.description||'A little progress every day')}</p></div></div><strong>${streak(habit)}<small>day streak</small></strong><button class="habit-more" data-edit="${habit.id}" aria-label="Edit habit"><span class="material-symbols-outlined">more_vert</span></button></article>`;
+    return `<article class="real-habit-card habit-magic-card" data-id="${habit.id}"><button class="habit-drag-handle" type="button" draggable="true" aria-label="Drag to reorder"><span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span></button><button class="habit-check-button ${done?'done':''}" data-toggle="${habit.id}" aria-label="${done?'Mark incomplete':'Mark complete'}"><span aria-hidden="true">${done?'✓':''}</span></button><div class="habit-card-copy"><span class="habit-card-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><div><h3>${escape(habit.name)}</h3><p>${escape(habit.description||'A little progress every day')}</p></div></div><strong>${streak(habit)}<small>day streak</small></strong><button class="habit-more" data-edit="${habit.id}" aria-label="Edit habit"><span class="material-symbols-outlined">more_vert</span></button></article>`;
   }
   function heatmap(habit){
     let cells='';for(let index=83;index>=0;index--){const date=shift(today(),-index);cells+=`<span class="heat-cell ${habit.dates.includes(date)?'done':''}" title="${date}"></span>`}
     const completed=habit.dates.filter(date=>date>=shift(today(),-83)&&date<=today()).length;
-    return `<article><header><span class="habit-heatmap-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><strong>${escape(habit.name)}</strong><small>${completed}/84 days</small></header><div class="real-heatmap">${cells}</div></article>`;
+    return `<article class="habit-magic-card"><header><span class="habit-heatmap-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><strong>${escape(habit.name)}</strong><small>${completed}/84 days</small></header><div class="real-heatmap">${cells}</div></article>`;
   }
   function render(){
     const main=document.querySelector('main.kairos-page-main');if(!main)return;
     const done=state.habits.filter(habit=>habit.dates.includes(today())).length,total=state.habits.length,rate=total?Math.round(done/total*100):0;
-    main.innerHTML=`<div class="habit-dashboard"><header class="habit-page-head"><div><span class="habit-kicker">DAILY RHYTHM</span><h1>My Habits</h1><p>${done} of ${total} completed today. Every small step counts.</p></div><button class="habit-primary" data-add><span class="material-symbols-outlined">add</span>Add Habit</button></header><div class="habit-columns"><section><h2>Active Habits</h2><div class="habit-cards">${total?state.habits.map(card).join(''):'<div class="habit-empty">No habits yet. Add a small goal to get started.</div>'}</div></section><section class="habit-momentum"><span>Today&apos;s Progress</span><div class="habit-ring" style="--progress:${rate*3.6}deg"><div><strong>${rate}%</strong><small>completion</small></div></div><dl><div><dt>Current Longest Streak</dt><dd>${Math.max(0,...state.habits.map(streak))} days</dd></div><div><dt>Personal Best</dt><dd>${Math.max(0,...state.habits.map(best))} days</dd></div></dl></section><section><h2>Last 12 Weeks</h2><div class="habit-heatmaps">${state.habits.map(heatmap).join('')}</div></section></div></div>`;
+    const progressStart=(lastHabitCompletionRate===null?0:lastHabitCompletionRate)*3.6;
+    main.innerHTML=`<div class="habit-dashboard"><header class="habit-page-head"><div><span class="habit-kicker">DAILY RHYTHM</span><h1>My Habits</h1><p>${done} of ${total} completed today. Every small step counts.</p></div><button class="habit-primary" data-add><span class="material-symbols-outlined">add</span>Add Habit</button></header><div class="habit-columns"><section><h2>Active Habits</h2><div class="habit-cards">${total?state.habits.map(card).join(''):'<div class="habit-empty">No habits yet. Add a small goal to get started.</div>'}</div></section><section class="habit-progress-column"><h2 aria-hidden="true">&nbsp;</h2><div class="habit-momentum habit-magic-card"><span>Today&apos;s Progress</span><div class="habit-ring" data-habit-progress-ring style="--progress:${progressStart}deg"><div><strong class="habit-count-up-text" data-habit-countup>${rate}%</strong><small>completion</small></div></div><dl><div class="habit-magic-card"><dt>Current Longest Streak</dt><dd>${Math.max(0,...state.habits.map(streak))} days</dd></div><div class="habit-magic-card"><dt>Personal Best</dt><dd>${Math.max(0,...state.habits.map(best))} days</dd></div></dl></div></section><section><h2>Last 12 Weeks</h2><div class="habit-heatmaps">${state.habits.map(heatmap).join('')}</div></section></div></div>`;
+    animateHabitCompletion(rate);
     main.querySelectorAll('[data-toggle]').forEach(button=>button.onclick=()=>toggle(button.dataset.toggle));
     main.querySelectorAll('[data-edit]').forEach(button=>button.onclick=()=>editor(button.dataset.edit));
     main.querySelector('[data-add]').onclick=()=>editor();
     const create=document.querySelector('.kairos-create');if(create)create.onclick=()=>editor();
     setupDrag();
+    setupHabitMagicBento();
   }
   function history(habit){
     let days='';for(let index=29;index>=0;index--){const date=shift(today(),-index);days+=`<button type="button" data-history="${date}" class="${habit.dates.includes(date)?'done':''}">${from(date).getDate()}</button>`}
@@ -112,6 +136,21 @@
         cards().forEach(item=>item.classList.remove('is-drop-before','is-drop-after'));
         if(movingId)persist();
       };
+    });
+  }
+  function setupHabitMagicBento(){
+    const cards=[...document.querySelectorAll('.habit-magic-card')];
+    const update=(card,event)=>{
+      const rect=card.getBoundingClientRect(),x=((event.clientX-rect.left)/rect.width)*100,y=((event.clientY-rect.top)/rect.height)*100;
+      card.style.setProperty('--magic-x',`${x}%`);
+      card.style.setProperty('--magic-y',`${y}%`);
+      card.style.setProperty('--magic-intensity','1');
+    };
+    cards.forEach(card=>{
+      card.style.setProperty('--magic-intensity','0');
+      card.onpointermove=event=>update(card,event);
+      card.onpointerenter=event=>update(card,event);
+      card.onpointerleave=()=>card.style.setProperty('--magic-intensity','0');
     });
   }
   function sync(){let local={};try{local=JSON.parse(localStorage.getItem(KEY)||'{}')}catch{}state={...local,habits:(Array.isArray(local.habits)?local.habits:[]).map(clean)};render()}

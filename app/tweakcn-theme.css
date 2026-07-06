@@ -55,3 +55,55 @@ body[data-page="habits"] .habit-card-icon{background:none!important;background-c
 .kairos-alert-header{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;align-items:start}.kairos-alert-media{display:grid;width:44px;height:44px;place-items:center;border-radius:14px;background:color-mix(in oklch,var(--primary) 12%,var(--popover));color:var(--primary)}.kairos-alert-media .material-symbols-outlined{font-size:24px}.kairos-alert-title{margin:0;color:var(--foreground);font-size:20px;font-weight:700;line-height:1.25;letter-spacing:-.02em}.kairos-alert-description{margin:7px 0 0;color:var(--muted-foreground);font-size:14px;line-height:1.55}
 .kairos-alert-footer{display:flex;justify-content:flex-end;gap:10px}.kairos-alert-footer button{height:40px;padding:0 16px;border-radius:calc(var(--radius) - 4px)!important;font-size:14px;font-weight:600}.kairos-alert-cancel{border:1px solid var(--border)!important;background:var(--background)!important;color:var(--foreground)!important;box-shadow:var(--shadow-sm)}.kairos-alert-action{border:1px solid var(--primary)!important;background:var(--primary)!important;color:var(--primary-foreground)!important;box-shadow:var(--shadow-sm)}.kairos-alert-cancel:hover{background:var(--accent)!important}.kairos-alert-action:hover{filter:saturate(1.05) brightness(.98);transform:translateY(-1px)}
 @keyframes kairos-alert-fade{from{opacity:0}to{opacity:1}}@keyframes kairos-alert-enter{from{opacity:0;transform:translateY(8px) scale(.96);filter:blur(2px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}@media(max-width:560px){.kairos-alert-footer{flex-direction:column-reverse}.kairos-alert-footer button{width:100%}.kairos-alert-header{grid-template-columns:1fr;text-align:center}.kairos-alert-media{margin:auto}}
+
+/* Habits card utility buttons must stay visually transparent.
+   This intentionally overrides the global tweakcn button hover rule above. */
+body[data-page="habits"] .real-habit-card .habit-drag-handle,
+body[data-page="habits"] .real-habit-card .habit-more,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more{
+  appearance:none!important;
+  -webkit-appearance:none!important;
+  background:transparent!important;
+  background-color:transparent!important;
+  background-image:none!important;
+  border-color:transparent!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+body[data-page="habits"] .real-habit-card .habit-drag-handle:hover,
+body[data-page="habits"] .real-habit-card .habit-drag-handle:focus,
+body[data-page="habits"] .real-habit-card .habit-drag-handle:focus-visible,
+body[data-page="habits"] .real-habit-card .habit-drag-handle:active,
+body[data-page="habits"] .real-habit-card .habit-more:hover,
+body[data-page="habits"] .real-habit-card .habit-more:focus,
+body[data-page="habits"] .real-habit-card .habit-more:focus-visible,
+body[data-page="habits"] .real-habit-card .habit-more:active,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle:hover,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle:focus,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle:focus-visible,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle:active,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more:hover,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more:focus,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more:focus-visible,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more:active{
+  background:transparent!important;
+  background-color:transparent!important;
+  background-image:none!important;
+  color:var(--foreground)!important;
+  box-shadow:none!important;
+  outline:none!important;
+  filter:none!important;
+  transform:none!important;
+}
+body[data-page="habits"] .real-habit-card .habit-drag-handle::before,
+body[data-page="habits"] .real-habit-card .habit-drag-handle::after,
+body[data-page="habits"] .real-habit-card .habit-more::before,
+body[data-page="habits"] .real-habit-card .habit-more::after,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle::before,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-drag-handle::after,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more::before,
+body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more::after{
+  display:none!important;
+  content:none!important;
+}

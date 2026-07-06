@@ -10,8 +10,8 @@
     embeddedMain?.classList.add('kairos-page-main');
     return;
   }
-  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=23">');
-  if (!document.querySelector('link[href="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css">');
+  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=28">');
+  if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=3">');
   if (!document.querySelector('link[href^="reminder-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="reminder-feature.css?v=1">');
   const page = document.body.dataset.page || 'calendar';
   const spaShell = page === 'calendar';
@@ -302,10 +302,10 @@
 })();
 
 {
-  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=23">');
-  if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=2">');
+  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=28">');
+  if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=3">');
   const scheduleFeatureScript=document.createElement('script');
-  scheduleFeatureScript.src='schedule-feature.js?v=36';
+  scheduleFeatureScript.src='schedule-feature.js?v=37';
   document.body.appendChild(scheduleFeatureScript);
 }
 if (new URLSearchParams(location.search).get('embed') !== '1') {

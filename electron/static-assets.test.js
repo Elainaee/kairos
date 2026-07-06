@@ -476,8 +476,8 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /<div class="music-sidebar-footer">[\s\S]*?id="neteaseSidebarAccount"[\s\S]*?id="neteaseSidebarAvatar"[\s\S]*?id="neteaseSidebarName"/,
-    "NetEase account profile should render in the sidebar footer"
+    /<div class="music-sidebar-footer">[\s\S]*?<div class="music-sidebar-account-wrap" id="neteaseSidebarAccountWrap">[\s\S]*?id="neteaseSidebarAvatar" alt="" hidden[\s\S]*?id="neteaseSidebarAvatarFallback"[\s\S]*?id="neteaseSidebarName">&#x672A;&#x767B;&#x5F55;<\/span>[\s\S]*?class="music-sidebar-account-service"[\s\S]*?hidden[\s\S]*?class="material-symbols-outlined music-sidebar-account-chevron"[\s\S]*?hidden[\s\S]*?id="neteaseSidebarAccountMenu" role="menu" hidden/,
+    "NetEase account profile should render an always-visible signed-out placeholder in the sidebar footer"
   );
   assert.doesNotMatch(
     musicHtml,
@@ -486,8 +486,13 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccount\.hidden = !hasProfile;[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| 'NetEase Cloud';[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
-    "NetEase status refresh should update sidebar avatar and nickname"
+    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccountWrap\.hidden = false;[\s\S]*?if \(!hasProfile\) \{[\s\S]*?neteaseSidebarName\.textContent = '\\u672a\\u767b\\u5f55';[\s\S]*?neteaseSidebarAvatar\.hidden = true;[\s\S]*?neteaseSidebarAvatarFallback\.hidden = false;[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| 'NetEase Cloud';[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
+    "NetEase status refresh should keep signed-out placeholder visible and update avatar/nickname when logged in"
+  );
+  assert.match(
+    musicHtml,
+    /serviceIcon\.hidden = !hasProfile;[\s\S]*?chevron\.hidden = !hasProfile;/,
+    "signed-out sidebar account should hide the service icon and expand affordance"
   );
   assert.match(
     musicHtml,
@@ -496,8 +501,8 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /showMusicView\('playlist'\);\s*initializeNeteaseView\(\);/,
-    "Music startup should check NetEase status so the sidebar profile appears before opening NetEase Cloud"
+    /showInitialMusicSource\(\);\s*initializeNeteaseView\(\);/,
+    "Music startup should show the first ordered source while still checking NetEase status for the sidebar profile"
   );
   assert.match(
     musicHtml,
@@ -533,6 +538,11 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
     musicHtml,
     /const requestId = \+\+neteaseLoginRequestId;[\s\S]*?const result = await api\.startLogin\(\);[\s\S]*?if \(requestId !== neteaseLoginRequestId\) return;/,
     "stale NetEase QR creation results should not replace a newer QR"
+  );
+  assert.match(
+    musicHtml,
+    /const startNeteaseLoginFlow = async \(\{ force = false \} = \{\}\) => \{[\s\S]*?if \(neteaseLoginInFlight \|\| \(neteaseLoginKey && !force\)\) return;[\s\S]*?if \(now < neteaseLoginCooldownUntil\) \{[\s\S]*?return;[\s\S]*?\}[\s\S]*?if \(force\) \{[\s\S]*?neteaseLoginKey = "";[\s\S]*?\}[\s\S]*?if \(result\?\.code === 406 \|\| result\?\.retryAfter\) \{[\s\S]*?neteaseLoginCooldownUntil = Date\.now\(\) \+ \(Number\(result\.retryAfter\) \|\| 60000\);/,
+    "NetEase QR login should guard in-flight requests and cool down after rate limits"
   );
   assert.match(
     musicHtml,
@@ -591,8 +601,8 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /<div class="netease-auth-gate" id="neteaseAuthGate" hidden>[\s\S]*?你还没有登录网易云账号，若要使用请先登录[\s\S]*?<button class="netease-button" id="neteaseLoginButton" type="button">/,
-    "NetEase signed-out view should show only the centered login prompt and login button"
+    /<div class="netease-auth-gate" id="neteaseAuthGate" hidden>[\s\S]*?id="neteaseQrLoginMode"[\s\S]*?id="neteaseQrImage"[\s\S]*?id="neteaseOtherLoginButton"[\s\S]*?id="neteasePhoneLoginForm"[\s\S]*?id="neteasePhoneInput"[\s\S]*?id="neteaseSendCaptchaButton"[\s\S]*?id="neteaseQrLoginButton"/,
+    "NetEase signed-out view should provide QR and phone verification login modes"
   );
   assert.doesNotMatch(
     musicHtml,
@@ -636,7 +646,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /const result = await api\.getHistory\(\{ type: 1 \}\);[\s\S]*?await ensureNeteaseLikedIds\(\)\.catch[\s\S]*?renderNeteaseSongCollection\('NetEase History'/,
+    /const result = await api\.getHistory\(\{ type: neteaseHistoryType \}\);[\s\S]*?await ensureNeteaseLikedIds\(\)\.catch[\s\S]*?renderNeteaseSongCollection\('NetEase History'/,
     "NetEase history rows should sync liked ids before rendering row state"
   );
   assert.match(
@@ -646,7 +656,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /const requestId = \+\+neteaseAccountRequestId;[\s\S]*?const result = await api\.getHistory\(\{ type: 1 \}\);[\s\S]*?if \(neteaseActiveView !== 'history' \|\| requestId !== neteaseAccountRequestId\) return;[\s\S]*?await ensureNeteaseLikedIds\(\)\.catch[\s\S]*?if \(neteaseActiveView !== 'history' \|\| requestId !== neteaseAccountRequestId\) return;/,
+    /const requestId = \+\+neteaseAccountRequestId;[\s\S]*?const result = await api\.getHistory\(\{ type: neteaseHistoryType \}\);[\s\S]*?if \(neteaseActiveView !== 'history' \|\| requestId !== neteaseAccountRequestId\) return;[\s\S]*?await ensureNeteaseLikedIds\(\)\.catch[\s\S]*?if \(neteaseActiveView !== 'history' \|\| requestId !== neteaseAccountRequestId\) return;/,
     "stale NetEase history responses should not overwrite newer account content"
   );
 });
@@ -661,7 +671,7 @@ test("NetEase collection empty states stay contextual", async () => {
   );
   assert.match(
     musicHtml,
-    /renderNeteaseResults\(songs, \{ remember: false, queueSongs: songs, withFilter: true, showPlayCount: options\.showPlayCount === true, emptyMessage: options\.emptyMessage \}\);/,
+    /renderNeteaseResults\(songs, \{ remember: false, queueSongs: songs, withFilter: true, showPlayCount: options\.showPlayCount === true, historyType: options\.historyType, emptyMessage: options\.emptyMessage \}\);/,
     "NetEase collection pages should pass their empty message to the shared result table"
   );
   assert.match(
@@ -671,7 +681,7 @@ test("NetEase collection empty states stay contextual", async () => {
   );
   assert.match(
     musicHtml,
-    /renderNeteaseSongCollection\('NetEase History'[\s\S]*?emptyMessage: 'No NetEase listening history yet\.'/,
+    /renderNeteaseSongCollection\('NetEase History'[\s\S]*?historyType: neteaseHistoryType,[\s\S]*?emptyMessage: 'No NetEase listening history yet\.'/,
     "NetEase history should use a history-specific empty state"
   );
   assert.match(
@@ -691,7 +701,7 @@ test("NetEase collection empty states stay contextual", async () => {
   );
   assert.match(
     musicHtml,
-    /const result = await api\.getHistory\(\{ type: 1 \}\);[\s\S]*?if \(neteaseActiveView !== 'history' \|\| requestId !== neteaseAccountRequestId\) return;/,
+    /const result = await api\.getHistory\(\{ type: neteaseHistoryType \}\);[\s\S]*?if \(neteaseActiveView !== 'history' \|\| requestId !== neteaseAccountRequestId\) return;/,
     "stale NetEase history requests should not overwrite a newer active view"
   );
 });
@@ -699,6 +709,36 @@ test("NetEase collection empty states stay contextual", async () => {
 test("NetEase history row menu follows history layout", async () => {
   const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
 
+  assert.match(
+    musicHtml,
+    /let neteaseHistoryType = 1;/,
+    "NetEase history should default to the API weekly record type"
+  );
+  assert.match(
+    musicHtml,
+    /data-history-type="1"[\s\S]*?最近一周[\s\S]*?data-history-type="0"[\s\S]*?所有时间/,
+    "NetEase history should expose API range buttons for weekly and all-time records"
+  );
+  assert.match(
+    musicHtml,
+    /\.netease-history-tabs\{position:relative;display:inline-flex[\s\S]*?border:0;background:transparent/,
+    "NetEase history range tabs should sit on the table border without a pill container"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-page="music"\] \.netease-history-tabs button\.netease-history-tab:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color:transparent!important[\s\S]*?box-shadow:none!important/,
+    "NetEase history range tabs should override the global button hover background"
+  );
+  assert.match(
+    musicHtml,
+    /<span class="netease-history-indicator" aria-hidden="true"><\/span>[\s\S]*?const positionHistoryIndicator = \(\) => \{[\s\S]*?indicator\.style\.width = `\$\{active\.offsetWidth\}px`;[\s\S]*?indicator\.style\.transform = `translateX\(\$\{active\.offsetLeft\}px\)`;/,
+    "NetEase history range tabs should share a smoothly moving underline indicator"
+  );
+  assert.match(
+    musicHtml,
+    /const nextType = Number\(button\.dataset\.historyType\);[\s\S]*?neteaseHistoryType = nextType;[\s\S]*?loadNeteaseHistory\(nextType\);/,
+    "NetEase history range buttons should reload through the API type parameter"
+  );
   assert.match(
     musicHtml,
     /const rowMenuHtml = options\.showPlayCount[\s\S]*?\? `<span class="track-row-menu-wrap">[\s\S]*?data-action="play-next"[\s\S]*?Play Next[\s\S]*?<\/span><\/span>`[\s\S]*?: `<span class="track-row-menu-wrap">[\s\S]*?data-action="add-queue"[\s\S]*?data-action="like"/,
@@ -711,6 +751,199 @@ test("NetEase history row menu follows history layout", async () => {
   );
 });
 
+test("music controls suppress global hover backgrounds", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const playerCss = await fs.readFile(path.join(root, "app/music-player.css"), "utf8");
+
+  assert.match(
+    musicHtml,
+    /body\[data-page="music"\] \.playlist-detail-table button\.track-play-button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color:transparent!important[\s\S]*?box-shadow:none!important/,
+    "track play buttons should override the global button hover background"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-page="music"\] \.playlist-detail-table button\.track-play-button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\),[\s\S]*?button\.track-play-button:focus-visible:not[\s\S]*?transform:translate\(-50%,-50%\) scale\(1\)!important/,
+    "track play buttons should preserve their centered transform while suppressing hover effects"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-page="music"\] button\.track-like-button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color:transparent!important[\s\S]*?box-shadow:none!important/,
+    "like buttons should override the global button hover background"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-page="music"\] button\.track-row-menu-trigger:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color:transparent!important[\s\S]*?box-shadow:none!important/,
+    "row more buttons should override the global button hover background"
+  );
+  assert.match(
+    playerCss,
+    /#musicToggle:hover \{[\s\S]*?box-shadow: none !important/,
+    "main player play button should not add a hover shadow"
+  );
+  assert.match(
+    playerCss,
+    /#musicPlayer \.music-playlist-panel header button:hover,[\s\S]*?#musicPlayer \.music-track-remove:focus-visible \{[\s\S]*?background-color: transparent !important;[\s\S]*?box-shadow: none !important/,
+    "queue clear and remove buttons should suppress hover background and shadow"
+  );
+});
+
+test("NetEase sidebar source can collapse after opening", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+
+  assert.match(
+    musicHtml,
+    /if \(button\.dataset\.source === 'netease'\) \{[\s\S]*?const submenu = button\.closest\('\.music-submenu'\);[\s\S]*?if \(submenu\?\.dataset\.state !== 'open'\) \{[\s\S]*?button\.setAttribute\('aria-expanded', 'false'\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?showNeteaseSection\(neteaseActiveView \|\| 'search'\);/,
+    "NetEase source click should respect the submenu toggle's closed state instead of forcing it open"
+  );
+});
+
+test("NetEase sidebar uses bundled app icon", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const icon = await fs.stat(path.join(root, "app/assets/netease-format.ico"));
+
+  assert.ok(icon.isFile(), "NetEase sidebar icon should be bundled with app assets");
+  assert.match(
+    musicHtml,
+    /<img class="music-item-icon-img" src="assets\/netease-format\.ico" alt="" aria-hidden="true">[\s\S]*?<span>Netease Music<\/span>/,
+    "Netease Music sidebar entry should render the bundled ico instead of the generic cloud icon"
+  );
+});
+
+test("NetEase sidebar labels use requested copy", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+
+  assert.match(
+    musicHtml,
+    /<span>Netease Music<\/span>[\s\S]*?data-netease-view="playlists"[\s\S]*?<span>Playlist<\/span>[\s\S]*?data-netease-view="liked"[\s\S]*?<span>Like<\/span>/,
+    "NetEase sidebar labels should read Netease Music, Playlist, and Like"
+  );
+});
+
+test("NetEase sidebar account menu can log out", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload.cjs"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const service = await fs.readFile(path.join(root, "electron/netease-api-service.js"), "utf8");
+
+  assert.match(preload, /logout: \(\) => ipcRenderer\.invoke\("netease:logout"\)/, "preload should expose NetEase logout");
+  assert.match(preload, /sendCaptcha: \(input\) => ipcRenderer\.invoke\("netease:send-captcha", input\)/, "preload should expose NetEase captcha sending");
+  assert.match(preload, /loginWithPhone: \(input\) => ipcRenderer\.invoke\("netease:login-with-phone", input\)/, "preload should expose NetEase phone login");
+  assert.match(preload, /openVerification: \(url\) => ipcRenderer\.invoke\("netease:open-verification", url\)/, "preload should expose NetEase verification links");
+  assert.doesNotMatch(preload, /switchAccount|netease:switch-account/, "preload should not expose removed account switching");
+  assert.match(main, /ipcMain\.handle\("netease:logout",\(\)=>neteaseService\.logout\(\)\);/, "main should register NetEase logout");
+  assert.doesNotMatch(main, /netease:switch-account|switchAccount/, "main should not register removed account switching");
+  assert.match(main, /ipcMain\.handle\("netease:send-captcha",\(_event,input\)=>neteaseService\.sendCaptcha\(input\)\);/, "main should register NetEase captcha sending");
+  assert.match(main, /ipcMain\.handle\("netease:login-with-phone",\(_event,input\)=>neteaseService\.loginWithPhone\(input\)\);/, "main should register NetEase phone login");
+  assert.match(main, /ipcMain\.handle\("netease:open-verification"[\s\S]*?shell\.openExternal\(target\)/, "main should open NetEase verification links through Electron shell");
+  assert.match(service, /function neteaseFailure\(error, fallback\) \{[\s\S]*?needsVerification: Number\(code\) === 10004 \|\| Number\(code\) === 10003,[\s\S]*?retryAfter: Number\(code\) === 406 \? 60000 : 0/, "service should convert NetEase failures into normal UI responses");
+  assert.match(service, /async function withSuppressedNeteaseErrors\(task\)[\s\S]*?if \(args\[0\] === "\[ERR\]"\) return;/, "service should suppress noisy NetEase API internal error logs");
+  assert.doesNotMatch(service, /\?{4,}/, "service should not contain question-mark fallback messages");
+  assert.match(service, /async sendCaptcha\(\{ phone, countrycode = "86" \} = \{\}\) \{[\s\S]*?neteaseApi\.captcha_sent\(\{ phone: targetPhone, ctcode:/, "service should send NetEase SMS captcha");
+  assert.match(service, /async loginWithPhone\(\{ phone, captcha, countrycode = "86" \} = \{\}\) \{[\s\S]*?neteaseApi\.login_cellphone\(\{[\s\S]*?captcha: targetCaptcha,[\s\S]*?this\.cookie = body\.cookie;[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, "Phone login failed\."\);/, "service should login with phone captcha and return readable failures");
+  assert.doesNotMatch(service, /this\.accounts|rememberAccount|switchAccount/, "service should not keep removed account switching state");
+  assert.match(service, /async logout\(\) \{[\s\S]*?this\.cookie = "";[\s\S]*?this\.loginKey = "";[\s\S]*?await this\.save\(\);/, "logout should clear saved NetEase session state");
+  assert.match(
+    musicHtml,
+    /neteaseSidebarAccount\?\.addEventListener\('click'[\s\S]*?if \(neteaseSidebarAccount\.disabled\) return;[\s\S]*?neteaseSidebarAccountMenu\.hidden = !next;[\s\S]*?neteaseSidebarAccount\.setAttribute\('aria-expanded', String\(next\)\);/,
+    "sidebar account button should toggle its menu"
+  );
+  assert.match(
+    musicHtml,
+    /id="neteaseSidebarAccountMenu" role="menu" hidden>[\s\S]*?data-action="logout"[\s\S]*?Log Out[\s\S]*?neteaseSidebarAccountMenu\?\.addEventListener\('click'[\s\S]*?if \(button\.dataset\.action === 'logout'\) \{[\s\S]*?await api\?\.logout\?\.\(\);[\s\S]*?resetNeteaseSessionUi\(\);[\s\S]*?toast\.message\('Logged out'\);/,
+    "account menu should directly show only logout"
+  );
+  assert.doesNotMatch(musicHtml, /renderNeteaseAccountMenu|data-action="account"|data-action="new-login"|switchAccount/, "account switching UI should be removed");
+  assert.match(
+    musicHtml,
+    /neteaseLoginButton\?\.addEventListener\('click', \(\) => startNeteaseLoginFlow\(\{ force: true \}\)\);[\s\S]*?neteaseOtherLoginButton\?\.addEventListener\('click', \(\) => setNeteaseLoginMode\('phone'\)\);[\s\S]*?neteaseSendCaptchaButton\?\.addEventListener\('click', async \(\) => \{[\s\S]*?api\.sendCaptcha\(\{ phone, countrycode: '86' \}\);[\s\S]*?neteasePhoneLoginForm\?\.addEventListener\('submit', async event => \{[\s\S]*?api\.loginWithPhone\(\{ phone, captcha, countrycode: '86' \}\);/,
+    "NetEase login UI should switch to phone mode, send captcha, and submit phone login"
+  );
+  assert.match(
+    musicHtml,
+    /id="neteaseVerificationPanel" hidden[\s\S]*?id="neteaseVerificationButton"[\s\S]*?const setNeteaseVerification = \(result = null\) => \{[\s\S]*?needsVerification[\s\S]*?neteaseVerificationButton\?\.addEventListener\('click', async \(\) => \{[\s\S]*?api\.openVerification\(neteaseVerificationUrl\);/,
+    "phone login should show and open NetEase security verification links"
+  );
+  assert.match(
+    musicHtml,
+    /body\[data-page="music"\] button\.music-sidebar-account:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color: transparent!important;[\s\S]*?box-shadow: none!important/,
+    "sidebar account button should suppress the global button hover shadow"
+  );
+  assert.match(
+    musicHtml,
+    /\.netease-phone-form\{display:grid!important;justify-items:stretch!important;[\s\S]*?\.netease-phone-submit\{width:100%;height:36px/,
+    "phone login form should stretch the submit button instead of centering it as a small pill"
+  );
+});
+
+test("NetEase search page renders daily recommendations and hot playlists", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload.cjs"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const service = await fs.readFile(path.join(root, "electron/netease-api-service.js"), "utf8");
+
+  assert.match(preload, /getSearchHome: \(input\) => ipcRenderer\.invoke\("netease:get-search-home", input\)/, "preload should expose NetEase search home");
+  assert.match(main, /ipcMain\.handle\("netease:get-search-home",\(_event,input\)=>neteaseService\.getSearchHome\(input\)\);/, "main should register NetEase search home");
+  assert.match(service, /async getSearchHome\(\{ songLimit = 10, playlistLimit = 8 \} = \{\}\) \{[\s\S]*?neteaseApi\.recommend_songs[\s\S]*?neteaseApi\.personalized[\s\S]*?dailySongs[\s\S]*?hotPlaylists/, "service should load daily songs and hot playlists");
+  assert.doesNotMatch(service, /savedPlaylistIds/, "search home should not infer playlist collection by comparing saved playlist ids");
+  assert.match(service, /function playlistSubscribedState\(body = \{\}\) \{[\s\S]*?source\.subscribed === true[\s\S]*?source\.isSubscribed === true[\s\S]*?source\.subscribedPlaylist === true[\s\S]*?source\.playlist\?\.subscribed === true/, "playlist detail should read subscribed state from NetEase dynamic playlist API fields");
+  assert.match(service, /playlist_detail_dynamic\(this\.withCookie\(\{ id: playlistId \}\)\)[\s\S]*?subscribed: playlistSubscribedState\(detailResult\?\.body \|\| \{\}\)/, "playlist detail should return the API subscribed state to the renderer");
+  assert.match(service, /async setPlaylistSubscribed\(\{ id, neteaseId, subscribed = true \} = \{\}\) \{[\s\S]*?const input = \{[\s\S]*?t: subscribed \? 1 : 2[\s\S]*?neteaseApi\.playlist_subscribe\(this\.withCookie\(input\)\)/, "playlist collection should use the NetEase playlist subscribe API");
+  assert.match(service, /Number\(parsed\.code\) !== 406[\s\S]*?playlist_subscribe\(this\.withCookie\(\{ \.\.\.input, crypto: "weapi" \}\)\)/, "playlist collection should retry through weapi when NetEase rejects the eapi route as too frequent");
+  assert.match(preload, /setPlaylistSubscribed: \(input\) => ipcRenderer\.invoke\("netease:set-playlist-subscribed", input\)/, "preload should expose playlist collection");
+  assert.match(main, /ipcMain\.handle\("netease:set-playlist-subscribed",\(_event,input\)=>neteaseService\.setPlaylistSubscribed\(input\)\);/, "main should register playlist collection");
+  assert.match(musicHtml, /\.netease-search-home\{display:grid;gap:28px/, "search home should have dedicated layout styles");
+  assert.match(
+    musicHtml,
+    /const loadNeteaseSearchHome = async \(\{ force = false \} = \{\}\) => \{[\s\S]*?api\.getSearchHome\(\{ songLimit: 8, playlistLimit: 8 \}\);[\s\S]*?Daily Recommended Songs[\s\S]*?createNeteaseHomeSongTable\(dailySongs\)[\s\S]*?Hot Playlists[\s\S]*?makeNeteasePlaylistCard\(playlist, 'search-home'\)/,
+    "search home should render daily songs and hot playlist cards"
+  );
+  assert.match(
+    musicHtml,
+    /const createNeteaseHomeSongTable = songs => \{[\s\S]*?table\.className = 'playlist-detail-table netease-results netease-home-table';[\s\S]*?track-like-button[\s\S]*?track-row-menu-trigger/,
+    "daily recommendations should reuse the playlist song row styling and controls"
+  );
+  assert.match(
+    musicHtml,
+    /const showNeteaseSearchBack = \(\) => \{[\s\S]*?playlist-detail-back[\s\S]*?loadNeteaseSearchHome\(\{ force: true \}\);/,
+    "search results should provide a back button to the recommendation home"
+  );
+  assert.match(
+    musicHtml,
+    /playlist-subscribe-button[\s\S]*?toggleNeteasePlaylistSubscribed\(options\.playlist, subscribeButton\)/,
+    "NetEase playlist detail should show a save or unsave button next to Play All"
+  );
+  assert.match(
+    musicHtml,
+    /const openNeteasePlaylistDetail = async[\s\S]*?playlist\.subscribed = playlist\.subscribed === true \|\| songsResult\.subscribed === true;[\s\S]*?renderNeteaseSongCollection\(playlist\.name[\s\S]*?playlist/,
+    "playlist detail should preserve API-confirmed collection state and allow dynamic detail to mark saved playlists"
+  );
+  assert.match(
+    musicHtml,
+    /if \(neteaseSearchHomeLoaded && !force && neteaseResults\.querySelector\('\.netease-search-home'\)\) return;/,
+    "returning to Search should only skip loading when the recommendation home still exists in the DOM"
+  );
+  assert.match(
+    musicHtml,
+    /if \(view === 'search'\) \{[\s\S]*?if \(!neteaseLastSongs\.length\) loadNeteaseSearchHome\(\);[\s\S]*?else renderNeteaseResults\(neteaseLastSongs\);/,
+    "opening the Search tab should load the recommendation home before any search results"
+  );
+  assert.match(
+    musicHtml,
+    /if \(!query\) \{[\s\S]*?await loadNeteaseSearchHome\(\{ force: true \}\);[\s\S]*?return true;[\s\S]*?\}/,
+    "submitting an empty Search query should return to the recommendation home"
+  );
+});
+
+test("shared player exposes liked control for current local and NetEase tracks", async () => {
+  const playerJs = await fs.readFile(path.join(root, "app/music-player.js"), "utf8");
+  const playerCss = await fs.readFile(path.join(root, "app/music-player.css"), "utf8");
+
+  assert.match(playerJs, /id="musicLike"[\s\S]*?aria-pressed="false"/, "shared player should render a current-song liked button");
+  assert.match(playerJs, /const syncLikeButton = \(\) => \{[\s\S]*?els\.like\.setAttribute\('aria-pressed', String\(liked\)\);/, "liked button should mirror the active track");
+  assert.match(playerJs, /if\(isNeteaseId\(track\.id\)\)\{[\s\S]*?setSongLiked\?\.\(\{id:track\.id,neteaseId:track\.neteaseId,liked:nextLiked\}\)/, "NetEase player likes should call the NetEase like API");
+  assert.match(playerJs, /updateTrack\?\.\(\{id:track\.id,liked:nextLiked\}\)/, "local player likes should call the local music library");
+  assert.match(playerCss, /\.music-like-button\[aria-pressed="true"\][\s\S]*?color: #ff4761/, "liked player button should become red when active");
+});
 test("NetEase Play All skips unavailable leading songs", async () => {
   const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
 
@@ -801,7 +1034,7 @@ test("NetEase row playback builds a full visible queue like local playlists", as
   );
   assert.match(
     musicHtml,
-    /renderNeteaseResults\(songs, \{ remember: false, queueSongs: songs, withFilter: true, showPlayCount: options\.showPlayCount === true, emptyMessage: options\.emptyMessage \}\);/,
+    /renderNeteaseResults\(songs, \{ remember: false, queueSongs: songs, withFilter: true, showPlayCount: options\.showPlayCount === true, historyType: options\.historyType, emptyMessage: options\.emptyMessage \}\);/,
     "NetEase account collections should pass their full song list into the same row playback queue path"
   );
   assert.match(
@@ -1064,8 +1297,8 @@ test("NetEase playlist cards reuse local tilted-card interaction", async () => {
   );
   assert.match(
     neteaseService,
-    /createdPlaylists = createdResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(normalizePlaylist\);[\s\S]*?savedPlaylists = savedResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(normalizePlaylist\);/,
-    "NetEase playlist service should only filter the red-heart playlist, not infer created vs collected groups"
+    /createdPlaylists = createdResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(playlist => normalizePlaylist\(playlist, \{ owned: true \}\)\);[\s\S]*?savedPlaylists = savedResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(playlist => normalizePlaylist\(playlist, \{ subscribed: true \}\)\);/,
+    "NetEase playlist service should use API-provided created and collected groups for ownership and collection state"
   );
   assert.match(
     musicHtml,

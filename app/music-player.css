@@ -120,7 +120,7 @@
 .music-transport-controls {
     position: relative;
     display: grid;
-    grid-template-columns: 42px 42px 42px 42px;
+    grid-template-columns: 42px 42px 42px 42px 42px;
     align-items: center;
     justify-content: center;
     justify-items: center;
@@ -199,14 +199,14 @@
     border-radius: 999px !important;
     background: var(--primary, #d1633c) !important;
     color: var(--primary-foreground, #fff) !important;
-    box-shadow: 0 9px 18px color-mix(in srgb, var(--primary, #d1633c) 25%, transparent) !important
+    box-shadow: none !important
 }
 
 #musicToggle:hover {
     background: var(--primary, #d1633c) !important;
     color: var(--primary-foreground, #fff) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 11px 22px color-mix(in srgb, var(--primary, #d1633c) 32%, transparent) !important
+    transform: none !important;
+    box-shadow: none !important
 }
 
 #musicToggleIcon {
@@ -251,6 +251,25 @@
 .music-shuffle[aria-pressed="true"] {
     color: var(--primary, #d1633c);
     background: color-mix(in oklch, var(--primary, #d1633c) 11%, transparent)
+}
+
+.music-like-button {
+    color: #9b9485 !important
+}
+
+.music-like-button[aria-pressed="true"] {
+    color: #ff4761 !important
+}
+
+.music-like-button[aria-pressed="true"] .material-symbols-outlined {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24
+}
+
+.music-like-button:hover,
+.music-like-button:focus-visible {
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: none !important
 }
 
 .music-timeline {
@@ -466,7 +485,11 @@
 
 .music-playlist-panel header button:hover {
     color: #C95F3D;
-    background: #ECE7D9
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important
 }
 
 .music-queue-close .music-icon {
@@ -574,8 +597,11 @@
 }
 
 .music-queue-play-button:hover {
-    background: rgba(27,28,24,.28) !important;
-    filter: drop-shadow(0 5px 8px rgba(31, 46, 68, .24))
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important
 }
 
 .music-queue-play-icon,
@@ -721,8 +747,25 @@
 }
 
 .music-track-remove:hover {
-    background: rgba(201, 95, 61, .1) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important;
     color: #C95F3D !important
+}
+
+#musicPlayer .music-playlist-panel header button:hover,
+#musicPlayer .music-playlist-panel header button:focus-visible,
+#musicPlayer .music-queue-play-button:hover,
+#musicPlayer .music-queue-play-button:focus-visible,
+#musicPlayer .music-track-remove:hover,
+#musicPlayer .music-track-remove:focus-visible {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important
 }
 
 .music-playlist-empty {
