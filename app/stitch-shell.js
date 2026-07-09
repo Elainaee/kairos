@@ -13,6 +13,7 @@
   if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=28">');
   if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=3">');
   if (!document.querySelector('link[href^="reminder-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="reminder-feature.css?v=1">');
+  if (!document.querySelector('link[href^="settings-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="settings-feature.css?v=1">');
   const page = document.body.dataset.page || 'calendar';
   const spaShell = page === 'calendar';
   const labels = spaShell
@@ -29,7 +30,7 @@
   const oldHeader = document.querySelector('body > header.kairos-topbar') || main.querySelector(':scope > header') || document.querySelector('body > header.fixed') || [...document.querySelectorAll('body > nav.fixed')].find(node => node.classList.contains('right-0'));
   const header = document.createElement('header');
   header.className = 'kairos-topbar';
-  header.innerHTML = `<a class="kairos-brand kairos-brand-shiny" href="index.html"><span class="kairos-brand-mark kairos-brand-mark-shiny material-symbols-outlined">auto_awesome</span><span class="kairos-brand-name-shiny">Kairos</span></a><nav class="kairos-nav kairos-gooey-nav" aria-label="Primary navigation"><span class="kairos-gooey-effect" aria-hidden="true"></span>${labels.map(([id,href,icon,label])=>`<a class="${page===id?'active':''}" href="${href}"><span class="material-symbols-outlined">${icon}</span><span>${label}</span></a>`).join('')}</nav><div class="kairos-actions"><button class="kairos-create"><span class="material-symbols-outlined">add</span>Create New</button><button class="kairos-icon-button kairos-reminder-button" aria-label="Reminders" aria-expanded="false"><span class="material-symbols-outlined">notifications</span><i class="kairos-reminder-badge" hidden></i></button><button class="kairos-icon-button"><span class="material-symbols-outlined">settings</span></button></div>`;
+  header.innerHTML = `<a class="kairos-brand kairos-brand-shiny" href="index.html"><span class="kairos-brand-mark kairos-brand-mark-shiny material-symbols-outlined">auto_awesome</span><span class="kairos-brand-name-shiny">Kairos</span></a><nav class="kairos-nav kairos-gooey-nav" aria-label="Primary navigation"><span class="kairos-gooey-effect" aria-hidden="true"></span>${labels.map(([id,href,icon,label])=>`<a class="${page===id?'active':''}" href="${href}"><span class="material-symbols-outlined">${icon}</span><span>${label}</span></a>`).join('')}</nav><div class="kairos-actions"><button class="kairos-create"><span class="material-symbols-outlined">add</span>Create New</button><button class="kairos-icon-button kairos-reminder-button" aria-label="Reminders" aria-expanded="false" title="Reminders"><span class="material-symbols-outlined">notifications</span><i class="kairos-reminder-badge" hidden></i></button><button class="kairos-icon-button kairos-settings-button" aria-label="Settings" title="Settings" type="button"><span class="material-symbols-outlined">settings</span></button></div>`;
   oldHeader?.remove();
   main.before(header);
 
@@ -312,5 +313,8 @@ if (new URLSearchParams(location.search).get('embed') !== '1') {
   const reminderFeatureScript=document.createElement('script');
   reminderFeatureScript.src='reminder-feature.js?v=6';
   document.body.appendChild(reminderFeatureScript);
+  const settingsFeatureScript=document.createElement('script');
+  settingsFeatureScript.src='settings-feature.js?v=1';
+  document.body.appendChild(settingsFeatureScript);
 }
 document.documentElement.classList.remove('kairos-boot');

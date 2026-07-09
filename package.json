@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "check": "node --check app/ai-chat.js && node --check app/music-player.js && node --check app/stitch-shell.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/esports-search.js && node --check electron/web-source.js && node --test electron/*.test.js"
+    "check": "node --check app/ai-chat.js && node --check app/music-player.js && node --check app/settings-feature.js && node --check app/stitch-shell.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/esports-search.js && node --check electron/web-source.js && node --test electron/*.test.js"
   },
   "dependencies": {
     "@volcengine/ark-runtime": "1.0.9",

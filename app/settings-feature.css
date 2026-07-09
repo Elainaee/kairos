@@ -1,0 +1,51 @@
+.kairos-settings-dialog{width:min(960px,calc(100vw - 32px));height:min(600px,calc(100vh - 48px));padding:0;border:0;border-radius:18px;background:transparent;color:#1b1c18}
+.kairos-settings-dialog::backdrop{background:rgba(48,49,44,.42);backdrop-filter:blur(5px)}
+.kairos-settings-panel{display:grid;grid-template-columns:220px minmax(0,1fr);width:100%;height:100%;margin:0;overflow:hidden;border:1px solid rgba(61,59,46,.12);border-radius:18px;background:linear-gradient(145deg,rgba(255,255,255,.93),rgba(245,244,237,.95));box-shadow:0 28px 80px rgba(27,28,24,.24),inset 0 1px 0 rgba(255,255,255,.78);font-family:Outfit,system-ui,sans-serif}
+.kairos-settings-sidebar{display:flex;flex-direction:column;gap:22px;padding:32px 20px 26px 32px;border-right:1px solid rgba(61,59,46,.1);background:rgba(255,255,255,.34)}
+.kairos-settings-kicker,.kairos-settings-content-kicker{display:block;color:#9e3d19;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.kairos-settings-sidebar h2{margin:0;color:#3d3b2e;font-size:30px;line-height:1.1;font-weight:760;letter-spacing:0}
+.kairos-settings-nav{display:grid;gap:5px;margin-top:2px}
+.kairos-settings-nav button{display:flex;align-items:center;gap:10px;width:100%;height:42px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#57423c;font:750 14px/1 Outfit,system-ui,sans-serif;text-align:left;cursor:pointer}
+.kairos-settings-nav button:hover,.kairos-settings-nav button:focus-visible{background:rgba(235,230,214,.72);outline:none}
+.kairos-settings-nav button.active{background:#d1633c;color:#fff;box-shadow:0 7px 18px rgba(209,99,60,.22)}
+.kairos-settings-nav .material-symbols-outlined{font-size:20px}
+.kairos-settings-content{display:flex;min-width:0;flex-direction:column;gap:24px;padding:32px;overflow:auto}
+.kairos-settings-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.kairos-settings-content-kicker{margin-bottom:5px}
+.kairos-settings-header strong{display:block;color:#3d3b2e;font-size:30px;line-height:1.15;font-weight:760}
+.kairos-settings-close{display:grid;width:38px;height:38px;place-items:center;border:0;border-radius:10px;background:transparent;color:#57423c;cursor:pointer}
+.kairos-settings-close:hover,.kairos-settings-close:focus-visible{background:#ebe6d6;outline:none}
+.kairos-settings-close .material-symbols-outlined{font-size:22px}
+.kairos-settings-section{display:grid;gap:10px}
+.kairos-settings-section h3{margin:0;color:#57423c;font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.kairos-settings-group{overflow:hidden;border:1px solid rgba(61,59,46,.1);border-radius:14px;background:rgba(255,255,255,.52)}
+.kairos-setting-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,230px);align-items:center;gap:20px;min-height:68px;padding:14px 18px}
+.kairos-setting-row+.kairos-setting-row{border-top:1px solid rgba(61,59,46,.08)}
+.kairos-setting-copy{min-width:0}
+.kairos-setting-label{display:block;color:#1b1c18;font-size:14px;font-weight:750;line-height:1.3}
+.kairos-select-wrap{position:relative;display:block}
+.kairos-select-wrap select{width:100%;height:42px;appearance:none;border:1px solid rgba(61,59,46,.22);border-radius:999px;background:#fbf9f2;padding:0 38px 0 15px;color:#3d3b2e;font:750 14px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 3px rgba(27,28,24,.08)}
+.kairos-select-wrap select:focus{border-color:#d1633c;box-shadow:0 0 0 3px rgba(209,99,60,.12);outline:none}
+.kairos-select-wrap .material-symbols-outlined{position:absolute;right:11px;top:50%;translate:0 -50%;font-size:19px;color:#8a726a;pointer-events:none}
+.kairos-settings-note{margin:0;padding:0 2px;color:#6f6a5f;font-size:12px;font-weight:650;line-height:1.45}
+.kairos-settings-empty{display:grid;min-height:150px;place-items:center;gap:10px;border:1px solid rgba(61,59,46,.1);border-radius:14px;background:rgba(255,255,255,.42);padding:22px;text-align:center;color:#6f6a5f}
+.kairos-settings-empty .material-symbols-outlined{font-size:32px;color:#d1633c}
+.kairos-settings-empty p{max-width:300px;margin:0;font-size:13px;font-weight:650;line-height:1.45}
+.kairos-settings-button:focus-visible{background:#ebe6d6;outline:2px solid rgba(209,99,60,.45);outline-offset:2px}
+@media(max-width:720px){
+  .kairos-settings-dialog{width:min(620px,calc(100vw - 24px));height:min(520px,calc(100vh - 32px))}
+  .kairos-settings-panel{grid-template-columns:150px minmax(0,1fr)}
+  .kairos-settings-sidebar{padding:20px 10px 14px 16px}
+  .kairos-settings-content{padding:20px}
+  .kairos-setting-row{grid-template-columns:1fr;gap:8px}
+}
+@media(max-width:520px){
+  .kairos-settings-panel{grid-template-columns:126px minmax(0,1fr)}
+  .kairos-settings-nav button{padding:0 8px}
+  .kairos-settings-nav button span:last-child{font-size:12px}
+  .kairos-settings-sidebar h2{font-size:22px}
+}
+@media(prefers-reduced-motion:no-preference){
+  .kairos-settings-dialog[open]{animation:kairos-settings-enter .16s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes kairos-settings-enter{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+}
