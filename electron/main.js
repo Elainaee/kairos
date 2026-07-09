@@ -12,7 +12,6 @@ import { ContextManager } from "./context-manager.js";
 import { MusicLibrary } from "./music-library.js";
 import { searchEsportsMatches } from "./esports-search.js";
 import { fetchUrlText } from "./web-source.js";
-import { runKairosLangChainAgent } from "./agent/kairos-agent.js";
 import { NeteaseApiService } from "./netease-api-service.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -234,26 +233,12 @@ async function extractSchedulesFromPayload(payload) {
   const rows=Array.isArray(parsed)?parsed:parsed.schedules;if(!Array.isArray(rows))throw new ProviderError("invalid_schedule_output","模型没有返回日程列表");
   const validTypes=new Set(["task","deadline","event","match","other"]),validPriorities=new Set(["low","medium","high"]);return rows.slice(0,50).filter(x=>x&&typeof x.title==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x.date||"")).map(x=>({title:x.title.trim().slice(0,120),date:x.date,end_date:/^\d{4}-\d{2}-\d{2}$/.test(x.end_date||"")?x.end_date:x.date,start_time:/^\d{2}:\d{2}$/.test(x.start_time||"")?x.start_time:"",end_time:/^\d{2}:\d{2}$/.test(x.end_time||"")?x.end_time:"",all_day:Boolean(x.all_day)||!x.start_time,type:validTypes.has(x.type)?x.type:"event",priority:validPriorities.has(x.priority)?x.priority:"medium",status:"todo",reminder:x.reminder||"none",notes:String(x.notes||"").slice(0,500),source:"ai_attachment"}));
 }
-ipcMain.handle("ai:agent:run", async (_event, input) => {
-  const settings = await readSettings();
-  const provider = input.provider || settings.defaultProvider || "doubao";
-  const entry = settings.providers[provider] || {};
-  const model = input.model || entry.model || PROVIDERS[provider]?.defaultModel;
-  return runKairosLangChainAgent({ ...input, provider, model }, {
-    apiKey: decryptKey(entry, provider),
-    permissions: toolRuntime,
-    searchEsportsMatches,
-    fetchUrlText,
-    extractSchedules: extractSchedulesFromPayload
-  });
-});
 ipcMain.handle("ai:extract-schedules", (_event, payload) => extractSchedulesFromPayload(payload));
 
 ipcMain.handle("ai:conversations:list",()=>aiStore.listConversations());
 ipcMain.handle("ai:conversations:create",(_event,input)=>aiStore.createConversation(input));
 ipcMain.handle("ai:conversations:get",(_event,id)=>aiStore.getConversation(id));
 ipcMain.handle("ai:conversations:update",(_event,{id,patch})=>aiStore.updateConversation(id,patch));
-ipcMain.handle("ai:conversations:add-message",(_event,input)=>aiStore.addMessage(input));
 ipcMain.handle("ai:conversations:delete",async(_event,id)=>{const files=await aiStore.deleteConversation(id);await attachments.removeConversationFiles(files);return{ok:true};});
 ipcMain.handle("ai:usage",(_event,filters)=>aiStore.usageSummary(filters));
 async function ensureExternalSearchAllowed(){const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch!=="read")throw new Error("permission_denied");}

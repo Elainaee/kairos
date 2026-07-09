@@ -557,16 +557,12 @@ AI 对话流中显示系统状态：
 - VLR / Valorant Esports 等多来源同场比赛如果日期、时间、对手或赛事名不一致，会合并为一张候选卡并记录 `conflicts`；卡片中会展示冲突字段，保存前需要二次确认。
 - 确认卡组已实现 MVP 批量操作：仅确认高置信度、全部确认、全部忽略；批量确认会复用单张卡的权限与低置信度确认逻辑。
 - 已实现缺关键信息时的澄清：没有附件、URL 或明确日期时，如果用户只说 `EDG 最近比赛` 这类缺游戏项目的请求，会先询问具体项目；如果缺少 recent/upcoming 范围，会先询问范围。
-- 已将赛程意图判定抽为 `electron/ai-intent.js`，并新增单元测试覆盖澄清、URL、附件和自动查询分支；前端 `app/ai-chat.js` 复用同一套规则。
-- 已接入第一版 LangChain Agent：`electron/agent/kairos-agent.js` 使用 LangChain `createAgent`，默认支持豆包（火山方舟 OpenAI-compatible endpoint），并通过 `electron/agent/langchain-tools.js` 注册 Kairos 本地工具。
-- 前端已接入 `desktop.agent.run(input)`：Agent 返回 `schedule_cards`、`clarification`、`tool_error`、`chat` 时由 UI 直接展示；返回 `pass` 时回退旧流程。
-- 前端旧的赛程规则分支已清理：`app/ai-chat.js` 不再直接判断 URL、附件、电竞赛程或调用外部查询工具；URL/附件/明确日期文本/电竞赛程都统一由 Agent 后端处理。
-- `ai:extract-schedules` 的实现已抽为主进程可复用函数，Agent 和旧 IPC 共用同一套日程提取逻辑。
-- Agent 使用用户当前配置的 provider/model/API Key；豆包优先使用用户设置或 `.env.local` 中的 `ARK_API_KEY`，不经过 Kairos 服务器。
+- LangChain Agent 第一版已按用户要求移除：前端不再调用 `desktop.agent.run(input)`，主进程不再暴露 `ai:agent:run`，项目回到基础大模型聊天流程。
+- `ai:extract-schedules` 的实现仍保留为主进程可复用函数，供后续重新搭建 Agent 或工具流时复用。
 - EDG 以外的大写战队名会从用户文本中提取并传给查询工具；EDG 仍作为首版默认重点战队。
 - EDG 固定可信来源存在时不再等待搜索引擎候选，避免 VLR/搜索网络波动导致长时间卡住。
 - 工具返回的 sources 已补齐 `accessedAt`；比赛备注会标明时间按 `Asia/Shanghai` 显示。
-- `npm run check` 已覆盖 `app/ai-chat.js`、`electron/ai-intent.js`、`electron/esports-search.js`、`electron/web-source.js`、`electron/agent/kairos-agent.js` 与相关测试；`KAIROS_LIVE_TESTS=1 node --test electron/esports-search.test.js` 可验证真实 VLR / Valorant Esports 来源。
+- `npm run check` 已覆盖 `app/ai-chat.js`、`electron/esports-search.js`、`electron/web-source.js` 与相关测试；`KAIROS_LIVE_TESTS=1 node --test electron/esports-search.test.js` 可验证真实 VLR / Valorant Esports 来源。
 - 前端会读取前 3 个候选来源正文，并交给现有 `ai:extract-schedules` 生成日程候选。
 - 当 VLR 结构化解析返回候选时，前端会直接展示确认卡片，不再依赖模型从网页正文中猜测。
 - VLR 与 Valorant Esports 结果会合并去重；暂未实现 Liquipedia 的结构化专用 parser。

@@ -302,35 +302,6 @@
     } catch (error) { finishRequest('failed', error.message); }
   };
   const retryLast = () => { if (!currentRequestId && lastRequest) startRequest({ ...lastRequest, isRetry: true }); };
-  const persistAgentHandledMessages = async (request, assistantText = '') => {
-    await desktop.conversations.addMessage({ conversationId: active.id, role: 'user', content: request.text, provider: request.provider, model: request.model, attachmentIds: request.attachmentIds, attachmentNames: request.attachmentNames });
-    if (assistantText) {
-      active.messages.push({ role: 'assistant', content: assistantText, status: 'completed', createdAt: new Date().toISOString() });
-      await desktop.conversations.addMessage({ conversationId: active.id, role: 'assistant', content: assistantText, provider: request.provider, model: request.model });
-    }
-  };
-  const handleAgentResult = async (result, request, retryOnPermission = true) => {
-    if (!result || result.type === 'pass') return false;
-    if (result.type === 'permission_required' && result.permission === 'externalSearch') {
-      if (!retryOnPermission || !window.confirm(result.message || '需要授权 AI 读取外部公开来源。是否授权并继续？')) { await persistAgentHandledMessages(request); return true; }
-      await desktop.permissions.set({ externalSearch: 'read' });
-      return handleAgentResult(await desktop.agent.run(request), request, false);
-    }
-    if (result.type === 'schedule_cards') {
-      const message = result.message || `找到 ${result.cards?.length || 0} 项候选，请确认后保存。`;
-      appendSystem(message);
-      renderScheduleCards(result.cards || []);
-      await persistAgentHandledMessages(request, message);
-      return true;
-    }
-    if (result.type === 'clarification' || result.type === 'tool_error' || result.type === 'chat') {
-      const message = result.message || (result.type === 'tool_error' ? 'Agent 工具执行失败。' : '');
-      if (message) appendMessage('assistant', message);
-      await persistAgentHandledMessages(request, message);
-      return true;
-    }
-    return false;
-  };
   const submit = async () => {
     if (currentRequestId) { await desktop.stopMessage(currentRequestId); return; }
     const text = input.value.trim(); if (!text || !active || !desktop) return;
@@ -348,11 +319,6 @@
     const history = active.messages.filter(item => ['user', 'assistant'].includes(item.role) && item.content).map(item => ({ role: item.role, content: item.content }));
     const attachmentIds = pendingAttachments.filter(item => item.status === 'ready').map(item => item.id);
     lastRequest = { history, attachmentIds, attachmentNames, text, provider: ui.provider.value, model: ui.model.value }; pendingAttachments = []; renderAttachments(); updateComposer();
-    try {
-      if (await handleAgentResult(await desktop.agent.run(lastRequest), lastRequest)) return;
-    } catch (error) {
-      appendSystem(`Agent 暂时不可用，已切换为普通助手流程：${error.message}`);
-    }
     await startRequest(lastRequest);
   };
 
