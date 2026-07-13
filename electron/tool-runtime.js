@@ -1,7 +1,7 @@
 const DOMAINS=["schedules","tasks","habits","notes","studyPlans","externalSearch"];
 const LEVELS=["none","read","write"];
 const READ_ONLY_DOMAINS=new Set(["externalSearch"]);
-const OPERATIONS=["create","update","delete"];
+const OPERATIONS=["create","update","delete","delete_many"];
 
 export class ToolRuntime {
   constructor(store) { this.store=store; }

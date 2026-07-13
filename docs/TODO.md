@@ -26,7 +26,6 @@
 - [x] 已接入网易云音乐服务：`electron/netease-api-service.js`
 - [x] 已有 AI 聊天、会话、附件、上下文、工具权限与外部搜索基础
 - [x] 已有 LangChain Agent 雏形：`electron/agent/`
-- [x] 已有 VCT/Valorant 赛事搜索与 AI 意图识别：`electron/esports-search.js`、`electron/ai-intent.js`
 - [x] 已有测试脚本覆盖 Electron 服务、静态资源契约、网易云、电竞搜索、AI intent 和 agent 基础流程
 - [x] 主界面已按参考图完成当前视觉验收
 - [~] 当前仍是 HTML/CSS/JS 原型结构，尚未拆成正式组件体系

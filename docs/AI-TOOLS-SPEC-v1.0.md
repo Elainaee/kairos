@@ -1,5 +1,7 @@
 # Kairos AI Tools Spec v1.0
 
+> 已归档：本文描述的 `searchEsportsMatches`、`fetchUrlText` 与 `ai:extract-schedules` IPC 已移除，不再是 Kairos 的运行时能力。当前工具调用统一由 LangChain Agent 管理。
+
 > 状态：草案，阶段 1/2 已开始实现，URL 来源基础链路已接入，自动搜索候选来源已接入，外部查询 read 权限已接入  
 > 范围：Kairos 桌面端 AI 助手的工具调用能力，首版聚焦“外部赛程查询 → 日程确认卡片 → 本地写入”。  
 > 目标场景示例：用户输入“我想看最近瓦里 EDG 所有的比赛”，Kairos 能识别这是电竞赛程查询，而不是让模型凭空回答。

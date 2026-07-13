@@ -10,12 +10,13 @@ import { ToolRuntime } from "./tool-runtime.js";
 import { AppStateStore, createAppAdapters } from "./app-state.js";
 import { ContextManager } from "./context-manager.js";
 import { MusicLibrary } from "./music-library.js";
-import { searchEsportsMatches } from "./esports-search.js";
-import { fetchUrlText } from "./web-source.js";
+import { runKairosAgent } from "./langchain-agent.js";
+import { createWebSearch } from "./web-search.js";
 import { NeteaseApiService } from "./netease-api-service.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 dotenv.config({ path: path.join(root, ".env.local"), quiet: true });
+dotenv.config({ path: path.join(root, ".env.firecrawl.local"), quiet: true });
 const controllers = new Map();
 const sessionKeys = new Map();
 let mainWindow, petWindow, aiChatWindow;
@@ -30,20 +31,60 @@ let aiStore, appStateStore, attachments, toolRuntime, contextManager, appAdapter
 
 const settingsPath = () => path.join(app.getPath("userData"), "ai-settings.json");
 const petStatePath = () => path.join(app.getPath("userData"), "pet-state.json");
-const defaults = { defaultProvider: "openai", providers: { openai: { model: PROVIDERS.openai.defaultModel, credentialMode: "session", encryptedKey: "" } } };
+const defaults = { defaultProvider: "openai", providers: { openai: { model: PROVIDERS.openai.defaultModel, credentialMode: "session", encryptedKey: "", createdAt: "", keyHint: "", environmentDisabled: false } }, firecrawl: { encryptedKey: "", createdAt: "", keyHint: "", environmentDisabled: false } };
 async function readSettings() { try { return { ...defaults, ...JSON.parse(await fs.readFile(settingsPath(), "utf8")) }; } catch { return structuredClone(defaults); } }
 async function writeSettings(value) { await fs.mkdir(path.dirname(settingsPath()), { recursive: true }); await fs.writeFile(settingsPath(), JSON.stringify(value, null, 2), "utf8"); }
 async function readPetState() { try { return { visible: JSON.parse(await fs.readFile(petStatePath(), "utf8")).visible !== false }; } catch { return { visible: true }; } }
 async function writePetState(value) { await fs.mkdir(path.dirname(petStatePath()), { recursive: true }); await fs.writeFile(petStatePath(), JSON.stringify(value, null, 2), "utf8"); }
 function sendPetVisibility() { mainWindow?.webContents.send("pet:visibility", petVisible); }
-function decryptKey(entry, provider) {
-  if (sessionKeys.has(provider)) return sessionKeys.get(provider);
-  if (entry?.encryptedKey && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(entry.encryptedKey, "base64"));
-  if (provider === "openai" && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-  if (provider === "doubao" && process.env.ARK_API_KEY) return process.env.ARK_API_KEY;
+function environmentKeyForProvider(provider) {
+  if (provider === "openai") return process.env.OPENAI_API_KEY || "";
+  if (provider === "doubao") return process.env.ARK_API_KEY || "";
   return "";
 }
-function publicSettings(settings) { return { ...settings, providers: Object.fromEntries(Object.entries(settings.providers || {}).map(([id, value]) => [id, { ...value, encryptedKey: undefined, hasKey: Boolean(value.encryptedKey || sessionKeys.has(id) || (id === "openai" && process.env.OPENAI_API_KEY)) }])) }; }
+function resolveProviderKey(settings, entry, provider) {
+  if (sessionKeys.has(provider)) return sessionKeys.get(provider);
+  if (entry?.encryptedKey && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(entry.encryptedKey, "base64"));
+  if (!entry?.environmentDisabled) return environmentKeyForProvider(provider);
+  return "";
+}
+function decryptFirecrawlKey(settings) {
+  if (settings?.firecrawl?.encryptedKey && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(settings.firecrawl.encryptedKey, "base64"));
+  if (!settings?.firecrawl?.environmentDisabled) return process.env.FIRECRAWL_API_KEY || "";
+  return "";
+}
+function keyHint(apiKey) {
+  const value = String(apiKey || "").trim();
+  if (!value) return "";
+  if (value.length <= 8) return `${value.slice(0, 2)}${"*".repeat(Math.max(2, value.length - 4))}${value.slice(-2)}`;
+  const prefix = value.slice(0, Math.min(7, Math.max(4, value.indexOf("-") > 0 ? value.indexOf("-") + 5 : 6)));
+  return `${prefix}${"*".repeat(Math.max(8, Math.min(24, value.length - prefix.length - 4)))}${value.slice(-4)}`;
+}
+function publicSettings(settings) {
+  const providerIds = new Set([...Object.keys(PROVIDERS), ...Object.keys(settings.providers || {})]);
+  return {
+    ...settings,
+    firecrawl: (() => {
+      const value = settings.firecrawl || {};
+      const saved = Boolean(value.encryptedKey);
+      const session = false;
+      const environment = !value.environmentDisabled && Boolean(process.env.FIRECRAWL_API_KEY);
+      return { ...value, encryptedKey: undefined, configured: saved || session || environment, hasKey: saved || session || environment, source: saved ? "saved" : environment ? "environment" : "none", createdAt: value.createdAt || "", keyHint: value.keyHint || (environment ? keyHint(process.env.FIRECRAWL_API_KEY) : "") };
+    })(),
+    providers: Object.fromEntries([...providerIds].map(id => {
+      const value = settings.providers?.[id] || {};
+      const saved = Boolean(value.encryptedKey);
+      const session = sessionKeys.has(id);
+      const environment = !value.environmentDisabled && Boolean(environmentKeyForProvider(id));
+      return [id, { ...value, encryptedKey: undefined, configured: saved || session || environment, hasKey: saved || session || environment, source: saved ? "saved" : session ? "session" : environment ? "environment" : "none", createdAt: value.createdAt || "", keyHint: value.keyHint || (session ? keyHint(sessionKeys.get(id)) : environment ? keyHint(environmentKeyForProvider(id)) : "") }];
+    }))
+  };
+}
+async function searchWebWithSettings(input) {
+  const settings = await readSettings();
+  return createWebSearch({ apiKey: decryptFirecrawlKey(settings) })(input);
+}
+function errorInfo(error) { if (error && typeof error === "object") return { code: error.code || "unknown", message: error.message || String(error) }; return { code: "unknown", message: typeof error === "string" ? error : "unknown_error" }; }
 function broadcastAiStream(payload) {
   for (const win of [mainWindow, aiChatWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send("ai:stream", payload);
@@ -211,44 +252,47 @@ ipcMain.handle("ai:get-settings", async () => publicSettings(await readSettings(
 ipcMain.handle("ai:save-settings", async (_event, input) => {
   const current = await readSettings(); const provider = input.provider;
   if (!PROVIDERS[provider]) throw new ProviderError("unknown_provider", "未知模型提供商");
-  const next = structuredClone(current); next.defaultProvider = input.defaultProvider || current.defaultProvider; next.providers[provider] = { ...(current.providers[provider] || {}), model: String(input.model || PROVIDERS[provider].defaultModel), credentialMode: input.credentialMode === "saved" ? "saved" : "session", encryptedKey: current.providers[provider]?.encryptedKey || "" };
-  if (input.apiKey) { if (next.providers[provider].credentialMode === "saved") { if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", "系统安全存储当前不可用"); next.providers[provider].encryptedKey = safeStorage.encryptString(input.apiKey).toString("base64"); sessionKeys.delete(provider); } else { sessionKeys.set(provider, input.apiKey); next.providers[provider].encryptedKey = ""; } }
+  const next = structuredClone(current); next.defaultProvider = input.defaultProvider || current.defaultProvider; next.providers[provider] = { ...(current.providers[provider] || {}), model: String(input.model || PROVIDERS[provider].defaultModel), credentialMode: input.credentialMode === "saved" ? "saved" : "session", encryptedKey: current.providers[provider]?.encryptedKey || "", environmentDisabled: Boolean(current.providers[provider]?.environmentDisabled) };
+  if (input.clearKey) { next.providers[provider].encryptedKey = ""; next.providers[provider].createdAt = ""; next.providers[provider].keyHint = ""; next.providers[provider].environmentDisabled = true; sessionKeys.delete(provider); }
+  if (input.apiKey) { next.providers[provider].environmentDisabled = false; if (next.providers[provider].credentialMode === "saved") { if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", "系统安全存储当前不可用"); next.providers[provider].encryptedKey = safeStorage.encryptString(input.apiKey).toString("base64"); next.providers[provider].createdAt = new Date().toISOString(); next.providers[provider].keyHint = keyHint(input.apiKey); sessionKeys.delete(provider); } else { sessionKeys.set(provider, input.apiKey); next.providers[provider].encryptedKey = ""; next.providers[provider].keyHint = keyHint(input.apiKey); } }
   await writeSettings(next); return publicSettings(next);
 });
-ipcMain.handle("ai:test-provider", async (_event, { provider, sessionKey }) => { const settings = await readSettings(); const entry=settings.providers[provider]||{}; return testProvider({ provider, apiKey: sessionKey || decryptKey(entry, provider), model: entry.model || PROVIDERS[provider]?.defaultModel }); });
+ipcMain.handle("ai:save-firecrawl-settings", async (_event, input = {}) => {
+  const current = await readSettings();
+  const next = structuredClone(current);
+  next.firecrawl ||= { encryptedKey: "", createdAt: "", keyHint: "", environmentDisabled: false };
+  if (input.clear) { next.firecrawl.encryptedKey = ""; next.firecrawl.createdAt = ""; next.firecrawl.keyHint = ""; next.firecrawl.environmentDisabled = true; }
+  if (input.apiKey) {
+    if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", "系统安全存储当前不可用");
+    next.firecrawl.environmentDisabled = false;
+    next.firecrawl.encryptedKey = safeStorage.encryptString(String(input.apiKey)).toString("base64");
+    next.firecrawl.createdAt = new Date().toISOString();
+    next.firecrawl.keyHint = keyHint(input.apiKey);
+  }
+  await writeSettings(next);
+  return publicSettings(next);
+});
+ipcMain.handle("ai:test-provider", async (_event, { provider, sessionKey }) => { const settings = await readSettings(); const entry=settings.providers[provider]||{}; return testProvider({ provider, apiKey: sessionKey || resolveProviderKey(settings, entry, provider), model: entry.model || PROVIDERS[provider]?.defaultModel }); });
 ipcMain.handle("ai:send", async (_event, payload) => {
   const requestId = crypto.randomUUID(); const controller = new AbortController(); controllers.set(requestId, controller); const settings = await readSettings(); const provider = payload.provider || settings.defaultProvider; const entry = settings.providers[provider] || {};
   const model=payload.model || entry.model || PROVIDERS[provider].defaultModel; const conversationId=payload.conversationId; const lastUser=[...(payload.messages||[])].reverse().find(x=>x.role==="user"); if(conversationId&&lastUser&&!payload.isRetry)await aiStore.addMessage({conversationId,role:"user",content:lastUser.content,provider,model,attachmentIds:payload.attachmentIds,attachmentNames:payload.attachmentNames});
-  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { const requestMessages=[...(payload.messages||[])],images=[];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});if(prepared.mode==="image"){const bytes=await fs.readFile(prepared.localPath);images.push({dataUrl:`data:${prepared.attachment.mimeType};base64,${bytes.toString("base64")}`});}}broadcastAiStream({ requestId, type: "started" }); for await (const event of streamProviderRequest({ ...payload, messages:requestMessages,images,provider,model,apiKey:decryptKey(entry,provider),signal:controller.signal })) { if(event.type==="text_delta")output+=event.delta;if(event.type==="completed")usage=event.usage;if(event.type==="stopped")status="stopped";broadcastAiStream({ requestId, ...event }); } } catch (error) { status="failed";errorValue={code:error.code||"unknown",message:error.message};broadcastAiStream({ requestId, type: "failed", ...errorValue }); } finally { if(conversationId){await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model}).then(message=>errorValue?aiStore.updateMessage(message.id,{error:errorValue}):message);if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0});}controllers.delete(requestId); } }); return { requestId };
+  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { if(!["openai","doubao"].includes(provider))throw new ProviderError("agent_model_unsupported","当前提供商尚未接入 LangChain 工具调用适配器。"); const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const result=await runKairosAgent({apiKey:resolveProviderKey(settings,entry,provider),model,baseURL:provider==="doubao"?"https://ark.cn-beijing.volces.com/api/v3":undefined,messages:requestMessages,conversationTitle:conversation?.title||"新对话",replyStyle:aiPreferences.replyStyle,memoryEnabled:aiPreferences.memoryEnabled!==false,store:aiStore,toolRuntime,appAdapters,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:["允许联网搜索","取消"],defaultId:0,cancelId:1,title:"允许 Kairos 联网搜索？",message:"Kairos 想查询外部网页以回答当前问题。只会发送模型选择的搜索词。"});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;if(output)broadcastAiStream({requestId,type:"text_delta",delta:output});broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue }); } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
 });
 ipcMain.handle("ai:stop", (_event, requestId) => { controllers.get(requestId)?.abort(); return { ok: true }; });
-async function extractSchedulesFromPayload(payload) {
-  const settings=await readSettings();const provider=payload.provider||settings.defaultProvider;const entry=settings.providers[provider]||{};const model=payload.model||entry.model||PROVIDERS[provider]?.defaultModel;
-  const capabilities=PROVIDERS[provider]?.capabilities||[],images=[],sources=[];
-  if(payload.sourceText)sources.push(`${payload.sourceLabel||"用户提供文本"}:\n${String(payload.sourceText).slice(0,60000)}`);
-  for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,capabilities);if(prepared.mode==="extracted_text")sources.push(`${prepared.attachment.name}:\n${prepared.chunks.map(x=>`[${x.location}]\n${x.text}`).join("\n\n")}`);if(prepared.mode==="image"){const bytes=await fs.readFile(prepared.localPath);images.push({dataUrl:`data:${prepared.attachment.mimeType};base64,${bytes.toString("base64")}`});}}
-  const today=new Date().toISOString().slice(0,10);const prompt=`你是 Kairos 日程提取器。根据用户要求以及附件内容，找出明确的日程、课程、任务、截止日期、比赛赛程或活动。只返回 JSON，不要解释。格式：{"schedules":[{"title":"标题","date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","start_time":"HH:mm 或空字符串","end_time":"HH:mm 或空字符串","all_day":true,"type":"task|deadline|event|match|other","priority":"low|medium|high","status":"todo","reminder":"none","notes":"来源或必要说明"}]}。今天是 ${today}。不确定的日期不要猜测；没有可提取项目时返回 {"schedules":[]}。\n\n用户要求：${payload.text||"整理为日程"}\n\n附件文本：\n${sources.join("\n\n")}`;
-  let output="";for await(const event of streamProviderRequest({provider,model,apiKey:decryptKey(entry,provider),messages:[{role:"user",content:prompt}],images,signal:new AbortController().signal})){if(event.type==="text_delta")output+=event.delta;}
-  const cleaned=output.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");let parsed;try{parsed=JSON.parse(cleaned);}catch{throw new ProviderError("invalid_schedule_output","模型没有返回有效的日程结构");}
-  const rows=Array.isArray(parsed)?parsed:parsed.schedules;if(!Array.isArray(rows))throw new ProviderError("invalid_schedule_output","模型没有返回日程列表");
-  const validTypes=new Set(["task","deadline","event","match","other"]),validPriorities=new Set(["low","medium","high"]);return rows.slice(0,50).filter(x=>x&&typeof x.title==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x.date||"")).map(x=>({title:x.title.trim().slice(0,120),date:x.date,end_date:/^\d{4}-\d{2}-\d{2}$/.test(x.end_date||"")?x.end_date:x.date,start_time:/^\d{2}:\d{2}$/.test(x.start_time||"")?x.start_time:"",end_time:/^\d{2}:\d{2}$/.test(x.end_time||"")?x.end_time:"",all_day:Boolean(x.all_day)||!x.start_time,type:validTypes.has(x.type)?x.type:"event",priority:validPriorities.has(x.priority)?x.priority:"medium",status:"todo",reminder:x.reminder||"none",notes:String(x.notes||"").slice(0,500),source:"ai_attachment"}));
-}
-ipcMain.handle("ai:extract-schedules", (_event, payload) => extractSchedulesFromPayload(payload));
-
 ipcMain.handle("ai:conversations:list",()=>aiStore.listConversations());
 ipcMain.handle("ai:conversations:create",(_event,input)=>aiStore.createConversation(input));
 ipcMain.handle("ai:conversations:get",(_event,id)=>aiStore.getConversation(id));
 ipcMain.handle("ai:conversations:update",(_event,{id,patch})=>aiStore.updateConversation(id,patch));
 ipcMain.handle("ai:conversations:delete",async(_event,id)=>{const files=await aiStore.deleteConversation(id);await attachments.removeConversationFiles(files);return{ok:true};});
 ipcMain.handle("ai:usage",(_event,filters)=>aiStore.usageSummary(filters));
-async function ensureExternalSearchAllowed(){const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch!=="read")throw new Error("permission_denied");}
-ipcMain.handle("ai:external:search-esports-matches",async(_event,input)=>{await ensureExternalSearchAllowed();return searchEsportsMatches(input);});
-ipcMain.handle("ai:external:fetch-url-text",async(_event,input)=>{await ensureExternalSearchAllowed();return fetchUrlText(input);});
+ipcMain.handle("ai:memories:list",()=>aiStore.listMemories());
+ipcMain.handle("ai:memories:forget",(_event,id)=>aiStore.forgetMemory(id));
+ipcMain.handle("ai:memories:clear",()=>aiStore.clearMemories());
 ipcMain.handle("ai:attachments:save",(_event,input)=>attachments.save(input));
 ipcMain.handle("ai:attachments:remove",(_event,id)=>attachments.remove(id));
 ipcMain.handle("ai:attachments:prepare",(_event,{id,provider})=>attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]).then(result=>({...result,localPath:undefined})));
 ipcMain.handle("ai:context:assess",async(_event,{conversationId,provider,limit})=>{const conversation=await aiStore.getConversation(conversationId);if(!conversation)throw new Error("conversation_not_found");const parsed=(conversation.attachments||[]).flatMap(item=>item.parsed?.chunks||[]);return contextManager.assess({provider:provider||conversation.provider,messages:conversation.messages,attachments:parsed,limit});});
-ipcMain.handle("ai:context:resolve",async(_event,{conversationId,action,carrySummary=false})=>{const conversation=await aiStore.getConversation(conversationId);if(!conversation)throw new Error("conversation_not_found");if(action==="new_conversation")return{action,conversation:await contextManager.createContinuation(conversationId,{carrySummary})};if(action!=="summarize")throw new Error("invalid_context_action");const settings=await readSettings();const provider=conversation.provider||settings.defaultProvider;const entry=settings.providers[provider]||{};let summary="";for await(const event of streamProviderRequest({provider,model:conversation.model||entry.model||PROVIDERS[provider].defaultModel,apiKey:decryptKey(entry,provider),messages:contextManager.buildSummaryPrompt(conversation.messages),signal:new AbortController().signal})){if(event.type==="text_delta")summary+=event.delta;}await contextManager.saveSummary(conversationId,summary);return{action,summary};});
+ipcMain.handle("ai:context:resolve",async(_event,{conversationId,action,carrySummary=false})=>{const conversation=await aiStore.getConversation(conversationId);if(!conversation)throw new Error("conversation_not_found");if(action==="new_conversation")return{action,conversation:await contextManager.createContinuation(conversationId,{carrySummary})};if(action!=="summarize")throw new Error("invalid_context_action");const settings=await readSettings();const provider=conversation.provider||settings.defaultProvider;const entry=settings.providers[provider]||{};let summary="";for await(const event of streamProviderRequest({provider,model:conversation.model||entry.model||PROVIDERS[provider].defaultModel,apiKey:resolveProviderKey(settings,entry,provider),messages:contextManager.buildSummaryPrompt(conversation.messages),signal:new AbortController().signal})){if(event.type==="text_delta")summary+=event.delta;}await contextManager.saveSummary(conversationId,summary);return{action,summary};});
 ipcMain.handle("ai:permissions:get",()=>toolRuntime.getPermissions());
 ipcMain.handle("ai:permissions:set",(_event,input)=>toolRuntime.setPermissions(input));
 ipcMain.handle("app:initialize",(_event,legacy)=>appStateStore.initialize(legacy));
@@ -296,4 +340,4 @@ ipcMain.handle("netease:get-liked-song-ids",()=>neteaseService.getLikedSongIds()
 ipcMain.handle("netease:set-song-liked",(_event,input)=>neteaseService.setSongLiked(input));
 ipcMain.handle("netease:get-history",(_event,input)=>neteaseService.getHistory(input));
 
-app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json")});await neteaseService.initialize();attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
+app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));await appStateStore.migrateStudyPlansToSchedules();musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json")});await neteaseService.initialize();attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });

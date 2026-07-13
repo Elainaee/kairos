@@ -10,7 +10,7 @@
     embeddedMain?.classList.add('kairos-page-main');
     return;
   }
-  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=28">');
+  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=30">');
   if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=3">');
   if (!document.querySelector('link[href^="reminder-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="reminder-feature.css?v=1">');
   if (!document.querySelector('link[href^="settings-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="settings-feature.css?v=1">');
@@ -303,10 +303,10 @@
 })();
 
 {
-  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=28">');
+  if (!document.querySelector('link[href^="schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="schedule-feature.css?v=30">');
   if (!document.querySelector('link[href^="date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="date-range-picker.css?v=3">');
   const scheduleFeatureScript=document.createElement('script');
-  scheduleFeatureScript.src='schedule-feature.js?v=37';
+  scheduleFeatureScript.src='schedule-feature.js?v=41';
   document.body.appendChild(scheduleFeatureScript);
 }
 if (new URLSearchParams(location.search).get('embed') !== '1') {

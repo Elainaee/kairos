@@ -7,16 +7,20 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "check": "node --check app/ai-chat.js && node --check app/music-player.js && node --check app/settings-feature.js && node --check app/stitch-shell.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/esports-search.js && node --check electron/web-source.js && node --test electron/*.test.js"
+    "check": "node --check app/ai-chat.js && node --check app/music-player.js && node --check app/settings-feature.js && node --check app/stitch-shell.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/langchain-agent.js && node --check electron/web-search.js && node --test electron/*.test.js"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.2",
+    "@langchain/openai": "^1.5.5",
     "@volcengine/ark-runtime": "1.0.9",
     "NeteaseCloudMusicApi": "^4.32.0",
     "dotenv": "^16.4.7",
     "electron": "^36.0.0",
     "jszip": "^3.10.1",
+    "langchain": "^1.5.3",
     "mammoth": "^1.12.0",
     "openai": "^4.89.0",
-    "pdfjs-dist": "^6.0.227"
+    "pdfjs-dist": "^6.0.227",
+    "zod": "^4.4.3"
   }
 }

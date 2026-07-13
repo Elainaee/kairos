@@ -107,3 +107,24 @@ body.kairos-embedded[data-page="habits"] .real-habit-card .habit-more::after{
   display:none!important;
   content:none!important;
 }
+/* Schedule deletion toast: Undo stays text-only in every interaction state. */
+body[data-page="calendar"] .schedule-toast button,
+body[data-page="calendar"] .schedule-toast button:hover,
+body[data-page="calendar"] .schedule-toast button:focus,
+body[data-page="calendar"] .schedule-toast button:focus-visible,
+body[data-page="calendar"] .schedule-toast button:active,
+body.kairos-embedded[data-page="calendar"] .schedule-toast button,
+body.kairos-embedded[data-page="calendar"] .schedule-toast button:hover,
+body.kairos-embedded[data-page="calendar"] .schedule-toast button:focus,
+body.kairos-embedded[data-page="calendar"] .schedule-toast button:focus-visible,
+body.kairos-embedded[data-page="calendar"] .schedule-toast button:active{
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  background-color:transparent!important;
+  background-image:none!important;
+  box-shadow:none!important;
+  color:#ffb59d!important;
+  outline:none!important;
+  transform:none!important;
+}
