@@ -8,6 +8,14 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   saveFirecrawlSettings: (settings) => ipcRenderer.invoke("ai:save-firecrawl-settings", settings),
   testProvider: (provider, sessionKey = "") => ipcRenderer.invoke("ai:test-provider", { provider, sessionKey }),
   closeAiWindow: () => ipcRenderer.invoke("ai-window:close"),
+  onShellCommand: (handler) => {
+    const listener = (_event, command) => handler(command);
+    ipcRenderer.on("shell:command", listener);
+    return () => ipcRenderer.removeListener("shell:command", listener);
+  },
+  reminders: Object.freeze({
+    notify: (input = {}) => ipcRenderer.invoke("reminder:notify", input)
+  }),
   sendMessage: (payload) => ipcRenderer.invoke("ai:send", payload),
   memories: Object.freeze({ list:()=>ipcRenderer.invoke("ai:memories:list"), forget:(id)=>ipcRenderer.invoke("ai:memories:forget",id), clear:()=>ipcRenderer.invoke("ai:memories:clear") }),
   stopMessage: (requestId) => ipcRenderer.invoke("ai:stop", requestId),
@@ -17,7 +25,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   context: Object.freeze({ assess:(conversationId,provider,limit)=>ipcRenderer.invoke("ai:context:assess",{conversationId,provider,limit}),resolve:(conversationId,action,carrySummary=false)=>ipcRenderer.invoke("ai:context:resolve",{conversationId,action,carrySummary}) }),
   permissions: Object.freeze({ get:()=>ipcRenderer.invoke("ai:permissions:get"),set:(input)=>ipcRenderer.invoke("ai:permissions:set",input) }),
   tools: Object.freeze({ query:(domain,query={})=>ipcRenderer.invoke("ai:tools:query",{domain,query}),propose:(input)=>ipcRenderer.invoke("ai:tools:propose",input),decide:(input)=>ipcRenderer.invoke("ai:tools:decide",input) }),
-  appState: Object.freeze({ initialize:(legacy)=>ipcRenderer.invoke("app:initialize",legacy),save:(state)=>ipcRenderer.invoke("app:save",state),get:()=>ipcRenderer.invoke("app:get"),onChanged:(handler)=>{const listener=(_event,state)=>handler(state);ipcRenderer.on("app:state-changed",listener);return()=>ipcRenderer.removeListener("app:state-changed",listener);} }),
+  appState: Object.freeze({ initialize:(legacy)=>ipcRenderer.invoke("app:initialize",legacy),save:(state)=>ipcRenderer.invoke("app:save",state),get:()=>ipcRenderer.invoke("app:get"),audit:()=>ipcRenderer.invoke("app:audit"),listBackups:()=>ipcRenderer.invoke("app:list-backups"),readBackup:(name)=>ipcRenderer.invoke("app:read-backup",name),restoreBackup:(name)=>ipcRenderer.invoke("app:restore-backup",name),exportCurrent:()=>ipcRenderer.invoke("app:export-current"),importJson:()=>ipcRenderer.invoke("app:import-json"),onChanged:(handler)=>{const listener=(_event,state)=>handler(state);ipcRenderer.on("app:state-changed",listener);return()=>ipcRenderer.removeListener("app:state-changed",listener);} }),
   music: Object.freeze({
     getState: () => ipcRenderer.invoke("music:get-state"),
     chooseFiles: () => ipcRenderer.invoke("music:choose-files"),
@@ -27,6 +35,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     updatePlayback: (patch) => ipcRenderer.invoke("music:update-playback", patch),
     updateTrack: (input) => ipcRenderer.invoke("music:update-track", input),
     removeTrack: (id) => ipcRenderer.invoke("music:remove-track", id),
+    removeUnavailableTracks: () => ipcRenderer.invoke("music:remove-unavailable-tracks"),
     clear: () => ipcRenderer.invoke("music:clear"),
     reorder: (ids) => ipcRenderer.invoke("music:reorder", ids),
     reorderPlaylist: (id, trackIds) => ipcRenderer.invoke("music:reorder-playlist", { id, trackIds }),
@@ -65,6 +74,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     hide: () => ipcRenderer.invoke("pet:hide"),
     show: () => ipcRenderer.invoke("pet:show"),
     click: () => ipcRenderer.invoke("pet:click"),
+    react: (action, payload = {}) => ipcRenderer.invoke("pet:react", { action, ...payload }),
     isReady: () => ipcRenderer.invoke("pet:is-ready"),
     getVisibility: () => ipcRenderer.invoke("pet:get-visibility"),
     resize: (w, h) => ipcRenderer.invoke("pet:resize", { width: w, height: h }),
@@ -79,6 +89,11 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
       const listener = () => handler();
       ipcRenderer.on("pet:open-ai", listener);
       return () => ipcRenderer.removeListener("pet:open-ai", listener);
+    },
+    onAction: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("pet:action", listener);
+      return () => ipcRenderer.removeListener("pet:action", listener);
     },
     onBlur: (handler) => {
       const listener = () => handler();

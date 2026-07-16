@@ -2,11 +2,16 @@
 setlocal
 cd /d "%~dp0"
 
-if exist "%~dp0node_modules\.bin\electron.cmd" (
-  call "%~dp0node_modules\.bin\electron.cmd" .
-) else if exist "%~dp0node_modules\electron\dist\electron.exe" (
-  "%~dp0node_modules\electron\dist\electron.exe" .
-) else (
-  echo Electron was not found. Run npm install or pnpm install first.
+set "NODE_EXE=node"
+where node >nul 2>nul
+if errorlevel 1 if exist "D:\nodejs\node.exe" set "NODE_EXE=D:\nodejs\node.exe"
+
+"%NODE_EXE%" "%~dp0scripts\kairos-dev.cjs"
+if errorlevel 1 (
+  echo.
+  echo Run this for details:
+  echo   "%NODE_EXE%" "%~dp0scripts\kairos-doctor.cjs"
   exit /b 1
+) else (
+  exit /b 0
 )

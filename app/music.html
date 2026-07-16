@@ -260,6 +260,7 @@ body[data-page="music"] button.music-sidebar-account[aria-expanded="true"]:not(.
 .netease-login-mode[hidden]{display:none!important}
 .netease-login-title{margin:0;color:#111827;font:850 20px/1.2 Outfit,system-ui,sans-serif}
 .netease-login-subtitle{margin:10px 0 14px;color:#7f7a70;font-size:14px;font-weight:550}
+.netease-login-scope{max-width:360px;margin:-4px 0 14px;border:1px solid rgba(209,99,60,.14);border-radius:10px;background:#fff8f4;color:#76665d;padding:9px 11px;text-align:center;font:650 12px/1.45 Outfit,system-ui,sans-serif}
 .netease-login-qr{display:grid;place-items:center;width:170px;height:170px;margin:0 auto 18px;background:#fff}
 .netease-login-qr img{width:168px;height:168px;border-radius:0;background:white}
 .netease-login-qr-empty{width:168px;height:168px;display:grid;place-items:center;color:#9b9485;font-size:12px;font-weight:700;background:#fff}
@@ -485,6 +486,9 @@ body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pr
 .playlist-detail-table tbody tr.is-playing .track-number{opacity:0}
 .playlist-detail-table tbody tr.is-playing .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%) scale(1)}
 .playlist-detail-table tbody tr .track-play-cell button.track-play-button:hover,.playlist-detail-table tbody tr .track-play-cell button.track-play-button:focus-visible{border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#162236!important}
+.playlist-detail-table tbody tr.is-unavailable{opacity:.58}
+.playlist-detail-table tbody tr.is-unavailable .track-play-cell button.track-play-button{cursor:not-allowed;color:#9a9386!important}
+.playlist-detail-table tbody tr.is-unavailable .track-artist,.playlist-detail-table tbody tr.is-unavailable .track-duration{color:#a34832}
 .track-play-button:hover svg,.track-play-button:focus-visible svg{filter:none!important;transform:none!important}
 .track-title-cell{display:flex;align-items:center;gap:10px;min-width:0}
 .track-cover{width:38px;height:38px;border-radius:6px;overflow:hidden;display:grid;place-items:center;background:#ECE7D9;color:#676556;flex:0 0 38px}
@@ -696,6 +700,7 @@ if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !
                 <div class="netease-login-mode" id="neteaseQrLoginMode" data-login-mode="qr">
                   <h2 class="netease-login-title">&#x767B;&#x5F55;&#x83B7;&#x53D6;&#x66F4;&#x61C2;&#x4F60;&#x7684;&#x597D;&#x97F3;&#x4E50;</h2>
                   <p class="netease-login-subtitle">&#x626B;&#x7801;&#x767B;&#x5F55;</p>
+                  <p class="netease-login-scope">Use your own Netease Music account for personal learning only. Kairos does not redistribute music content or support commercial public playback.</p>
                   <div class="netease-login-qr" id="neteaseQrCard">
                     <span class="netease-login-qr-empty" id="neteaseQrEmpty">&#x6B63;&#x5728;&#x751F;&#x6210;&#x4E8C;&#x7EF4;&#x7801;...</span>
                     <img id="neteaseQrImage" alt="Netease Music login QR code" hidden>
@@ -795,6 +800,15 @@ const neteaseSearchInput = document.getElementById('neteaseSearchInput');
 const neteaseResults = document.getElementById('neteaseResults');
 const neteaseAccountPanel = document.getElementById('neteaseAccountPanel');
 const neteaseUrlStatus = document.getElementById('neteaseUrlStatus');
+const getNeteaseQualityPreference = () => {
+  try {
+    const settings = window.KairosSettingsFeature?.read?.() || JSON.parse(localStorage.getItem('kairos-settings') || '{}');
+    const value = settings?.music?.neteaseQuality || 'standard';
+    return ['standard', 'higher', 'exhigh', 'lossless'].includes(value) ? value : 'standard';
+  } catch {
+    return 'standard';
+  }
+};
 const neteaseAuthGate = document.getElementById('neteaseAuthGate');
 const neteaseContent = document.getElementById('neteaseContent');
 const neteaseSidebarAccountWrap = document.getElementById('neteaseSidebarAccountWrap');
@@ -1136,8 +1150,8 @@ const getPlayerSnapshot = () => {
   }
 };
 
-const postNeteaseUrlRefresh = (requestId, track = null) => {
-  const detail = { requestId, track };
+const postNeteaseUrlRefresh = (requestId, track = null, error = "") => {
+  const detail = { requestId, track, error };
   try { window.dispatchEvent(new CustomEvent('kairos:netease-url-refreshed', { detail })); } catch {}
   try {
     if (window.parent && window.parent !== window) {
@@ -1153,11 +1167,11 @@ const handleNeteaseUrlRefresh = async event => {
   const api = getDesktopNetease();
   if (!api?.playSong) return postNeteaseUrlRefresh(requestId, null);
   try {
-    const result = await api.playSong({ id: sourceTrack.id, neteaseId: sourceTrack.neteaseId });
-    postNeteaseUrlRefresh(requestId, result?.ok ? result.track : null);
+    const result = await api.playSong({ id: sourceTrack.id, neteaseId: sourceTrack.neteaseId, level: getNeteaseQualityPreference() });
+    postNeteaseUrlRefresh(requestId, result?.ok ? result.track : null, result?.ok ? "" : result?.message || "Unable to refresh NetEase URL");
   } catch (error) {
     console.error('netease url refresh failed', error);
-    postNeteaseUrlRefresh(requestId, null);
+    postNeteaseUrlRefresh(requestId, null, error?.message || "Unable to refresh NetEase URL");
   }
 };
 
@@ -1379,7 +1393,7 @@ const playNeteaseTrack = async (song, queueSongs = [], options = {}) => {
   const api = getDesktopNetease();
   if (!api?.playSong) return null;
   if (neteaseUrlStatus) neteaseUrlStatus.textContent = 'Getting playable URL...';
-  const result = await api.playSong({ id: song.id, neteaseId: song.neteaseId });
+  const result = await api.playSong({ id: song.id, neteaseId: song.neteaseId, level: getNeteaseQualityPreference() });
   if (!result?.ok || !result.track?.playUrl) {
     throw new Error(result?.message || 'No playable URL returned.');
   }
@@ -2581,13 +2595,17 @@ const renderPlaylistDetail = playlistId => {
     const visibleIds = [...tbody.querySelectorAll('tr[data-track-id]')]
       .filter(row => !row.hidden)
       .map(row => row.dataset.trackId)
-      .filter(Boolean);
-    return visibleIds.length ? visibleIds : model.tracks.map(track => track.id);
+      .filter(id => id && model.tracks.find(track => track.id === id)?.available !== false);
+    return visibleIds.length ? visibleIds : model.tracks.filter(track => track.available !== false).map(track => track.id);
   };
   const playPlaylistTrack = async (trackId, options = {}) => {
     const target = model.tracks.find(track => track.id === trackId);
     const desktopMusic = getDesktopMusic();
     if (!target) return;
+    if (target.available === false) {
+      toast.error('File unavailable', 'The local file was moved or deleted.');
+      return;
+    }
     if (playbackState.currentTrackId === target.id && playbackState.playing) {
       playbackState = { currentTrackId: target.id, playing: false };
       if (desktopMusic?.updatePlayback) {
@@ -2597,7 +2615,7 @@ const renderPlaylistDetail = playlistId => {
       syncPlaybackRows(playbackState);
       return;
     }
-    const queueTrackIds = options.queueTrackIds || getVisiblePlaylistTrackIds();
+    const queueTrackIds = (options.queueTrackIds || getVisiblePlaylistTrackIds()).filter(id => model.tracks.find(track => track.id === id)?.available !== false);
     const playbackPatch = {
       queueTrackIds,
       currentTrackId: target.id,
@@ -2623,8 +2641,10 @@ const renderPlaylistDetail = playlistId => {
     notifyMusicPlayer(localPlaybackDetail({ queueTrackIds, currentTrackId: target.id, playing: true, ...(options.forceSequence ? { mode: 'sequence' } : {}) }));
   };
   hero.querySelector('.playlist-play-all').addEventListener('click', async () => {
-    const first = model.tracks[0];
-    if (first) await playPlaylistTrack(first.id, { forceSequence: true, queueTrackIds: model.tracks.map(track => track.id) });
+    const playable = model.tracks.filter(track => track.available !== false);
+    const first = playable[0];
+    if (first) await playPlaylistTrack(first.id, { forceSequence: true, queueTrackIds: playable.map(track => track.id) });
+    else toast.error('No playable songs', 'The local files in this playlist are unavailable.');
   });
 
   const tabs = document.createElement('div');
@@ -2968,14 +2988,16 @@ const renderPlaylistDetail = playlistId => {
     filtered.forEach((track, index) => {
         const row = document.createElement('tr');
         row.dataset.trackId = track.id;
-        row.draggable = detailMode === 'songs';
+        const unavailable = track.available === false;
+        row.classList.toggle('is-unavailable', unavailable);
+        row.draggable = detailMode === 'songs' && !unavailable;
         row.innerHTML = `
-          <td class="track-play-cell">${detailMode === 'select' ? `<button class="track-select-button" type="button" aria-label="Select song" aria-pressed="${selectedTrackIds.has(track.id)}"><span class="checkmark">check</span></button>` : `<span class="track-number">${String(index + 1).padStart(2, '0')}</span><button class="track-play-button send" type="button" aria-label="Play track" data-state="play"><svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg></button>`}</td>
+          <td class="track-play-cell">${detailMode === 'select' ? `<button class="track-select-button" type="button" aria-label="Select song" aria-pressed="${selectedTrackIds.has(track.id)}"><span class="checkmark">check</span></button>` : `<span class="track-number">${String(index + 1).padStart(2, '0')}</span><button class="track-play-button send" type="button" aria-label="${unavailable ? 'File unavailable' : 'Play track'}" data-state="play" ${unavailable ? 'disabled' : ''}><svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg></button>`}</td>
           <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div></td>
           <td class="track-album"></td>
           <td class="track-like"><button class="track-like-button" type="button" aria-label="${likedAriaLabel(track.liked === true)}" aria-pressed="${track.liked === true}"><span class="material-symbols-outlined">favorite</span></button></td>
           <td class="track-duration"></td>
-          <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="More actions" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>Play Next</span></button>${isLikedPlaylist ? '' : `<button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${track.liked ? 'Remove from Liked' : 'Like'}</span></button>`}<button class="danger" type="button" data-action="remove"><span class="material-symbols-outlined">${isLikedPlaylist ? 'heart_minus' : 'visibility_off'}</span><span>${isLikedPlaylist ? 'Remove from Liked' : 'Remove from Playlist'}</span></button></span></span></td>
+          <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="More actions" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden>${unavailable ? '' : `<button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>Play Next</span></button>`}${isLikedPlaylist ? '' : `<button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${track.liked ? 'Remove from Liked' : 'Like'}</span></button>`}<button class="danger" type="button" data-action="remove"><span class="material-symbols-outlined">${isLikedPlaylist ? 'heart_minus' : 'visibility_off'}</span><span>${isLikedPlaylist ? 'Remove from Liked' : 'Remove from Playlist'}</span></button></span></span></td>
         `;
         const selectButton = row.querySelector('.track-select-button');
         if (selectButton) {
@@ -3028,11 +3050,11 @@ const renderPlaylistDetail = playlistId => {
           trackCover.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">music_note</span>';
         }
         row.querySelector('.track-name').textContent = cleanMusicText(track.title) || cleanMusicText(track.fileName) || 'Untitled';
-        row.querySelector('.track-artist').textContent = cleanMusicText(track.artist) || 'Local music';
+        row.querySelector('.track-artist').textContent = unavailable ? 'File unavailable' : (cleanMusicText(track.artist) || 'Local music');
         row.querySelector('.track-album').textContent = cleanMusicText(track.album) || title;
         const durationCell = row.querySelector('.track-duration');
-        durationCell.textContent = formatTrackDuration(track.duration);
-        hydrateTrackDuration(track, durationCell);
+        durationCell.textContent = unavailable ? 'Missing' : formatTrackDuration(track.duration);
+        if (!unavailable) hydrateTrackDuration(track, durationCell);
         tbody.append(row);
       });
     updateTrackPlaybackRows();
@@ -3445,6 +3467,20 @@ const refreshMusicState = async ({ forceRender = true } = {}) => {
   }
 };
 
+const rejectedImportReasonLabels = {
+  unsupported_format: 'unsupported format',
+  empty_file: 'empty file',
+  unreadable_file: 'unreadable file'
+};
+const summarizeRejectedImports = rejected => {
+  const counts = new Map();
+  (rejected || []).forEach(item => {
+    const label = rejectedImportReasonLabels[item?.reason] || 'skipped';
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+  return [...counts].map(([label, count]) => `${count} ${label}`).join(', ');
+};
+
 importLocalPlaylist.addEventListener('click', async () => {
   const desktopMusic = getDesktopMusic();
   if (!desktopMusic) {
@@ -3459,8 +3495,9 @@ importLocalPlaylist.addEventListener('click', async () => {
   musicStateSignature = getMusicStateSignature(musicState);
   renderLocalPlaylist();
   if (result.rejected?.length) {
-    localPlaylistStatus.textContent = `${result.imported?.length || 0} imported, ${result.rejected.length} skipped`;
-    toast.message('Playlist imported', `${result.imported?.length || 0} imported, ${result.rejected.length} skipped`);
+    const rejectedSummary = summarizeRejectedImports(result.rejected);
+    localPlaylistStatus.textContent = `${result.imported?.length || 0} imported, ${result.rejected.length} skipped: ${rejectedSummary}`;
+    toast.message('Playlist imported', `${result.imported?.length || 0} imported, ${rejectedSummary}`);
   } else {
     toast.success('Playlist imported');
   }

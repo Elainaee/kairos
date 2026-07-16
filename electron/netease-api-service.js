@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { SettingsRepository } from "./settings-repository.js";
 
 const require = createRequire(import.meta.url);
 const neteaseApi = require("NeteaseCloudMusicApi");
@@ -103,6 +104,16 @@ function readableNeteaseMessage(code, fallback = "") {
   return fallback || "NetEase request failed.";
 }
 
+export function readableNeteasePlaybackMessage(data = {}, fallback = "") {
+  const code = Number(data.code || 0);
+  const fee = Number(data.fee ?? -1);
+  if (data.freeTrialInfo) return "This song is only available as a NetEase trial preview.";
+  if (fee === 1 || fee === 4) return "This song requires NetEase membership or purchase.";
+  if (data.payed === 0 && fee > 0) return "This song is restricted by NetEase rights.";
+  if (code === 404 || code === -110) return "NetEase cannot provide a playable URL for this song.";
+  return data.message || data.msg || fallback || "This song is unavailable on NetEase.";
+}
+
 async function withSuppressedNeteaseErrors(task) {
   const originalLog = console.log;
   console.log = (...args) => {
@@ -132,23 +143,33 @@ function neteaseFailure(error, fallback) {
 }
 
 export class NeteaseApiService {
-  constructor({ statePath } = {}) {
+  constructor({ statePath, database } = {}) {
     this.statePath = statePath;
+    this.database = database || null;
+    this.stateRepository = statePath ? new SettingsRepository({
+      filePath: statePath,
+      defaults: { cookie: "" },
+      normalize: value => ({ cookie: String(value?.cookie || "") }),
+      database: this.database,
+      storeKey: "netease-api-state",
+      summarize: value => ({ loggedIn: Boolean(value.cookie) })
+    }) : null;
     this.cookie = "";
     this.loginKey = "";
   }
 
   async initialize() {
-    try {
-      const data = JSON.parse(await fs.readFile(this.statePath, "utf8"));
-      this.cookie = String(data.cookie || "");
-    } catch {}
+    if (!this.stateRepository) return;
+    this.cookie = (await this.stateRepository.read()).cookie;
   }
 
   async save() {
-    if (!this.statePath) return;
-    await fs.mkdir(path.dirname(this.statePath), { recursive: true });
-    await fs.writeFile(this.statePath, JSON.stringify({ cookie: this.cookie }, null, 2), "utf8");
+    if (!this.stateRepository) return;
+    await this.stateRepository.write({ cookie: this.cookie });
+  }
+
+  readDatabaseSnapshot() {
+    return this.stateRepository?.readSnapshot() || null;
   }
 
   withCookie(input = {}) {
@@ -448,27 +469,31 @@ export class NeteaseApiService {
   async playSong({ id, neteaseId, level = DEFAULT_LEVEL } = {}) {
     const songId = String(neteaseId || id || "").replace(/^netease:/, "");
     if (!songId) return { ok: false, message: "Missing NetEase song id." };
-    const [detailResult, urlResult] = await Promise.all([
-      neteaseApi.song_detail(this.withCookie({ ids: songId })),
-      neteaseApi.song_url_v1(this.withCookie({ id: songId, level }))
-    ]);
-    const song = detailResult.body?.songs?.[0] || { id: Number(songId) || songId };
-    const urlData = urlResult.body?.data?.[0] || {};
-    if (!urlData.url) {
-      return { ok: false, message: urlData.message || "No playable URL returned for this song.", data: urlData };
+    try {
+      const [detailResult, urlResult] = await Promise.all([
+        neteaseApi.song_detail(this.withCookie({ ids: songId })),
+        neteaseApi.song_url_v1(this.withCookie({ id: songId, level }))
+      ]);
+      const song = detailResult.body?.songs?.[0] || { id: Number(songId) || songId };
+      const urlData = urlResult.body?.data?.[0] || {};
+      if (!urlData.url) {
+        return { ok: false, message: readableNeteasePlaybackMessage(urlData, "No playable URL returned for this song."), data: urlData };
+      }
+      const fetchedAt = Date.now();
+      const expiresIn = Number(urlData.expi || 0);
+      const track = {
+        ...normalizeSong(song),
+        playUrl: urlData.url,
+        duration: Number(urlData.time || 0) / 1000 || Number(song.dt || 0) / 1000 || 0,
+        bitrate: urlData.br || 0,
+        level: urlData.level || level,
+        expiresIn,
+        urlFetchedAt: fetchedAt,
+        urlExpiresAt: expiresIn > 0 ? fetchedAt + expiresIn * 1000 : 0
+      };
+      return { ok: true, track, data: urlData };
+    } catch (error) {
+      return neteaseFailure(error, "Unable to load playable NetEase URL.");
     }
-    const fetchedAt = Date.now();
-    const expiresIn = Number(urlData.expi || 0);
-    const track = {
-      ...normalizeSong(song),
-      playUrl: urlData.url,
-      duration: Number(urlData.time || 0) / 1000 || Number(song.dt || 0) / 1000 || 0,
-      bitrate: urlData.br || 0,
-      level: urlData.level || level,
-      expiresIn,
-      urlFetchedAt: fetchedAt,
-      urlExpiresAt: expiresIn > 0 ? fetchedAt + expiresIn * 1000 : 0
-    };
-    return { ok: true, track, data: urlData };
   }
 }

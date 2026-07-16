@@ -1,13 +1,86 @@
 {
   "name": "kairos-desktop",
+  "productName": "Kairos",
   "version": "0.1.0",
+  "description": "Personal learning check-in, schedule, AI companion, and music desktop app.",
+  "author": "Kairos",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron .",
-    "check": "node --check app/ai-chat.js && node --check app/music-player.js && node --check app/settings-feature.js && node --check app/stitch-shell.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/langchain-agent.js && node --check electron/web-search.js && node --test electron/*.test.js"
+    "start": "node scripts/kairos-dev.cjs",
+    "dev": "node scripts/kairos-dev.cjs",
+    "doctor": "node scripts/kairos-doctor.cjs",
+    "check": "node --check scripts/kairos-dev.cjs && node --check scripts/kairos-doctor.cjs && node --check app/ai-chat.js && node --check app/calendar-core.cjs && node --check app/habit-core.cjs && node --check app/note-core.cjs && node --check app/notes-feature.js && node --check app/music-player.js && node --check app/reminder-core.cjs && node --check app/reminder-feature.js && node --check app/schedule-feature.js && node --check app/settings-feature.js && node --check app/stitch-shell.js && node --check electron/app-database.js && node --check electron/app-state-audit.js && node --check electron/desktop-data-audit.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/langchain-agent.js && node --check electron/web-search.js && node --test electron/*.test.js",
+    "audit:app-state": "node electron/app-state-audit.js",
+    "audit:desktop-data": "node electron/desktop-data-audit.js",
+    "verify:dist": "node --test electron/dist-artifacts.verify.js",
+    "verify:installer": "node electron/installer-smoke.js",
+    "release:manifest": "node electron/release-manifest.js",
+    "verify:release": "pnpm check && pnpm dist:win && pnpm release:manifest && pnpm verify:dist",
+    "verify:release:full": "pnpm verify:release && pnpm verify:installer",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win",
+    "dist:win": "electron-builder --win nsis portable"
+  },
+  "build": {
+    "appId": "app.kairos.desktop",
+    "productName": "Kairos",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "package.json",
+      "app/**/*",
+      "electron/**/*",
+      "!electron/app-state-audit.js",
+      "!electron/desktop-data-audit.js",
+      "!**/*.map",
+      "!**/*.test.js",
+      "!electron/static-assets.test.js",
+      "!electron/services.test.js",
+      "!electron/agent/*.test.js",
+      "!docs{,/**}",
+      "!references{,/**}",
+      "!Brainstorm{,/**}",
+      "!node_modules/.cache{,/**}",
+      "!.env*",
+      "!start-kairos.*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/NeteaseCloudMusicApi/**/*"
+    ],
+    "win": {
+      "icon": "app/assets/netease-format.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-${os}-${arch}-setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kairos",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${os}-${arch}-portable.${ext}"
+    }
   },
   "dependencies": {
     "@langchain/core": "^1.2.2",
@@ -15,12 +88,16 @@
     "@volcengine/ark-runtime": "1.0.9",
     "NeteaseCloudMusicApi": "^4.32.0",
     "dotenv": "^16.4.7",
-    "electron": "^36.0.0",
     "jszip": "^3.10.1",
     "langchain": "^1.5.3",
     "mammoth": "^1.12.0",
     "openai": "^4.89.0",
     "pdfjs-dist": "^6.0.227",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@electron/asar": "^4.2.0",
+    "electron": "^36.0.0",
+    "electron-builder": "^26.15.3"
   }
 }

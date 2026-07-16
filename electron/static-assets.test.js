@@ -63,6 +63,929 @@ test("embedded music pages rely on the shell player instance", async () => {
   );
 });
 
+test("habit dashboard uses shared date and streak core", async () => {
+  const habitsHtml = await fs.readFile(path.join(root, "app/habits.html"), "latin1");
+  const habitsScript = await fs.readFile(path.join(root, "app/habits-feature.js"), "utf8");
+  const habitCore = await fs.readFile(path.join(root, "app/habit-core.cjs"), "utf8");
+
+  assert.match(
+    habitsHtml,
+    /<script src="habit-core\.cjs\?v=1"><\/script><script src="habits-feature\.js\?v=14"><\/script>/,
+    "habit dashboard should load the shared habit core before the UI feature"
+  );
+  assert.match(
+    habitsScript,
+    /const core=window\.KairosHabitCore;/,
+    "habit UI should use the shared testable habit core when it is loaded"
+  );
+  assert.match(habitsScript, /appState\.initialize\(state\);[\s\S]*?state\.habits=\(Array\.isArray\(state\.habits\)\?state\.habits:\[\]\)\.map\(clean\);\s*window\.kairosDesktop\.appState\.onChanged/, "habit initialization should bind state updates without immediately writing a stale full-state snapshot");
+  assert.match(
+    habitsScript,
+    /core\?\.currentStreak\?core\.currentStreak\(habit,today\(\)\)/,
+    "habit cards should render current streaks from the shared core"
+  );
+  assert.match(
+    habitsScript,
+    /core\?\.toggleDate\?core\.toggleDate\(habit,date,today\(\)\)/,
+    "habit toggles should apply shared backfill rules"
+  );
+  assert.match(
+    habitsScript,
+    /const backfillDefault=\(\)=>!!readSettings\(\)\?\.habits\?\.allowBackfillDefault/,
+    "new habit editor should read the saved default backfill rule"
+  );
+  assert.match(
+    habitsScript,
+    /const allowBackfill=habit\?!!habit\.allowBackfill:backfillDefault\(\);[\s\S]*?<input name="backfill" type="checkbox" \$\{allowBackfill\?'checked':''\}>/,
+    "new habits should use the global backfill default while existing habits keep their own setting"
+  );
+  assert.match(habitsScript, /const reactPet=\(action,payload=\{\}\)=>\{[\s\S]*?window\.top\.postMessage\(\{type:'kairos:pet-react',action,payload\}/, "embedded habit pages should route companion reactions through the desktop shell when preload is unavailable");
+  assert.match(habitsScript, /habit-check-button\[data-toggle\][\s\S]*?reactPet\('happy',\{title\}\)/, "new habit completions should give the desktop companion a single happy response");
+  assert.match(
+    habitCore,
+    /function currentStreak\(habit = \{\}, todayKey = dateKey\(\)\)[\s\S]*?function bestStreak\(habit = \{\}\)[\s\S]*?function heatmapWindow/,
+    "habit core should keep streak and heatmap logic in one reusable module"
+  );
+});
+
+test("note and mood core defines local dated journal behavior", async () => {
+  const noteCore = await fs.readFile(path.join(root, "app/note-core.cjs"), "utf8");
+  const packageJson = await fs.readFile(path.join(root, "package.json"), "utf8");
+  const appState = await fs.readFile(path.join(root, "electron/app-state.js"), "utf8");
+
+  assert.match(
+    appState,
+    /const EMPTY = \{[\s\S]*?moods: \{\}, notes: \[\][\s\S]*?\};/,
+    "app-state should reserve durable notes and dated mood storage"
+  );
+  assert.match(
+    noteCore,
+    /if \(root\) root\.KairosNoteCore = core;[\s\S]*?function normalizeNote\(input = \{\}, fallbackDate = dateKey\(\)\)/,
+    "note core should be reusable from browser UI and Node tests"
+  );
+  assert.match(
+    noteCore,
+    /function searchNotes\(notes = \[\], query = "", options = \{\}\)[\s\S]*?options\.date[\s\S]*?options\.mood[\s\S]*?note\.tags\.join\(" "\)/,
+    "note core should support date mood and keyword search"
+  );
+  assert.match(
+    noteCore,
+    /function setMood\(moods = \{\}, date = dateKey\(\), mood = ""\)[\s\S]*?if \(clean\) next\[key\] = clean;[\s\S]*?else delete next\[key\]/,
+    "note core should manage one mood label per date"
+  );
+  assert.match(
+    packageJson,
+    /node --check app\/note-core\.cjs/,
+    "check script should syntax-check the note core"
+  );
+});
+
+test("notes page is wired into the desktop shell and app-state", async () => {
+  const notesHtml = await fs.readFile(path.join(root, "app/notes.html"), "utf8");
+  const notesFeature = await fs.readFile(path.join(root, "app/notes-feature.js"), "utf8");
+  const shell = await fs.readFile(path.join(root, "app/stitch-shell.js"), "utf8");
+  const packageJson = await fs.readFile(path.join(root, "package.json"), "utf8");
+
+  assert.match(
+    notesHtml,
+    /<body data-page="notes">[\s\S]*data-note-search[\s\S]*data-note-date[\s\S]*data-mood-grid[\s\S]*<script src="note-core\.cjs\?v=1"><\/script>[\s\S]*<script src="notes-feature\.js\?v=1"><\/script>/,
+    "notes page should render search date filters mood picker and load the note core before the feature"
+  );
+  assert.match(
+    shell,
+    /\['notes','#notes','edit_note','Notes'\][\s\S]*notes: \['notes\.html\?embed=1&v=1', 'Notes'\]/,
+    "desktop shell should expose Notes in the SPA navigation"
+  );
+  assert.match(
+    notesFeature,
+    /const KEY = 'kairos-mvp-state';[\s\S]*?window\.kairosDesktop\?\.appState\?\.save\?\.\(state\)[\s\S]*?window\.kairosDesktop\.appState\.initialize\(state\)/,
+    "notes feature should persist through shared local state and the desktop app-state bridge"
+  );
+  assert.match(
+    notesFeature,
+    /core\.searchNotes\(state\.notes, query, date \? \{ date \} : \{\}\)/,
+    "notes feature should use the shared core for search"
+  );
+  assert.match(
+    notesFeature,
+    /core\.upsertNote\(state\.notes,/,
+    "notes feature should use the shared core for save"
+  );
+  assert.match(
+    notesFeature,
+    /core\.deleteNote\(state\.notes, id\)/,
+    "notes feature should use the shared core for delete"
+  );
+  assert.match(
+    notesFeature,
+    /core\.setMood\(state\.moods, today\(\)/,
+    "notes feature should use the shared core for mood updates"
+  );
+  assert.match(
+    notesHtml,
+    /data-note-attachments[\s\S]*data-note-attachment-list/,
+    "notes page should expose an attachment file picker and attachment list"
+  );
+  assert.match(
+    notesFeature,
+    /function readAttachment\(file\)[\s\S]*?FileReader[\s\S]*?readAsDataURL\(file\)/,
+    "notes feature should preserve local image previews for attachments"
+  );
+  assert.match(
+    notesFeature,
+    /renderAttachmentList\(\)[\s\S]*?data-remove-attachment[\s\S]*?selectedAttachments\.splice/,
+    "notes feature should render and remove selected attachments"
+  );
+  assert.match(
+    notesFeature,
+    /attachments: selectedAttachments,/,
+    "notes feature should save selected attachments with the note"
+  );
+  assert.match(
+    packageJson,
+    /node --check app\/notes-feature\.js/,
+    "check script should syntax-check the notes feature"
+  );
+});
+
+test("schedule calendar uses shared date and schedule core", async () => {
+  const shell = await fs.readFile(path.join(root, "app/stitch-shell.js"), "utf8");
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+  const calendarCore = await fs.readFile(path.join(root, "app/calendar-core.cjs"), "utf8");
+
+  assert.match(
+    shell,
+    /const loadScheduleFeature=\(\)=>\{[\s\S]*?scheduleFeatureScript\.src='schedule-feature\.js\?v=42';[\s\S]*?\};/,
+    "shell should keep schedule feature loading behind a helper"
+  );
+  assert.match(
+    shell,
+    /calendarCoreScript\.src='calendar-core\.cjs\?v=1';[\s\S]*?calendarCoreScript\.onload=loadScheduleFeature;[\s\S]*?calendarCoreScript\.onerror=loadScheduleFeature;[\s\S]*?document\.body\.appendChild\(calendarCoreScript\);/,
+    "shell should load the shared calendar core before invoking schedule-feature.js"
+  );
+  assert.match(
+    scheduleScript,
+    /const calendarCore=window\.KairosCalendarCore;/,
+    "schedule UI should use the shared calendar core when it is loaded"
+  );
+  assert.match(
+    scheduleScript,
+    /const monthGrid=\(year,monthIndex\)=>calendarCore\?\.monthGrid\?\.\(year,monthIndex\)/,
+    "schedule UI should delegate month grid generation to calendar core"
+  );
+  assert.match(
+    scheduleScript,
+    /const covers=\(x,date\)=>calendarCore\?\.coversDate\?\.\(x,date\)/,
+    "schedule UI should delegate date coverage rules to calendar core"
+  );
+  assert.match(
+    calendarCore,
+    /function monthGrid\(year, monthIndex, options = \{\}\)[\s\S]*?function coversDate\(item = \{\}, key\)[\s\S]*?function schedulesForDate/,
+    "calendar core should keep month grid and schedule coverage logic in one reusable module"
+  );
+});
+
+test("schedule calendar shows lightweight note and mood markers", async () => {
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+  const scheduleCss = await fs.readFile(path.join(root, "app/schedule-feature.css"), "utf8");
+
+  assert.match(
+    scheduleScript,
+    /function noteMarkerForDate\(key\)[\s\S]*?state\.notes[\s\S]*?state\.moods[\s\S]*?calendar-note-marker/,
+    "schedule calendar should derive date markers from notes and moods"
+  );
+  assert.match(
+    scheduleScript,
+    /cell\.innerHTML=`<span class="font-label-sm">[\s\S]*?\$\{noteMarkerForDate\(key\)\}`/,
+    "day cells should render the note and mood marker"
+  );
+  assert.match(
+    scheduleCss,
+    /\.calendar-note-marker[\s\S]*?\.calendar-grid \.day-cell\.calendar-day-selected \.calendar-note-marker/,
+    "note and mood markers should be styled for normal and selected calendar days"
+  );
+});
+
+test("schedule calendar supports drag-to-reschedule", async () => {
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+  const scheduleCss = await fs.readFile(path.join(root, "app/schedule-feature.css"), "utf8");
+
+  assert.match(
+    scheduleScript,
+    /const moveScheduleToDate=\(id,targetDate\)=>\{[\s\S]*?span=Math\.max\(0,dayDelta\(item\.date,item\.end_date\|\|item\.date\)\)[\s\S]*?item\.date=targetDate[\s\S]*?item\.end_date=shiftDate\(targetDate,span\)[\s\S]*?Undo/,
+    "drag rescheduling should preserve date span and offer undo"
+  );
+  assert.match(
+    scheduleScript,
+    /function bindCalendarDragDrop\(grid\)\{[\s\S]*?chip\.draggable=true[\s\S]*?dragstart[\s\S]*?drop[\s\S]*?moveScheduleToDate\(id,cell\.dataset\.date\)/,
+    "calendar chips should be draggable onto day cells"
+  );
+  assert.match(
+    scheduleScript,
+    /bindCalendarDragDrop\(grid\);[\s\S]*?revealCalendarMonth/,
+    "calendar should bind drag and drop after rendering day cells"
+  );
+  assert.match(
+    scheduleCss,
+    /\.calendar-schedule-chip\[draggable="true"\][\s\S]*?\.calendar-grid \.day-cell\.calendar-drop-target/,
+    "calendar drag and drop states should be visually styled"
+  );
+});
+
+test("today timeline supports quick time nudges", async () => {
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+  const scheduleCss = await fs.readFile(path.join(root, "app/schedule-feature.css"), "utf8");
+
+  assert.match(
+    scheduleScript,
+    /const shiftedTimeRange=\(item,delta\)=>calendarCore\?\.shiftTimeRange\?\.\(item\.start_time,item\.end_time\|\|item\.start_time,delta\)[\s\S]*?const shiftScheduleTime=\(id,delta=15\)=>\{[\s\S]*?Object\.assign\(item,next,[\s\S]*?Undo/,
+    "timeline time nudges should use the shared bounded time-range logic and offer undo"
+  );
+  assert.match(
+    scheduleScript,
+    /\$\{!x\.all_day&&x\.start_time\?`<span class="schedule-time-nudge"[\s\S]*?data-time-shift="\$\{x\.id\}" data-delta="-15"[\s\S]*?data-delta="15"/,
+    "timeline should show quick nudge controls only for timed schedules"
+  );
+  assert.match(
+    scheduleScript,
+    /querySelectorAll\('\[data-time-shift\]'\)[\s\S]*?shiftScheduleTime\(b\.dataset\.timeShift,Number\(b\.dataset\.delta\|\|15\)\)/,
+    "timeline nudge buttons should call the time shift helper"
+  );
+  assert.match(
+    scheduleCss,
+    /#scheduleTodayList \.schedule-time-nudge[\s\S]*?#scheduleTodayList \.schedule-time-nudge button:hover/,
+    "timeline nudge controls should have hover and focus styling"
+  );
+  assert.match(
+    scheduleScript,
+    /function bindTimelineTimeDrag\(box\)\{[\s\S]*?\[data-time-drag\][\s\S]*?const \{id,delta,row,label,originalTime\}=drag;[\s\S]*?if\(delta\)shiftScheduleTime\(id,delta\)[\s\S]*?Math\.round\(\(event\.clientY-drag\.startY\)\/10\)\*15/,
+    "timeline should support direct vertical drag time adjustment in 15-minute increments"
+  );
+  assert.match(scheduleScript, /data-time-drag="\$\{x\.id\}"[\s\S]*?aria-label="Drag to change schedule time"/, "timed schedule rows should expose an accessible drag handle");
+  assert.match(scheduleCss, /\[data-time-drag\]\{cursor:ns-resize;touch-action:none\}/, "timeline drag handle should advertise vertical dragging and prevent touch scrolling");
+  assert.match(scheduleScript, /const reactPet=\(action,payload=\{\}\)=>\{[\s\S]*?window\.top\.postMessage\(\{type:'kairos:pet-react',action,payload\}/, "embedded schedule pages should route companion reactions through the desktop shell when preload is unavailable");
+  assert.match(scheduleScript, /task-complete-check\[data-check\][\s\S]*?check\?\.checked[\s\S]*?reactPet\('happy',\{title\}\)/, "completed schedule rows should notify the desktop companion without reacting to reopen actions");
+  const shellScript = await fs.readFile(path.join(root, "app/stitch-shell.js"), "utf8");
+  assert.match(shellScript, /message\.type !== 'kairos:pet-react'[\s\S]*?spaFrames\.values\(\)[\s\S]*?kairosDesktop\?\.pet\?\.react\(message\.action/, "desktop shell should relay companion reactions only from its embedded application frames");
+});
+
+test("schedule form warns before saving overlapping timed schedules", async () => {
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+
+  assert.match(
+    scheduleScript,
+    /const scheduleRange=item=>\{if\(!item\|\|item\.all_day\|\|!item\.date\|\|!item\.start_time\|\|!item\.end_time\)return null;[\s\S]*?return start==null\|\|end==null\|\|end<=start\?null:\{date:item\.date,start,end\}\}/,
+    "schedule conflicts should only evaluate valid timed non-all-day schedules"
+  );
+  assert.match(
+    scheduleScript,
+    /const conflictingSchedules=item=>\{const range=scheduleRange\(item\);if\(!range\)return\[\];return state\.schedules\.filter\(current=>current\.id!==item\.id&&status\(current\)!=='done'\)[\s\S]*?other\.date===range\.date&&other\.start<range\.end&&range\.start<other\.end/,
+    "schedule conflict detection should ignore the current row and completed schedules"
+  );
+  assert.match(
+    scheduleScript,
+    /const conflicts=conflictingSchedules\(data\);if\(conflicts\.length\)\{const ok=await kairosConfirmAlert\(\{title:'Schedule time conflict\?'[\s\S]*?action:'Save Anyway'[\s\S]*?cancel:'Review'[\s\S]*?if\(!ok\)return\}state\.schedules=editing\?state\.schedules\.map/,
+    "saving an overlapping schedule should require explicit confirmation before mutating state"
+  );
+  assert.match(
+    scheduleScript,
+    /const renderConflictPreview=\(\)=>\{const draft=Object\.fromEntries\(new FormData\(f\)\);draft\.id=editing\|\|'';draft\.all_day=f\.all_day\.checked;const conflicts=conflictingSchedules\(draft\);[\s\S]*?Overlaps with/,
+    "schedule editor should preview overlapping schedules before submit"
+  );
+  assert.match(scheduleScript, /f\.addEventListener\('input',renderConflictPreview\);f\.addEventListener\('change',renderConflictPreview\)/, "conflict preview should refresh while editing schedule fields");
+});
+
+test("main window restores and persists desktop bounds", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+
+  assert.match(
+    main,
+    /const windowStatePath = \(\) => path\.join\(app\.getPath\("userData"\), "window-state\.json"\);/,
+    "main window bounds should be persisted in app userData"
+  );
+  assert.match(
+    main,
+    /function restoreWindowBounds\(saved\) \{[\s\S]*?screen\.getAllDisplays\(\)[\s\S]*?screen\.getPrimaryDisplay\(\)[\s\S]*?workArea[\s\S]*?finalWidth[\s\S]*?finalHeight[\s\S]*?\}/,
+    "saved window bounds should be clamped to an available display work area"
+  );
+  assert.match(
+    main,
+    /function attachWindowStatePersistence\(win\) \{[\s\S]*?win\.on\("resize", scheduleSave\);[\s\S]*?win\.on\("move", scheduleSave\);[\s\S]*?win\.on\("close", \(\) => \{/,
+    "window resize, move, and close should save the latest usable bounds"
+  );
+  assert.match(
+    main,
+    /const savedBounds = restoreWindowBounds\(await readWindowState\(\)\);[\s\S]*?new BrowserWindow\(\{ \.\.\.savedBounds, minWidth: 900, minHeight: 650/,
+    "main BrowserWindow should start from restored bounds instead of fixed dimensions"
+  );
+  assert.match(
+    main,
+    /if \(process\.env\.KAIROS_USER_DATA_DIR\) app\.setPath\("userData", process\.env\.KAIROS_USER_DATA_DIR\);/,
+    "packaged smoke tests should be able to verify startup with an isolated userData directory"
+  );
+  assert.match(
+    main,
+    /async function verifySmokeRenderer\(win\) \{[\s\S]*?calendarHeading: '#scheduleCalendarHeading'[\s\S]*?habitList: '#habitAnimatedList'[\s\S]*?musicPlayer: '#musicPlayer'[\s\S]*?reminderButton: '\.kairos-reminder-button'[\s\S]*?aiPanel: '#aiPanel'/,
+    "packaged smoke tests should verify that the main renderer mounted core UI surfaces"
+  );
+  assert.match(
+    main,
+    /const smokeStateMarker = process\.env\.KAIROS_SMOKE_STATE_MARKER \|\| "";[\s\S]*?const smokeExpectStateMarker = process\.env\.KAIROS_SMOKE_EXPECT_STATE_MARKER === "1";/,
+    "smoke mode should support persisted app-state marker checks across launches"
+  );
+  assert.match(
+    main,
+    /const api = window\.kairosDesktop\?\.appState;[\s\S]*?await api\.save\(withMarker\(before\)\);[\s\S]*?await delay\(500\);[\s\S]*?await api\.save\(withMarker\(await api\.get\(\)\)\);[\s\S]*?const after = await api\.get\(\);/,
+    "renderer smoke should exercise the desktop appState save/get bridge with a settled persistence check"
+  );
+  assert.match(
+    main,
+    /const smokeMusicFile = process\.env\.KAIROS_SMOKE_MUSIC_FILE \|\| "";[\s\S]*?const api = window\.kairosDesktop\?\.music;[\s\S]*?await api\.addFiles\(\[musicFile\]\);[\s\S]*?await api\.updatePlayback/,
+    "renderer smoke should exercise local music import and playback persistence"
+  );
+  assert.match(
+    main,
+    /const result = await verifySmokeRenderer\(mainWindow\);[\s\S]*?Kairos smoke test loaded main window\.[\s\S]*?JSON\.stringify\(result\.checks\)/,
+    "smoke mode should fail if core renderer selectors are missing"
+  );
+  assert.match(
+    main,
+    /await createWindow\(\);if\(!smokeTest\)createPetWindow\(\);/,
+    "app startup should await restored main window creation before spawning companion windows in normal desktop mode"
+  );
+});
+
+test("desktop shell enforces single instance and external link safety", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+
+  assert.match(
+    main,
+    /if \(process\.env\.KAIROS_USER_DATA_DIR\) app\.setPath\("userData", process\.env\.KAIROS_USER_DATA_DIR\);[\s\S]*?function acquireUserDataProcessLock\(\) \{[\s\S]*?kairos-instance\.lock[\s\S]*?isPidRunning\(existingPid\)[\s\S]*?const hasUserDataProcessLock = acquireUserDataProcessLock\(\);[\s\S]*?const hasSingleInstanceLock = hasUserDataProcessLock && app\.requestSingleInstanceLock\(\{ userDataDir: app\.getPath\("userData"\) \}\);[\s\S]*?if \(!hasUserDataProcessLock \|\| !hasSingleInstanceLock\) \{[\s\S]*?app\.quit\(\);[\s\S]*?app\.exit\(0\);[\s\S]*?\}/,
+    "desktop app should set the final userData path before requesting single-instance locks and quit duplicate processes"
+  );
+  assert.match(
+    main,
+    /function focusMainWindow\(\) \{[\s\S]*?mainWindow\.restore\(\);[\s\S]*?mainWindow\.show\(\);[\s\S]*?mainWindow\.focus\(\);[\s\S]*?\}/,
+    "second launches should restore and focus the existing main window"
+  );
+  assert.match(
+    main,
+    /app\.on\("second-instance", \(\) => \{ focusMainWindow\(\); \}\);/,
+    "single-instance second launch should be handled explicitly"
+  );
+  assert.match(
+    main,
+    /function protectAppNavigation\(win\) \{[\s\S]*?setWindowOpenHandler\(\(\{ url \}\) => \{[\s\S]*?shell\.openExternal\(url\)[\s\S]*?return \{ action: "deny" \};[\s\S]*?will-navigate", \(event, url\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?shell\.openExternal\(target\)/,
+    "external links should open in the system browser instead of navigating the app shell"
+  );
+  assert.match(main, /protectAppNavigation\(mainWindow\);/, "main window should receive external navigation protection");
+  assert.match(main, /protectAppNavigation\(aiChatWindow\);/, "AI chat window should receive external navigation protection");
+  assert.match(main, /protectAppNavigation\(petWindow\);/, "pet window should receive external navigation protection");
+  assert.match(
+    main,
+    /app\.on\("activate", \(\) => \{ if \(!focusMainWindow\(\)\) createWindow\(\)\.catch/,
+    "macOS activate should refocus or recreate the main window"
+  );
+});
+
+test("reminders remain local and do not require AI availability", async () => {
+  const reminderScript = await fs.readFile(path.join(root, "app/reminder-feature.js"), "utf8");
+  const reminderCore = await fs.readFile(path.join(root, "app/reminder-core.cjs"), "utf8");
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+  const shellScript = await fs.readFile(path.join(root, "app/stitch-shell.js"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload.cjs"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+
+  assert.match(
+    reminderScript,
+    /const KEY='kairos-mvp-state'/,
+    "reminders should keep using the shared local application state key"
+  );
+  assert.match(
+    reminderScript,
+    /const load=\(\)=>\{try\{return \{\.\.\.\{schedules:\[\],reminders:\{\}\},\.\.\.JSON\.parse\(localStorage\.getItem\(KEY\)\|\|'\{\}'\)\}\}catch\{return\{schedules:\[\],reminders:\{\}\}\}\}/,
+    "reminders should load schedules and reminder metadata from localStorage without a provider dependency"
+  );
+  assert.match(
+    reminderScript,
+    /function save\(\)\{localStorage\.setItem\(KEY,JSON\.stringify\(state\)\);window\.kairosDesktop\?\.appState\.save\(state\)\.catch\(console\.error\)\}/,
+    "reminder changes should persist locally and only optionally mirror to desktop app state"
+  );
+  assert.match(
+    reminderScript,
+    /const core=window\.KairosReminderCore\|\|/,
+    "reminder UI should use the shared testable reminder core when it is loaded"
+  );
+  assert.match(
+    reminderCore,
+    /function classifyReminder\(item = \{\}, meta = \{\}, now = Date\.now\(\), graceMs = GRACE_MS, checkMs = CHECK_MS\) \{[\s\S]*?shouldFireReminder[\s\S]*?missed: isMissedReminder/,
+    "due and missed reminder classification should live in a shared testable core"
+  );
+  assert.match(
+    reminderCore,
+    /function defaultReminderForType\(type, settings = \{\}\) \{[\s\S]*?settings\?\.defaultByType\?\.\[type\] \?\? settings\?\.\[type\][\s\S]*?DEFAULT_REMINDERS\[type\] \|\| "none"/,
+    "default reminder rules should accept user settings while keeping built-in fallbacks"
+  );
+  assert.match(
+    reminderScript,
+    /function check\(\)\{state=load\(\);[\s\S]*?core\.classifyReminder\(item,m,now,GRACE,CHECK\)[\s\S]*?state\.reminders\[item\.id\]=\{\.\.\.m,firedAt:now,snoozedUntil:null\};notify\(item,result\.missed\)/,
+    "due reminders should be triggered by local schedule data through the shared core"
+  );
+  assert.match(
+    reminderScript,
+    /const snoozeMinutes=\(\)=>\{const value=Number\(readSettings\(\)\?\.reminders\?\.snoozeMinutes\|\|10\);[\s\S]*?Date\.now\(\)\+snoozeMinutes\(\)\*60000/,
+    "reminder snooze duration should be configurable from saved settings"
+  );
+  assert.match(
+    shellScript,
+    /const loadReminderFeature=\(\)=>\{[\s\S]*?reminderFeatureScript\.src='reminder-feature\.js\?v=7';[\s\S]*?\};[\s\S]*?reminderCoreScript\.src='reminder-core\.cjs\?v=1';[\s\S]*?reminderCoreScript\.onload=loadReminderFeature;/,
+    "the shell should load reminder core before the UI reminder feature"
+  );
+  assert.match(
+    reminderScript,
+    /window\.dispatchEvent\(new CustomEvent\('kairos:reminder',\{detail:\{item,missed\}\}\)\)/,
+    "reminders should emit a local browser event for UI integrations such as FireFly"
+  );
+  assert.match(reminderScript, /kairosDesktop\?\.pet\?\.react\(detail\.missed\?'sleepy':'reminder'/, "reminders should drive the desktop companion state");
+  assert.match(reminderScript, /kairosDesktop\.appState\.get\(\)\.then\(next=>\{state=next\|\|state;start\(\)\}\)/, "reminders should hydrate desktop state before their first persistence check");
+  assert.match(reminderScript, /const desktopNotificationsEnabled=\(\)=>readSettings\(\)\?\.reminders\?\.desktopNotifications!==false/, "desktop notifications should default on unless explicitly disabled");
+  assert.match(reminderScript, /if\(desktopNotificationsEnabled\(\)\)window\.kairosDesktop\?\.reminders\?\.notify\?\.\(\{scheduleId:item\.id,title:item\.title,note:item\.notes\|\|timeText\(item\),missed\}\)/, "reminders should request a native desktop notification only when the preference is enabled");
+  assert.match(preload, /reminders: Object\.freeze\(\{[\s\S]*?notify: \(input = \{\}\) => ipcRenderer\.invoke\("reminder:notify", input\)/, "preload should expose a narrow native reminder notification API");
+  assert.match(main, /Notification\.isSupported\(\)[\s\S]*?new Notification\([\s\S]*?notification\.on\("click", \(\) => sendShellCommand\("schedule", \{ scheduleId:/, "main process should use a supported native notification and route its click to the schedule view");
+  assert.match(main, /ipcMain\.handle\("reminder:notify", \(event, input = \{\}\) => \{[\s\S]*?event\.sender !== mainWindow\?\.webContents/, "only the main workspace renderer should be allowed to show native reminders");
+  assert.match(shellScript, /type === 'schedule' && typeof command\.scheduleId === 'string'[\s\S]*?type:'kairos:open-schedule'/, "notification schedule commands should forward the schedule id into the embedded schedule page");
+  assert.match(scheduleScript, /message\.type==='kairos:open-schedule'[\s\S]*?event\.source===window\.top[\s\S]*?open\(state\.schedules\.find\(item=>item\.id===message\.id\)\)/, "embedded schedule page should accept schedule-open commands only from its shell");
+  assert.doesNotMatch(
+    reminderScript,
+    /OPENAI_API_KEY|ARK_API_KEY|FIRECRAWL_API_KEY|providers?|langchain|aiData|ToolRuntime/i,
+    "reminder basics should not depend on AI provider configuration or AI stores"
+  );
+});
+
+test("desktop pet keeps the restored original illustration and menu copy", async () => {
+  const petPage = await fs.readFile(path.join(root, "app/chibi_pet.html"), "utf8");
+
+  assert.match(petPage, /src="data:image\/png;base64,/, "the companion should keep using the restored embedded original illustration");
+  assert.match(petPage, /😳 与Ta对话/, "the restored context menu should retain its original chat copy");
+  assert.match(petPage, /🌸 隐藏桌宠/, "the restored context menu should retain its original hide copy");
+  assert.match(petPage, /#pet-img\.idle\s*\{\s*animation:\s*float/, "the original idle animation should remain available");
+});
+
+test("desktop application menu routes only approved workspace commands", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload.cjs"), "utf8");
+  const shellScript = await fs.readFile(path.join(root, "app/stitch-shell.js"), "utf8");
+
+  assert.match(main, /import \{[\s\S]*?Menu[\s\S]*?\} from "electron"/, "main process should use Electron's native application menu");
+  assert.match(main, /const SHELL_VIEWS = new Set\(\["calendar", "schedule", "habits", "notes", "music", "settings"\]\);/, "desktop menu commands should be limited to known workspace views");
+  assert.match(main, /label: "日历", accelerator: "Alt\+1"/, "application menu should expose a calendar shortcut");
+  assert.match(main, /label: "音乐", accelerator: "Alt\+5"/, "application menu should expose a music shortcut");
+  assert.match(main, /label: "设置", accelerator: "CommandOrControl\+,"/, "application menu should expose a settings shortcut");
+  assert.match(main, /label: "打开 AI 对话", accelerator: "CommandOrControl\+Shift\+A"/, "application menu should expose an AI shortcut");
+  assert.match(main, /Menu\.setApplicationMenu\(buildApplicationMenu\(\)\)/, "native menu should be installed when Electron is ready");
+  assert.match(preload, /onShellCommand: \(handler\) => \{[\s\S]*?ipcRenderer\.on\("shell:command", listener\)[\s\S]*?removeListener\("shell:command", listener\)/, "preload should expose a disposable shell command listener");
+  assert.match(shellScript, /onShellCommand\?\.\(command => \{[\s\S]*?type === 'settings'[\s\S]*?KairosSettingsFeature\?\.open\?\.[\s\S]*?\['calendar', 'schedule', 'habits', 'notes', 'music'\]\.includes\(type\)/, "shell commands should reuse the settings dialog and route only supported SPA views");
+});
+
+test("settings expose configurable reminder defaults", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/settings-feature.js"), "utf8");
+  const scheduleScript = await fs.readFile(path.join(root, "app/schedule-feature.js"), "utf8");
+
+  assert.match(
+    settingsScript,
+    /reminders: \{ deadline: '1440', event: '30', match: '30', snoozeMinutes: '10', desktopNotifications: true \}/,
+    "settings defaults should include reminder rules"
+  );
+  assert.match(
+    settingsScript,
+    /\['reminders', 'notifications', 'Reminders'\]/,
+    "settings navigation should expose a Reminders panel"
+  );
+  assert.match(
+    settingsScript,
+    /const remindersMarkup = \(\) => sectionView\('reminders', 'Reminders'[\s\S]*?Deadline default[\s\S]*?Event default[\s\S]*?Match default[\s\S]*?Snooze duration[\s\S]*?Windows notifications[\s\S]*?reminders\.desktopNotifications/,
+    "Reminders settings should let the user configure default offsets, snooze duration, and native notifications"
+  );
+  assert.match(
+    scheduleScript,
+    /const defaultReminderForType=type=>window\.KairosReminderCore\?\.defaultReminderForType\?\.\(type,readSettings\(\)\?\.reminders\)[\s\S]*?f\.type\.onchange=\(\)=>\{if\(f\.reminder\.value==='none'&&!editing\)f\.reminder\.value=defaultReminderForType\(f\.type\.value\)\}/,
+    "new schedule forms should apply the saved reminder default for the selected type"
+  );
+  assert.match(
+    scheduleScript,
+    /reminder:defaultReminderForType\(type\)/,
+    "new schedules should start with the configured reminder default"
+  );
+});
+
+test("settings expose configurable habit backfill defaults", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/settings-feature.js"), "utf8");
+
+  assert.match(
+    settingsScript,
+    /habits: \{ allowBackfillDefault: false \}/,
+    "habit backfill should be disabled by default"
+  );
+  assert.match(
+    settingsScript,
+    /\['habits', 'potted_plant', 'Habits'\]/,
+    "settings navigation should expose a Habits panel"
+  );
+  assert.match(
+    settingsScript,
+    /const habitsMarkup = \(\) => sectionView\('habits', 'Habits'[\s\S]*?Allow past-date check-ins for new habits[\s\S]*?habits\.allowBackfillDefault[\s\S]*?Existing habits keep their own backfill setting/,
+    "Habit settings should configure the backfill default for newly created habits"
+  );
+});
+
+test("settings can reduce motion across shell and embedded pages", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/settings-feature.js"), "utf8");
+  const shellScript = await fs.readFile(path.join(root, "app/stitch-shell.js"), "utf8");
+
+  assert.match(settingsScript, /accessibility: \{ reduceMotion: false \}/, "reduce motion should default off for existing users");
+  assert.match(settingsScript, /accessibility: \{ \.\.\.defaults\.accessibility, \.\.\.\(input\?\.accessibility \|\| \{\}\) \}/, "legacy settings should merge the accessibility preference safely");
+  assert.match(settingsScript, /const applyMotionPreference = \(\) => document\.documentElement\.classList\.toggle\('kairos-reduce-motion', state\.accessibility\.reduceMotion === true\)/, "settings should apply the saved motion preference to the current document");
+  assert.match(settingsScript, /kairosReduceMotion', 'Reduce motion', state\.accessibility\.reduceMotion, 'accessibility\.reduceMotion'/, "Appearance settings should expose a reduce motion toggle");
+  assert.match(shellScript, /html\.kairos-reduce-motion \*,html\.kairos-reduce-motion \*::before,html\.kairos-reduce-motion \*::after\{animation-duration:\.001ms!important/, "manual reduce motion should neutralize animations and transitions globally");
+  assert.match(shellScript, /message\?\.type === 'kairos:motion-preference' && event\.source === window\.top/, "embedded pages should only accept motion preferences from their shell");
+  assert.match(shellScript, /const syncMotionPreference = frame => frame\?\.contentWindow\?\.postMessage\(\{ type:'kairos:motion-preference'/, "shell should propagate the preference to embedded pages");
+  assert.match(shellScript, /window\.addEventListener\('kairos:settings-changed', event => \{[\s\S]*?spaFrames\.forEach\(syncMotionPreference\)/, "changing the setting should update every mounted embedded page");
+});
+
+test("package metadata defines Windows desktop distribution", async () => {
+  const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const checklist = await fs.readFile(path.join(root, "docs/WINDOWS-RELEASE-CHECKLIST.md"), "utf8");
+
+  assert.equal(pkg.productName, "Kairos");
+  assert.equal(pkg.build.appId, "app.kairos.desktop");
+  assert.match(main, /if \(process\.platform === "win32"\) app\.setAppUserModelId\("app\.kairos\.desktop"\);/, "Windows notifications and shortcuts should use the packaged Kairos app identity");
+  assert.equal(pkg.main, "electron/main.js");
+  assert.equal(pkg.scripts.start, "node scripts/kairos-dev.cjs");
+  assert.equal(pkg.scripts.dev, "node scripts/kairos-dev.cjs");
+  assert.equal(pkg.scripts.doctor, "node scripts/kairos-doctor.cjs");
+  assert.equal(pkg.scripts.pack, "electron-builder --dir");
+  assert.equal(pkg.scripts.dist, "electron-builder --win");
+  assert.equal(pkg.scripts["dist:win"], "electron-builder --win nsis portable");
+  assert.equal(pkg.scripts["audit:app-state"], "node electron/app-state-audit.js");
+  assert.equal(pkg.scripts["audit:desktop-data"], "node electron/desktop-data-audit.js");
+  assert.match(pkg.scripts.check, /node --check scripts\/kairos-dev\.cjs/);
+  assert.match(pkg.scripts.check, /node --check scripts\/kairos-doctor\.cjs/);
+  assert.match(pkg.scripts.check, /node --check electron\/app-database\.js/);
+  assert.match(pkg.scripts.check, /node --check electron\/app-state-audit\.js/);
+  assert.match(pkg.scripts.check, /node --check electron\/desktop-data-audit\.js/);
+  assert.equal(pkg.scripts["verify:dist"], "node --test electron/dist-artifacts.verify.js");
+  assert.equal(pkg.scripts["verify:installer"], "node electron/installer-smoke.js");
+  assert.equal(pkg.scripts["release:manifest"], "node electron/release-manifest.js");
+  assert.equal(pkg.scripts["verify:release"], "pnpm check && pnpm dist:win && pnpm release:manifest && pnpm verify:dist");
+  assert.equal(pkg.scripts["verify:release:full"], "pnpm verify:release && pnpm verify:installer");
+  assert.equal(pkg.build.appId, "app.kairos.desktop");
+  assert.equal(pkg.build.artifactName, "${productName}-${version}-${os}-${arch}.${ext}");
+  assert.equal(pkg.build.directories.output, "release");
+  assert.equal(pkg.build.win.icon, "app/assets/netease-format.ico");
+  assert.deepEqual(pkg.build.win.target.map(item => item.target), ["nsis", "portable"]);
+  assert.equal(pkg.build.nsis.artifactName, "${productName}-${version}-${os}-${arch}-setup.${ext}");
+  assert.equal(pkg.build.portable.artifactName, "${productName}-${version}-${os}-${arch}-portable.${ext}");
+  assert.equal(pkg.build.nsis.oneClick, false);
+  assert.equal(pkg.build.nsis.deleteAppDataOnUninstall, false);
+  assert.ok(pkg.build.files.includes("app/**/*"), "renderer assets should be packaged");
+  assert.ok(pkg.build.files.includes("electron/**/*"), "main process files should be packaged");
+  assert.ok(pkg.build.files.includes("!electron/app-state-audit.js"), "developer audit CLI should stay out of the runtime package");
+  assert.ok(pkg.build.files.includes("!electron/desktop-data-audit.js"), "developer desktop data audit CLI should stay out of the runtime package");
+  assert.ok(pkg.build.files.includes("!.env*"), "local secret files must not be packaged");
+  assert.ok(pkg.build.files.includes("!docs{,/**}"), "project docs should stay out of the runtime package");
+  assert.ok(pkg.devDependencies["electron-builder"], "electron-builder should be available for distribution builds");
+  assert.match(checklist, /pnpm audit:app-state[\s\S]*?退出码为 `0`[\s\S]*?退出码为 `2`[\s\S]*?退出码为 `1`/, "release checklist should document app-state audit usage and exit codes");
+});
+
+test("development launch scripts provide local runtime diagnostics", async () => {
+  const cmd = await fs.readFile(path.join(root, "start-kairos.cmd"), "utf8");
+  const ps1 = await fs.readFile(path.join(root, "start-kairos.ps1"), "utf8");
+  const devScript = await fs.readFile(path.join(root, "scripts/kairos-dev.cjs"), "utf8");
+  const doctorScript = await fs.readFile(path.join(root, "scripts/kairos-doctor.cjs"), "utf8");
+
+  assert.match(cmd, /scripts\\kairos-dev\.cjs/, "cmd launcher should delegate to the shared dev launcher");
+  assert.match(cmd, /D:\\nodejs\\node\.exe/, "cmd launcher should use the known local Node install when PATH is missing");
+  assert.match(cmd, /scripts\\kairos-doctor\.cjs/, "cmd launcher should suggest the doctor script after failures");
+  assert.match(ps1, /scripts\\kairos-dev\.cjs/, "PowerShell launcher should delegate to the shared dev launcher");
+  assert.match(ps1, /D:\\nodejs\\node\.exe/, "PowerShell launcher should use the known local Node install when PATH is missing");
+  assert.match(ps1, /scripts\\kairos-doctor\.cjs/, "PowerShell launcher should suggest the doctor script after failures");
+  assert.match(devScript, /node_modules", "\.bin"[\s\S]*?electron\.cmd/, "dev launcher should prefer the local package binary");
+  assert.match(devScript, /node_modules", "electron", "dist"[\s\S]*?electron\.exe/, "dev launcher should still support the Electron executable fallback");
+  assert.match(devScript, /Kairos could not find the local Electron runtime[\s\S]*?pnpm install[\s\S]*?npm install/, "dev launcher should print install guidance instead of a raw spawn failure");
+  assert.match(doctorScript, /Kairos desktop environment[\s\S]*?npm[\s\S]*?pnpm[\s\S]*?Electron/, "doctor should report Node package manager and Electron paths");
+});
+
+test("distribution smoke verifies desktop userData health", async () => {
+  const verifier = await fs.readFile(path.join(root, "electron/dist-artifacts.verify.js"), "utf8");
+
+  assert.match(
+    verifier,
+    /import \{ auditDesktopDataDir \} from "\.\/desktop-data-audit\.js";/,
+    "distribution verifier should use the shared desktop data audit"
+  );
+  assert.match(
+    verifier,
+    /const audit = await auditDesktopDataDir\(userDataDir\);[\s\S]*?assert\.equal\(audit\.ok, true[\s\S]*?app-state\.json[\s\S]*?migration-ready/,
+    "distribution smoke should fail when generated userData is not migration-ready"
+  );
+  assert.match(
+    verifier,
+    /async function verifyPortableStartup\(executablePath\) \{[\s\S]*?KAIROS_SMOKE_STATE_MARKER: marker[\s\S]*?assertSmokePersistence\(result\);[\s\S]*?smoke-result-second\.json[\s\S]*?KAIROS_SMOKE_EXPECT_STATE_MARKER: "1"[\s\S]*?assertSmokePersistence\(restarted, \{ expectExisting: true \}\);/,
+    "portable smoke should verify persisted app-state music and AI data across a restart"
+  );
+});
+
+test("installer smoke verifies installed app single instance behavior", async () => {
+  const installerSmoke = await fs.readFile(path.join(root, "electron/installer-smoke.js"), "utf8");
+  const checklist = await fs.readFile(path.join(root, "docs/WINDOWS-RELEASE-CHECKLIST.md"), "utf8");
+
+  assert.match(
+    installerSmoke,
+    /async function assertSingleInstanceFocus\(executablePath, userDataDir\) \{[\s\S]*?spawn\(executablePath[\s\S]*?await waitForRunningProcess\(first, "first installed Kairos process"\)[\s\S]*?spawn\(executablePath[\s\S]*?await waitForExit\(second\)[\s\S]*?first installed Kairos process should remain running after second launch/,
+    "installer smoke should prove a second installed-app launch does not keep a second Kairos.exe process"
+  );
+  assert.match(
+    installerSmoke,
+    /console\.log\("Verifying installed Kairos single-instance behavior"\);[\s\S]*?await assertSingleInstanceFocus\(installedExe, path\.join\(userDataDir, "single-instance"\)\);/,
+    "installer smoke should run single-instance verification after installed app startup"
+  );
+  assert.match(
+    checklist,
+    /verify:installer[\s\S]*?重复启动聚焦/,
+    "release checklist should record installed single-instance coverage"
+  );
+});
+
+test("main process initializes the optional SQLite app database", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+
+  assert.match(
+    main,
+    /import \{ KairosAppDatabase \} from "\.\/app-database\.js";/,
+    "main process should import the desktop database layer"
+  );
+  assert.match(
+    main,
+    /appDatabase=new KairosAppDatabase\(path\.join\(userData,"kairos\.sqlite"\)\);await appDatabase\.initialize\(\);aiStore=new AiDataStore\(path\.join\(userData,"ai-data\.json"\),\{database:appDatabase\}\);appStateStore=new AppStateStore\(path\.join\(userData,"app-state\.json"\),\{database:appDatabase\}\)[\s\S]*?musicLibrary=new MusicLibrary\(\{statePath:path\.join\(userData,"music-state\.json"\),coverDir:path\.join\(userData,"music-covers"\),database:appDatabase\}\);neteaseService=new NeteaseApiService\(\{statePath:path\.join\(userData,"netease-api-state\.json"\),database:appDatabase\}\)/,
+    "main process should initialize SQLite in userData and mirror app-state plus auxiliary store writes"
+  );
+});
+
+test("main process restores auxiliary settings from SQLite snapshots", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const neteaseService = await fs.readFile(path.join(root, "electron/netease-api-service.js"), "utf8");
+
+  assert.match(
+    main,
+    /import \{ SettingsRepository \} from "\.\/settings-repository\.js";/,
+    "main process should use a dedicated repository for AI provider settings"
+  );
+  assert.match(
+    main,
+    /function settingsRepository\(\) \{ if \(!aiSettingsRepository\) aiSettingsRepository = new SettingsRepository\(\{ filePath: settingsPath\(\), defaults, normalize: normalizeSettings, database: appDatabase, storeKey: "ai-settings"[\s\S]*?async function readSettings\(\) \{ return settingsRepository\(\)\.read\(\); \}/,
+    "AI settings repository should rebuild ai-settings.json from its SQLite json_store snapshot"
+  );
+  assert.match(
+    neteaseService,
+    /this\.stateRepository = statePath \? new SettingsRepository\(\{[\s\S]*?storeKey: "netease-api-state"[\s\S]*?async initialize\(\) \{[\s\S]*?this\.cookie = \(await this\.stateRepository\.read\(\)\)\.cookie;/,
+    "NetEase login cookie should use the atomic SQLite-restorable state repository"
+  );
+  assert.match(
+    neteaseService,
+    /readDatabaseSnapshot\(\) \{\s*return this\.stateRepository\?\.readSnapshot\(\) \|\| null;/,
+    "NetEase service should expose its repository-backed SQLite snapshot"
+  );
+});
+
+test("settings preferences persist through desktop app state", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/settings-feature.js"), "utf8");
+
+  assert.match(
+    settingsScript,
+    /window\.kairosDesktop\?\.appState/,
+    "settings should use the desktop appState bridge when available"
+  );
+  assert.match(
+    settingsScript,
+    /await api\.save\(\{ \.\.\.desktopState, settings: value \}\);/,
+    "settings should be saved into the persistent app-state.json document"
+  );
+  assert.match(
+    settingsScript,
+    /localStorage\.setItem\(STORAGE_KEY, JSON\.stringify\(value\)\)/,
+    "settings should keep localStorage as a legacy/cache fallback"
+  );
+});
+
+test("settings music panel manages NetEase account and quality preferences", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/settings-feature.js"), "utf8");
+  const settingsCss = await fs.readFile(path.join(root, "app/settings-feature.css"), "utf8");
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const playerScript = await fs.readFile(path.join(root, "app/music-player.js"), "utf8");
+  const appReadme = await fs.readFile(path.join(root, "app/README.md"), "utf8");
+  const complianceDoc = await fs.readFile(path.join(root, "docs/NETEASE-COMPLIANCE.md"), "utf8");
+
+  assert.match(
+    settingsScript,
+    /music: \{ neteaseQuality: 'standard' \}/,
+    "settings defaults should include a NetEase streaming quality preference"
+  );
+  assert.match(
+    settingsScript,
+    /neteaseQuality: \[\['standard', 'Standard'\], \['higher', 'Higher'\], \['exhigh', 'Very high'\], \['lossless', 'Lossless'\]\]/,
+    "settings should expose supported NetEase quality levels"
+  );
+  assert.match(
+    settingsScript,
+    /data-netease-refresh[\s\S]*?Refresh account data[\s\S]*?data-netease-clear-cache[\s\S]*?Clear local cache[\s\S]*?data-netease-clear-session[\s\S]*?Clear session/,
+    "music settings should render account refresh cache clearing and clear-session actions"
+  );
+  assert.match(
+    settingsScript,
+    /personal learning and daily planning only[\s\S]*?does not redistribute music content[\s\S]*?commercial public playback/,
+    "music settings should explain the first-version NetEase personal-use scope"
+  );
+  assert.match(
+    settingsScript,
+    /Scan with your own Netease Music account[\s\S]*?personal learning use only[\s\S]*?does not redistribute music content/,
+    "settings QR login dialog should remind the user of personal-account scope before login"
+  );
+  assert.match(
+    musicHtml,
+    /class="netease-login-scope"[\s\S]*?Use your own Netease Music account for personal learning only[\s\S]*?does not redistribute music content[\s\S]*?commercial public playback/,
+    "music page login gate should show the NetEase personal-use scope before login"
+  );
+  assert.match(
+    settingsCss,
+    /\.kairos-netease-scope\{[\s\S]*?background:#fff8f4[\s\S]*?font:700 12px\/1\.45/,
+    "settings scope notice should have dedicated readable styling"
+  );
+  assert.match(
+    settingsScript,
+    /data-netease-refresh[\s\S]*?window\.kairosDesktop\?\.netease\?\.getStatus\?\.\(\)[\s\S]*?Netease account refreshed/,
+    "account refresh should reload NetEase status through the desktop bridge"
+  );
+  assert.match(
+    settingsScript,
+    /data-netease-clear-session[\s\S]*?Clear Netease session\?[\s\S]*?window\.kairosDesktop\?\.netease\?\.logout\?\.\(\)[\s\S]*?Netease session cleared/,
+    "clear session should remove the saved NetEase login cookie without touching local music"
+  );
+  assert.match(
+    settingsScript,
+    /const clearNeteaseLocalCache = \(\) => \{[\s\S]*?localStorage\.removeItem\('kairos-netease-playback-state'\)[\s\S]*?kairos-music-last-source'[\s\S]*?kairos:netease-cache-cleared/,
+    "settings should clear NetEase local playback cache without logging out"
+  );
+  assert.match(
+    settingsScript,
+    /data-netease-clear-cache[\s\S]*?Clear Netease local cache\?[\s\S]*?clearNeteaseLocalCache\(\)[\s\S]*?Netease local cache cleared/,
+    "settings should expose a confirmed NetEase local cache cleanup action"
+  );
+  assert.match(
+    settingsCss,
+    /\.kairos-netease-tools\{[\s\S]*?\.kairos-netease-tools button:not\(:disabled\):hover/,
+    "NetEase account tools should have dedicated desktop settings styles"
+  );
+  assert.match(
+    musicHtml,
+    /const getNeteaseQualityPreference = \(\) => \{[\s\S]*?settings\?\.music\?\.neteaseQuality[\s\S]*?\['standard', 'higher', 'exhigh', 'lossless'\]/,
+    "music page should read the saved NetEase quality preference"
+  );
+  assert.match(
+    musicHtml,
+    /api\.playSong\(\{ id: song\.id, neteaseId: song\.neteaseId, level: getNeteaseQualityPreference\(\) \}\)/,
+    "NetEase row playback should pass the selected quality level"
+  );
+  assert.match(
+    playerScript,
+    /const getNeteaseQualityPreference = \(\) => \{[\s\S]*?settings\?\.music\?\.neteaseQuality[\s\S]*?return \['standard','higher','exhigh','lossless'\]\.includes\(value\) \? value : 'standard';/,
+    "shared player URL refresh should read the selected NetEase quality level"
+  );
+  assert.match(
+    playerScript,
+    /api\.playSong\(\{ id: track\.id, neteaseId: track\.neteaseId, level: getNeteaseQualityPreference\(\) \}\)/,
+    "shared player URL refresh should pass the selected quality level"
+  );
+  assert.match(
+    playerScript,
+    /window\.addEventListener\('kairos:netease-cache-cleared', clearNeteasePlayback\)/,
+    "shared player should react to settings-driven NetEase cache clearing"
+  );
+  assert.match(
+    appReadme,
+    /Netease Music integration is limited to the user's own authorized account[\s\S]*?does not redistribute music content[\s\S]*?NETEASE-COMPLIANCE\.md/,
+    "app README should point maintainers to the NetEase compliance scope"
+  );
+  assert.match(
+    complianceDoc,
+    /Personal authorization only[\s\S]*?No music content redistribution[\s\S]*?No commercial public playback[\s\S]*?No bypass of Netease rights/,
+    "NetEase compliance doc should define allowed and out-of-scope behavior"
+  );
+});
+
+test("settings data panel manages app-state backups", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/settings-feature.js"), "utf8");
+  const settingsCss = await fs.readFile(path.join(root, "app/settings-feature.css"), "utf8");
+
+  assert.match(
+    settingsScript,
+    /let appBackups = \[\];[\s\S]*?let backupPreview = null;[\s\S]*?let appAudit = null;/,
+    "settings should keep backup list preview and migration audit state"
+  );
+  assert.match(
+    settingsScript,
+    /const dataMarkup = \(\) => \{[\s\S]*?window\.kairosDesktop\?\.appState[\s\S]*?data-import-app-state[\s\S]*?data-export-app-state[\s\S]*?data-refresh-backups[\s\S]*?data-preview-backup[\s\S]*?data-restore-backup/,
+    "Data settings panel should render import export refresh preview and restore controls"
+  );
+  assert.match(
+    settingsScript,
+    /Migration Audit[\s\S]*?auditSummary\(appAudit\)[\s\S]*?data-run-app-audit[\s\S]*?auditIssueList\(appAudit\)/,
+    "Data settings panel should render migration audit controls and results"
+  );
+  assert.match(
+    settingsScript,
+    /window\.kairosDesktop\.appState\?\.listBackups \? window\.kairosDesktop\.appState\.listBackups\(\)\.catch\(\(\) => \[\]\)[\s\S]*?window\.kairosDesktop\.appState\?\.audit \? window\.kairosDesktop\.appState\.audit\(\)\.catch\(\(\) => null\)/,
+    "settings refresh should load managed backups and migration audit from the desktop bridge"
+  );
+  assert.match(
+    settingsScript,
+    /data-run-app-audit[\s\S]*?window\.kairosDesktop\?\.appState\?\.audit\?\.\(\)[\s\S]*?flashSaved\('App data audited'\)/,
+    "settings should let the user refresh the app-state migration audit"
+  );
+  assert.match(
+    settingsScript,
+    /data-restore-backup[\s\S]*?confirmAction\(\{ title: 'Restore app-state backup\?'[\s\S]*?window\.kairosDesktop\?\.appState\?\.restoreBackup\?\.\(button\.dataset\.restoreBackup\)/,
+    "restoring a backup should require confirmation and use the constrained appState bridge"
+  );
+  assert.match(
+    settingsScript,
+    /data-export-app-state[\s\S]*?window\.kairosDesktop\?\.appState\?\.exportCurrent\?\.\(\)[\s\S]*?flashSaved\('App data exported'\)/,
+    "exporting app state should use the desktop save dialog bridge and report success"
+  );
+  assert.match(
+    settingsScript,
+    /data-import-app-state[\s\S]*?confirmAction\(\{ title: 'Import app data\?'[\s\S]*?window\.kairosDesktop\?\.appState\?\.importJson\?\.\(\)[\s\S]*?flashSaved\('App data imported'\)/,
+    "importing app state should require confirmation and use the desktop open dialog bridge"
+  );
+  assert.match(
+    settingsCss,
+    /\.kairos-backup-list[\s\S]*?\.kairos-backup-row[\s\S]*?\.kairos-backup-preview[\s\S]*?\.kairos-audit-list[\s\S]*?\.kairos-audit-ok/,
+    "backup and audit management UI should have dedicated layout styles"
+  );
+});
+
+test("desktop app state exposes constrained backup management", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload.cjs"), "utf8");
+  const appState = await fs.readFile(path.join(root, "electron/app-state.js"), "utf8");
+
+  assert.match(
+    appState,
+    /function assertBackupName\(name\) \{[\s\S]*?value !== path\.basename\(value\)[\s\S]*?\^app-state-v\\d\+-\.\+\\\.json\$[\s\S]*?invalid_backup_path/,
+    "app-state backup names should reject traversal and non-backup filenames"
+  );
+  assert.match(
+    appState,
+    /async listBackups\(\) \{[\s\S]*?await fs\.readdir\(this\.backupDir\(\)\)[\s\S]*?\^app-state-v\\d\+-\.\+\\\.json\$[\s\S]*?sort\(\(a, b\) => backupSortValue\(b\.name\)/,
+    "app-state backups should be listed only from the managed backups directory"
+  );
+  assert.match(
+    appState,
+    /backupPath\(name\) \{ return path\.join\(this\.backupDir\(\), assertBackupName\(name\)\); \}[\s\S]*?async readBackup\(name\) \{[\s\S]*?const resolved = path\.resolve\(file\);[\s\S]*?invalid_backup_path/,
+    "backup reads should constrain names to managed backup files instead of arbitrary paths"
+  );
+  assert.match(
+    appState,
+    /async restoreBackup\(name\) \{[\s\S]*?const raw = await this\.readBackup\(name\);[\s\S]*?const currentBackup = await this\.backupCurrent\("before-restore"\);[\s\S]*?last_restore_backup: currentBackup[\s\S]*?await this\.write\(restored\);/,
+    "backup restore should preserve the current app-state before overwriting it"
+  );
+  assert.match(
+    appState,
+    /export function auditAppState\(input = \{\}\) \{[\s\S]*?const state = normalize\(input\);[\s\S]*?summary = \{[\s\S]*?schedules: state\.schedules\.length[\s\S]*?habits: state\.habits\.length[\s\S]*?issues[\s\S]*?duplicate_ids[\s\S]*?invalid_schedule_type/,
+    "app-state should expose a migration readiness audit with counts and integrity issues"
+  );
+  assert.match(
+    main,
+    /ipcMain\.handle\("app:audit",async\(\)=>auditAppState\(await appStateStore\.read\(\)\)\);[\s\S]*?ipcMain\.handle\("app:list-backups",\(\)=>appStateStore\.listBackups\(\)\);[\s\S]*?ipcMain\.handle\("app:read-backup",\(_event,name\)=>appStateStore\.readBackup\(name\)\);[\s\S]*?ipcMain\.handle\("app:restore-backup",async\(_event,name\)=>\{const state=await appStateStore\.restoreBackup\(name\);mainWindow\?\.webContents\.send\("app:state-changed",state\);return state;\}\);/,
+    "main process should expose read-only app-state audit and backup management"
+  );
+  assert.match(
+    preload,
+    /audit:\(\)=>ipcRenderer\.invoke\("app:audit"\),listBackups:\(\)=>ipcRenderer\.invoke\("app:list-backups"\),readBackup:\(name\)=>ipcRenderer\.invoke\("app:read-backup",name\),restoreBackup:\(name\)=>ipcRenderer\.invoke\("app:restore-backup",name\),exportCurrent:\(\)=>ipcRenderer\.invoke\("app:export-current"\),importJson:\(\)=>ipcRenderer\.invoke\("app:import-json"\)/,
+    "preload should expose audit and backup management only under the appState bridge"
+  );
+  assert.match(
+    main,
+    /ipcMain\.handle\("app:export-current",async\(\)=>\{const result=await dialog\.showSaveDialog\(mainWindow,[\s\S]*?await fs\.writeFile\(result\.filePath,JSON\.stringify\(state,null,2\),"utf8"\);return\{canceled:false,filePath:result\.filePath\};\}\);/,
+    "main process should export current app-state through a user selected save path"
+  );
+  assert.match(
+    main,
+    /ipcMain\.handle\("app:import-json",async\(\)=>\{const result=await dialog\.showOpenDialog\(mainWindow,[\s\S]*?const raw=JSON\.parse\(await fs\.readFile\(result\.filePaths\[0\],"utf8"\)\);const backupPath=await appStateStore\.backupCurrent\("before-import"\);const state=await appStateStore\.write\(\{\.\.\.raw,imported_from:result\.filePaths\[0\],imported_at:new Date\(\)\.toISOString\(\),last_import_backup:backupPath\}\);[\s\S]*?return\{canceled:false,state,filePath:result\.filePaths\[0\],backupPath\};/,
+    "main process should back up current app-state before importing JSON and broadcast changes"
+  );
+});
+
 test("NetEase playback stays isolated from local queue persistence", async () => {
   const playerScript = await fs.readFile(path.join(root, "app/music-player.js"), "utf8");
   const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
@@ -190,8 +1113,8 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
   );
   assert.match(
     playerScript,
-    /const neteaseDesktop = \(\) => \{[\s\S]*?window\.parent\?\.kairosDesktop\?\.netease[\s\S]*?\};[\s\S]*?const result = await api\.playSong\(\{ id: track\.id, neteaseId: track\.neteaseId \}\);/,
-    "shared player should refresh NetEase URLs directly when the Music page listener is not mounted"
+    /const neteaseDesktop = \(\) => \{[\s\S]*?window\.parent\?\.kairosDesktop\?\.netease[\s\S]*?\};[\s\S]*?const result = await api\.playSong\(\{ id: track\.id, neteaseId: track\.neteaseId, level: getNeteaseQualityPreference\(\) \}\);/,
+    "shared player should refresh NetEase URLs directly with the selected quality when the Music page listener is not mounted"
   );
   assert.match(
     playerScript,
@@ -433,6 +1356,57 @@ test("local liked buttons expose current liked state like NetEase rows", async (
     musicHtml,
     /aria-label="Like song"/,
     "local liked buttons should not keep the stale generic Like song label"
+  );
+});
+
+test("local music missing files are visible and cleanable", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload.cjs"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main.js"), "utf8");
+  const library = await fs.readFile(path.join(root, "electron/music-library.js"), "utf8");
+
+  assert.match(preload, /removeUnavailableTracks: \(\) => ipcRenderer\.invoke\("music:remove-unavailable-tracks"\)/, "preload should expose missing local music cleanup");
+  assert.match(main, /ipcMain\.handle\("music:remove-unavailable-tracks",\(\)=>musicLibrary\.removeUnavailableTracks\(\)\);/, "main should register missing local music cleanup");
+  assert.match(library, /async publicTrack\(track\) \{[\s\S]*?available[\s\S]*?unavailableReason[\s\S]*?missing_file/, "public music state should mark moved or deleted files");
+  assert.match(library, /async removeUnavailableTracks\(\) \{[\s\S]*?state\.queueTrackIds = state\.queueTrackIds\.filter[\s\S]*?delete state\.positions\[id\][\s\S]*?playlist\.trackIds = \(playlist\.trackIds \|\| \[\]\)\.filter/, "cleanup should remove missing files from queues, positions, and playlists");
+  assert.match(musicHtml, /const unavailable = track\.available === false;[\s\S]*?row\.classList\.toggle\('is-unavailable', unavailable\);[\s\S]*?File unavailable[\s\S]*?Missing/, "local playlist rows should visibly mark unavailable files");
+  assert.match(musicHtml, /if \(target\.available === false\) \{[\s\S]*?toast\.error\('File unavailable', 'The local file was moved or deleted\.'\);[\s\S]*?return;/, "local playlist playback should stop before trying to play a moved file");
+});
+
+test("local music import rejects empty audio files", async () => {
+  const library = await fs.readFile(path.join(root, "electron/music-library.js"), "utf8");
+  const services = await fs.readFile(path.join(root, "electron/services.test.js"), "utf8");
+
+  assert.match(library, /if \(stat\.size <= 0\) \{[\s\S]*?reason: "empty_file"[\s\S]*?continue;/, "local music import should reject empty supported-extension files");
+  assert.match(services, /music library rejects empty audio files without polluting the library[\s\S]*?empty_file[\s\S]*?queueTrackIds,\[\]/, "service tests should cover empty-file rejection without queue pollution");
+});
+
+test("local music metadata import is bounded and fault tolerant", async () => {
+  const library = await fs.readFile(path.join(root, "electron/music-library.js"), "utf8");
+  const services = await fs.readFile(path.join(root, "electron/services.test.js"), "utf8");
+
+  assert.match(library, /const MAX_EMBEDDED_COVER_BYTES = 5 \* 1024 \* 1024;/, "embedded cover extraction should have a bounded size cap");
+  assert.match(library, /metadata\.cover\?\.data\?\.length && metadata\.cover\.data\.length <= MAX_EMBEDDED_COVER_BYTES/, "oversized embedded covers should be skipped instead of copied into userData");
+  assert.match(services, /music library skips oversized embedded covers and survives malformed tags[\s\S]*?Huge Cover Track[\s\S]*?broken-tags[\s\S]*?covers\.length,0/, "service tests should cover oversized covers and malformed tag fallback");
+});
+
+test("local music import explains skipped files", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/music.html"), "utf8");
+
+  assert.match(
+    musicHtml,
+    /const rejectedImportReasonLabels = \{[\s\S]*?unsupported_format: 'unsupported format'[\s\S]*?empty_file: 'empty file'[\s\S]*?unreadable_file: 'unreadable file'[\s\S]*?\};/,
+    "local import UI should translate rejected file reasons into readable copy"
+  );
+  assert.match(
+    musicHtml,
+    /const summarizeRejectedImports = rejected => \{[\s\S]*?counts\.set\(label, \(counts\.get\(label\) \|\| 0\) \+ 1\);[\s\S]*?join\(', '\);[\s\S]*?\};/,
+    "local import UI should group skipped files by reason"
+  );
+  assert.match(
+    musicHtml,
+    /const rejectedSummary = summarizeRejectedImports\(result\.rejected\);[\s\S]*?skipped: \$\{rejectedSummary\}[\s\S]*?toast\.message\('Playlist imported', `\$\{result\.imported\?\.length \|\| 0\} imported, \$\{rejectedSummary\}`\);/,
+    "local import status and toast should include skipped-file reasons"
   );
 });
 
@@ -836,6 +1810,8 @@ test("NetEase sidebar account menu can log out", async () => {
   assert.match(main, /ipcMain\.handle\("netease:login-with-phone",\(_event,input\)=>neteaseService\.loginWithPhone\(input\)\);/, "main should register NetEase phone login");
   assert.match(main, /ipcMain\.handle\("netease:open-verification"[\s\S]*?shell\.openExternal\(target\)/, "main should open NetEase verification links through Electron shell");
   assert.match(service, /function neteaseFailure\(error, fallback\) \{[\s\S]*?needsVerification: Number\(code\) === 10004 \|\| Number\(code\) === 10003,[\s\S]*?retryAfter: Number\(code\) === 406 \? 60000 : 0/, "service should convert NetEase failures into normal UI responses");
+  assert.match(service, /export function readableNeteasePlaybackMessage\(data = \{\}, fallback = ""\)[\s\S]*?requires NetEase membership or purchase[\s\S]*?restricted by NetEase rights[\s\S]*?unavailable on NetEase/, "service should provide readable playback failure messages");
+  assert.match(service, /async playSong\(\{ id, neteaseId, level = DEFAULT_LEVEL \} = \{\}\) \{[\s\S]*?try \{[\s\S]*?readableNeteasePlaybackMessage\(urlData, "No playable URL returned for this song\."\)[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, "Unable to load playable NetEase URL\."\);/, "service should return readable NetEase playback failures instead of throwing raw API errors");
   assert.match(service, /async function withSuppressedNeteaseErrors\(task\)[\s\S]*?if \(args\[0\] === "\[ERR\]"\) return;/, "service should suppress noisy NetEase API internal error logs");
   assert.doesNotMatch(service, /\?{4,}/, "service should not contain question-mark fallback messages");
   assert.match(service, /async sendCaptcha\(\{ phone, countrycode = "86" \} = \{\}\) \{[\s\S]*?neteaseApi\.captcha_sent\(\{ phone: targetPhone, ctcode:/, "service should send NetEase SMS captcha");
@@ -984,18 +1960,18 @@ test("NetEase row playback builds a full visible queue like local playlists", as
   );
   assert.match(
     musicHtml,
-    /const getVisiblePlaylistTrackIds = \(\) => \{[\s\S]*?querySelectorAll\('tr\[data-track-id\]'\)[\s\S]*?\.filter\(row => !row\.hidden\)[\s\S]*?return visibleIds\.length \? visibleIds : model\.tracks\.map\(track => track\.id\);[\s\S]*?\};/,
-    "local playlist row playback should derive its queue from the currently visible filtered rows"
+    /const getVisiblePlaylistTrackIds = \(\) => \{[\s\S]*?querySelectorAll\('tr\[data-track-id\]'\)[\s\S]*?model\.tracks\.find\(track => track\.id === id\)\?\.available !== false[\s\S]*?return visibleIds\.length \? visibleIds : model\.tracks\.filter\(track => track\.available !== false\)\.map\(track => track\.id\);[\s\S]*?\};/,
+    "local playlist row playback should derive its queue from visible playable rows and skip missing files"
   );
   assert.match(
     musicHtml,
-    /const queueTrackIds = options\.queueTrackIds \|\| getVisiblePlaylistTrackIds\(\);[\s\S]*?notifyMusicPlayer\(localPlaybackDetail\(\{ queueTrackIds, currentTrackId: target\.id, playing: true/,
+    /const queueTrackIds = \(options\.queueTrackIds \|\| getVisiblePlaylistTrackIds\(\)\)\.filter\(id => model\.tracks\.find\(track => track\.id === id\)\?\.available !== false\);[\s\S]*?notifyMusicPlayer\(localPlaybackDetail\(\{ queueTrackIds, currentTrackId: target\.id, playing: true/,
     "local playlist row playback should use visible queue ids and include local metadata for the shared player"
   );
   assert.match(
     musicHtml,
-    /playPlaylistTrack\(first\.id, \{ forceSequence: true, queueTrackIds: model\.tracks\.map\(track => track\.id\) \}\);/,
-    "local playlist Play All should keep using the full playlist queue even when the table is filtered"
+    /const playable = model\.tracks\.filter\(track => track\.available !== false\);[\s\S]*?playPlaylistTrack\(first\.id, \{ forceSequence: true, queueTrackIds: playable\.map\(track => track\.id\) \}\);/,
+    "local playlist Play All should keep using the full playable playlist queue even when the table is filtered"
   );
   assert.match(
     musicHtml,

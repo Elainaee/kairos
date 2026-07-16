@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 const SUPPORTED_EXTENSIONS = new Set([".mp3", ".flac", ".wav", ".m4a", ".mp4", ".aac"]);
 const COVER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const MAX_EMBEDDED_COVER_BYTES = 5 * 1024 * 1024;
 const pathKey = value => path.resolve(String(value || "")).toLowerCase();
 const EMPTY = {
   version: 1,
@@ -209,9 +210,10 @@ async function replaceFileWithRetry(tempPath, targetPath) {
 }
 
 export class MusicLibrary {
-  constructor({ statePath, coverDir }) {
+  constructor({ statePath, coverDir, database }) {
     this.statePath = statePath;
     this.coverDir = coverDir;
+    this.database = database || null;
     this.queue = Promise.resolve();
   }
 
@@ -219,8 +221,26 @@ export class MusicLibrary {
     try {
       return normalize(JSON.parse(await fs.readFile(this.statePath, "utf8")));
     } catch {
-      return normalize();
+      return this.readDatabaseSnapshot() || normalize();
     }
+  }
+
+  readDatabaseSnapshot() {
+    try {
+      const snapshot = this.database?.readJsonStorePayload?.("music-state");
+      return snapshot ? normalize({ ...snapshot, recoveredFromSqlite: true }) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async ensureStateFile() {
+    try {
+      JSON.parse(await fs.readFile(this.statePath, "utf8"));
+      return;
+    } catch {}
+    const snapshot = this.readDatabaseSnapshot();
+    if (snapshot) await this.write({ ...snapshot, restoredFromSqliteAt: new Date().toISOString() });
   }
 
   async write(input) {
@@ -230,12 +250,14 @@ export class MusicLibrary {
       const temp = `${this.statePath}.${process.pid}.${Date.now()}.tmp`;
       await fs.writeFile(temp, JSON.stringify(state, null, 2), "utf8");
       await replaceFileWithRetry(temp, this.statePath);
+      if (this.database?.saveJsonStoreSnapshot) this.database.saveJsonStoreSnapshot("music-state", state, { tracks: state.tracks.length, playlists: state.playlists.length, queue: state.queueTrackIds.length, currentTrackId: state.currentTrackId || "", playing: state.playing, volume: state.volume });
       return state;
     });
     return this.queue;
   }
 
   async publicState() {
+    await this.ensureStateFile();
     const state = await this.read();
     const trackByPath = new Map(state.tracks.map(track => [pathKey(track.path), track]));
     return {
@@ -270,8 +292,20 @@ export class MusicLibrary {
   }
 
   async publicTrack(track) {
+    let available = true;
+    let unavailableReason = "";
+    try {
+      const stat = await fs.stat(track.path);
+      available = stat.isFile();
+      if (!available) unavailableReason = "not_file";
+    } catch {
+      available = false;
+      unavailableReason = "missing_file";
+    }
     return {
       ...track,
+      available,
+      unavailableReason,
       playUrl: pathToFileURL(track.path).href,
       coverUrl: track.coverPath ? pathToFileURL(track.coverPath).href : ""
     };
@@ -292,6 +326,10 @@ export class MusicLibrary {
       try {
         const stat = await fs.stat(resolved);
         if (!stat.isFile()) throw new Error("not_file");
+        if (stat.size <= 0) {
+          rejected.push({ path: resolved, reason: "empty_file" });
+          continue;
+        }
         const key = resolved.toLowerCase();
         if (existingByPath.has(key)) {
           added.push(existingByPath.get(key));
@@ -300,7 +338,7 @@ export class MusicLibrary {
         const metadata = await parseMetadata(resolved);
         const id = crypto.randomUUID();
         let coverPath = "";
-        if (metadata.cover?.data?.length) {
+        if (metadata.cover?.data?.length && metadata.cover.data.length <= MAX_EMBEDDED_COVER_BYTES) {
           await fs.mkdir(this.coverDir, { recursive: true });
           coverPath = path.join(this.coverDir, `${id}${coverExtension(metadata.cover.mimeType)}`);
           await fs.writeFile(coverPath, metadata.cover.data);
@@ -463,6 +501,34 @@ export class MusicLibrary {
     if (state.currentTrackId === id) state.currentTrackId = state.queueTrackIds[0] || null;
     await this.write(state);
     return this.publicState();
+  }
+
+  async removeUnavailableTracks() {
+    const state = await this.read();
+    const unavailableIds = new Set();
+    const unavailablePaths = new Set();
+    for (const track of state.tracks) {
+      try {
+        const stat = await fs.stat(track.path);
+        if (stat.isFile()) continue;
+      } catch {}
+      unavailableIds.add(track.id);
+      unavailablePaths.add(pathKey(track.path));
+    }
+    if (!unavailableIds.size) return { ...(await this.publicState()), removed: [] };
+    const removed = state.tracks.filter(track => unavailableIds.has(track.id));
+    state.tracks = state.tracks.filter(track => !unavailableIds.has(track.id));
+    state.queueTrackIds = state.queueTrackIds.filter(trackId => !unavailableIds.has(trackId));
+    for (const id of unavailableIds) delete state.positions[id];
+    if (state.currentTrackId && unavailableIds.has(state.currentTrackId)) state.currentTrackId = state.queueTrackIds[0] || null;
+    if (!state.currentTrackId) state.playing = false;
+    for (const playlist of state.playlists) {
+      playlist.trackIds = (playlist.trackIds || []).filter(trackId => !unavailableIds.has(trackId));
+      playlist.hiddenTrackPaths = (playlist.hiddenTrackPaths || []).filter(hiddenPath => !unavailablePaths.has(pathKey(hiddenPath)));
+      playlist.updatedAt = new Date().toISOString();
+    }
+    await this.write(state);
+    return { ...(await this.publicState()), removed: await Promise.all(removed.map(track => this.publicTrack(track))) };
   }
 
   async clear() {

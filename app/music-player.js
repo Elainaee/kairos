@@ -43,6 +43,15 @@
       if (window.kairosDesktop?.netease) return window.kairosDesktop.netease;
       try { return window.parent?.kairosDesktop?.netease || null; } catch { return null; }
     };
+    const getNeteaseQualityPreference = () => {
+      try {
+        const settings = window.KairosSettingsFeature?.read?.() || window.parent?.KairosSettingsFeature?.read?.() || JSON.parse(localStorage.getItem('kairos-settings') || '{}');
+        const value = settings?.music?.neteaseQuality || 'standard';
+        return ['standard','higher','exhigh','lossless'].includes(value) ? value : 'standard';
+      } catch {
+        return 'standard';
+      }
+    };
     const toast = (type, title, description='') => window.dispatchEvent(new CustomEvent('kairos:toast',{detail:{type,title,description}}));
     const isNeteaseId = id => String(id || '').startsWith('netease:');
     const isNeteaseUrlStale = track => {
@@ -109,6 +118,7 @@
       localStorage.removeItem(NETEASE_PLAYBACK_KEY);
       localStorage.setItem(LAST_SOURCE_KEY, 'empty');
     };
+    window.addEventListener('kairos:netease-cache-cleared', clearNeteasePlayback);
     const restoreLastPlaybackSource = nextState => {
       const lastSource = localStorage.getItem(LAST_SOURCE_KEY) || 'local';
       if (lastSource === 'empty') return { ...nextState, queueTrackIds: [], currentTrackId: null, playing: false };
@@ -162,30 +172,36 @@
       const api = neteaseDesktop();
       if (api?.playSong) {
         try {
-          const result = await api.playSong({ id: track.id, neteaseId: track.neteaseId });
+          const result = await api.playSong({ id: track.id, neteaseId: track.neteaseId, level: getNeteaseQualityPreference() });
           if (result?.ok && result.track?.playUrl) return result.track;
-        } catch {}
+          if (result?.message) throw new Error(result.message);
+        } catch (error) {
+          throw new Error(error?.message || 'Unable to refresh NetEase URL');
+        }
       }
-      return new Promise(resolve => {
+      const response = await new Promise(resolve => {
       const requestId = `netease-url-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       let done = false;
-      const finish = nextTrack => {
+      const finish = detail => {
         if (done) return;
         done = true;
         clearTimeout(timer);
         window.removeEventListener('kairos:netease-url-refreshed', onResponse);
-        resolve(nextTrack || null);
+        resolve(detail || {});
       };
       const onResponse = event => {
         if (event.detail?.requestId !== requestId) return;
-        finish(event.detail?.track || null);
+        finish(event.detail || {});
       };
-      const timer = setTimeout(() => finish(null), 9000);
+      const timer = setTimeout(() => finish({ error: 'Unable to refresh NetEase URL' }), 9000);
       window.addEventListener('kairos:netease-url-refreshed', onResponse);
       const detail = { requestId, track };
       window.dispatchEvent(new CustomEvent('kairos:netease-refresh-url', { detail }));
       if (window.parent && window.parent !== window) window.parent.dispatchEvent(new CustomEvent('kairos:netease-refresh-url', { detail }));
       });
+      if (response?.track?.playUrl) return response.track;
+      if (response?.error) throw new Error(response.error);
+      return null;
     };
     const readLocalPlayCounts = () => { try { return JSON.parse(localStorage.getItem(PLAY_COUNT_KEY)||'{}')||{}; } catch { return {}; } };
     const writeLocalPlayCount = id => {

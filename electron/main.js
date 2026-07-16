@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, screen, shell } from "electron";
 import path from "node:path";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -7,12 +8,14 @@ import { PROVIDERS, ProviderError, streamProviderRequest, testProvider } from ".
 import { AiDataStore } from "./data-store.js";
 import { AttachmentService } from "./attachments.js";
 import { ToolRuntime } from "./tool-runtime.js";
-import { AppStateStore, createAppAdapters } from "./app-state.js";
+import { AppStateStore, auditAppState, createAppAdapters } from "./app-state.js";
+import { KairosAppDatabase } from "./app-database.js";
 import { ContextManager } from "./context-manager.js";
 import { MusicLibrary } from "./music-library.js";
 import { runKairosAgent } from "./langchain-agent.js";
 import { createWebSearch } from "./web-search.js";
 import { NeteaseApiService } from "./netease-api-service.js";
+import { SettingsRepository } from "./settings-repository.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 dotenv.config({ path: path.join(root, ".env.local"), quiet: true });
@@ -27,16 +30,172 @@ let petMoveTimer = null;
 let petPendingDx = 0;
 let petPendingDy = 0;
 let petVisible = true;
-let aiStore, appStateStore, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService;
+let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, aiSettingsRepository;
+const smokeTest = process.env.KAIROS_SMOKE_TEST === "1";
+if (process.env.KAIROS_USER_DATA_DIR) app.setPath("userData", process.env.KAIROS_USER_DATA_DIR);
+if (process.platform === "win32") app.setAppUserModelId("app.kairos.desktop");
+function isPidRunning(pid) {
+  const value = Number(pid);
+  if (!Number.isInteger(value) || value <= 0) return false;
+  try {
+    process.kill(value, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function acquireUserDataProcessLock() {
+  const filePath = path.join(app.getPath("userData"), "kairos-instance.lock");
+  fsSync.mkdirSync(path.dirname(filePath), { recursive: true });
+  try {
+    fsSync.writeFileSync(filePath, String(process.pid), { flag: "wx" });
+  } catch (error) {
+    if (error?.code !== "EEXIST") return false;
+    const existingPid = Number(fsSync.readFileSync(filePath, "utf8"));
+    if (isPidRunning(existingPid)) return false;
+    fsSync.rmSync(filePath, { force: true });
+    fsSync.writeFileSync(filePath, String(process.pid), { flag: "wx" });
+  }
+  const cleanup = () => {
+    try {
+      if (Number(fsSync.readFileSync(filePath, "utf8")) === process.pid) fsSync.rmSync(filePath, { force: true });
+    } catch {}
+  };
+  process.once("exit", cleanup);
+  return true;
+}
+const hasUserDataProcessLock = acquireUserDataProcessLock();
+const hasSingleInstanceLock = hasUserDataProcessLock && app.requestSingleInstanceLock({ userDataDir: app.getPath("userData") });
+if (!hasUserDataProcessLock || !hasSingleInstanceLock) {
+  app.quit();
+  app.exit(0);
+}
+const smokeResultPath = process.env.KAIROS_SMOKE_RESULT_PATH || "";
+const smokeStateMarker = process.env.KAIROS_SMOKE_STATE_MARKER || "";
+const smokeExpectStateMarker = process.env.KAIROS_SMOKE_EXPECT_STATE_MARKER === "1";
+const smokeMusicFile = process.env.KAIROS_SMOKE_MUSIC_FILE || "";
+const smokeExpectMusicMissing = process.env.KAIROS_SMOKE_EXPECT_MUSIC_MISSING === "1";
 
 const settingsPath = () => path.join(app.getPath("userData"), "ai-settings.json");
 const petStatePath = () => path.join(app.getPath("userData"), "pet-state.json");
+const windowStatePath = () => path.join(app.getPath("userData"), "window-state.json");
 const defaults = { defaultProvider: "openai", providers: { openai: { model: PROVIDERS.openai.defaultModel, credentialMode: "session", encryptedKey: "", createdAt: "", keyHint: "", environmentDisabled: false } }, firecrawl: { encryptedKey: "", createdAt: "", keyHint: "", environmentDisabled: false } };
-async function readSettings() { try { return { ...defaults, ...JSON.parse(await fs.readFile(settingsPath(), "utf8")) }; } catch { return structuredClone(defaults); } }
-async function writeSettings(value) { await fs.mkdir(path.dirname(settingsPath()), { recursive: true }); await fs.writeFile(settingsPath(), JSON.stringify(value, null, 2), "utf8"); }
+function normalizeSettings(value = {}) { const base = structuredClone(defaults); return { ...base, ...value, providers: { ...base.providers, ...(value.providers || {}) }, firecrawl: { ...base.firecrawl, ...(value.firecrawl || {}) } }; }
+function settingsRepository() { if (!aiSettingsRepository) aiSettingsRepository = new SettingsRepository({ filePath: settingsPath(), defaults, normalize: normalizeSettings, database: appDatabase, storeKey: "ai-settings", summarize: value => ({ defaultProvider: value.defaultProvider || "", providers: Object.keys(value.providers || {}).length, firecrawlConfigured: Boolean(value.firecrawl?.encryptedKey) }) }); return aiSettingsRepository; }
+async function readSettings() { return settingsRepository().read(); }
+async function writeSettings(value) { return settingsRepository().write(value); }
 async function readPetState() { try { return { visible: JSON.parse(await fs.readFile(petStatePath(), "utf8")).visible !== false }; } catch { return { visible: true }; } }
 async function writePetState(value) { await fs.mkdir(path.dirname(petStatePath()), { recursive: true }); await fs.writeFile(petStatePath(), JSON.stringify(value, null, 2), "utf8"); }
+async function readWindowState() { try { return JSON.parse(await fs.readFile(windowStatePath(), "utf8")); } catch { return null; } }
+async function writeWindowState(value) { await fs.mkdir(path.dirname(windowStatePath()), { recursive: true }); await fs.writeFile(windowStatePath(), JSON.stringify(value, null, 2), "utf8"); }
+function restoreWindowBounds(saved) {
+  const fallback = { width: 1440, height: 900 };
+  const savedX = Number(saved?.x);
+  const savedY = Number(saved?.y);
+  const savedWidth = Number(saved?.width);
+  const savedHeight = Number(saved?.height);
+  const width = Math.max(900, Math.min(2200, Number.isFinite(savedWidth) ? savedWidth : fallback.width));
+  const height = Math.max(650, Math.min(1600, Number.isFinite(savedHeight) ? savedHeight : fallback.height));
+  const displays = screen.getAllDisplays();
+  const point = { x: Number.isFinite(savedX) ? savedX : 0, y: Number.isFinite(savedY) ? savedY : 0 };
+  const display = displays.find(item => {
+    const area = item.workArea;
+    return point.x >= area.x && point.x <= area.x + area.width && point.y >= area.y && point.y <= area.y + area.height;
+  }) || screen.getPrimaryDisplay();
+  const area = display.workArea;
+  const finalWidth = Math.round(Math.min(width, area.width));
+  const finalHeight = Math.round(Math.min(height, area.height));
+  const x = Number.isFinite(savedX) ? savedX : area.x + 48;
+  const y = Number.isFinite(savedY) ? savedY : area.y + 48;
+  return {
+    x: Math.round(Math.max(area.x, Math.min(x, area.x + area.width - finalWidth))),
+    y: Math.round(Math.max(area.y, Math.min(y, area.y + area.height - finalHeight))),
+    width: finalWidth,
+    height: finalHeight
+  };
+}
+function attachWindowStatePersistence(win) {
+  let timer = null;
+  const scheduleSave = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      if (!win || win.isDestroyed() || win.isMinimized()) return;
+      writeWindowState(win.getBounds()).catch(error => console.error("Failed to save window state:", error));
+    }, 250);
+  };
+  win.on("resize", scheduleSave);
+  win.on("move", scheduleSave);
+  win.on("close", () => {
+    if (timer) clearTimeout(timer);
+    if (!win.isDestroyed() && !win.isMinimized()) writeWindowState(win.getBounds()).catch(() => {});
+  });
+}
 function sendPetVisibility() { mainWindow?.webContents.send("pet:visibility", petVisible); }
+const PET_ACTIONS = new Set(["idle", "talk", "happy", "sleepy", "reminder"]);
+const SHELL_VIEWS = new Set(["calendar", "schedule", "habits", "notes", "music", "settings"]);
+function sendShellCommand(type, payload = {}) {
+  if (!SHELL_VIEWS.has(type) || !mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send("shell:command", { type, ...payload });
+  return true;
+}
+function showNativeReminder(input = {}) {
+  if (!Notification.isSupported()) return { shown: false, reason: "not_supported" };
+  const itemTitle = typeof input.title === "string" ? input.title.trim().slice(0, 120) : "未命名日程";
+  const note = typeof input.note === "string" ? input.note.trim().slice(0, 220) : "";
+  const missed = input.missed === true;
+  const notification = new Notification({
+    title: missed ? "Kairos · 错过的提醒" : "Kairos · 日程提醒",
+    body: note ? `${itemTitle}\n${note}` : itemTitle,
+    silent: false
+  });
+  notification.on("click", () => sendShellCommand("schedule", { scheduleId: typeof input.scheduleId === "string" ? input.scheduleId.slice(0, 120) : "" }));
+  notification.show();
+  return { shown: true };
+}
+function buildApplicationMenu() {
+  const navigate = (type) => () => sendShellCommand(type);
+  return Menu.buildFromTemplate([
+    {
+      label: "Kairos",
+      submenu: [
+        { label: "打开 AI 对话", accelerator: "CommandOrControl+Shift+A", click: () => { sendPetAction("talk"); showAiChatWindow(); } },
+        { label: petVisible ? "隐藏 FireFly" : "显示 FireFly", click: async () => { petVisible = !petVisible; await writePetState({ visible: petVisible }); if (petVisible) petWindow?.show(); else petWindow?.hide(); sendPetVisibility(); } },
+        { type: "separator" },
+        { role: "quit", label: "退出 Kairos" }
+      ]
+    },
+    {
+      label: "页面",
+      submenu: [
+        { label: "日历", accelerator: "Alt+1", click: navigate("calendar") },
+        { label: "日程", accelerator: "Alt+2", click: navigate("schedule") },
+        { label: "习惯", accelerator: "Alt+3", click: navigate("habits") },
+        { label: "笔记", accelerator: "Alt+4", click: navigate("notes") },
+        { label: "音乐", accelerator: "Alt+5", click: navigate("music") },
+        { type: "separator" },
+        { label: "设置", accelerator: "CommandOrControl+,", click: navigate("settings") }
+      ]
+    },
+    {
+      label: "窗口",
+      submenu: [
+        { role: "minimize", label: "最小化" },
+        { role: "zoom", label: "缩放" },
+        { type: "separator" },
+        { role: "close", label: "关闭窗口" }
+      ]
+    }
+  ]);
+}
+function sendPetAction(action, payload = {}) {
+  if (!PET_ACTIONS.has(action) || !petWindow || petWindow.isDestroyed()) return false;
+  const title = typeof payload.title === "string" ? payload.title.slice(0, 80) : "";
+  petWindow.webContents.send("pet:action", { action, title });
+  return true;
+}
 function environmentKeyForProvider(provider) {
   if (provider === "openai") return process.env.OPENAI_API_KEY || "";
   if (provider === "doubao") return process.env.ARK_API_KEY || "";
@@ -89,6 +248,183 @@ function broadcastAiStream(payload) {
   for (const win of [mainWindow, aiChatWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send("ai:stream", payload);
   }
+}
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  return true;
+}
+function isExternalUrl(url) {
+  try {
+    return ["http:", "https:"].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+function protectAppNavigation(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) shell.openExternal(url).catch(() => {});
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    const target = url || "";
+    if (!isExternalUrl(target)) return;
+    event.preventDefault();
+    shell.openExternal(target).catch(() => {});
+  });
+}
+async function verifySmokeRenderer(win) {
+  const marker = JSON.stringify(smokeStateMarker);
+  const expectMarker = JSON.stringify(smokeExpectStateMarker);
+  const musicFile = JSON.stringify(smokeMusicFile);
+  const expectMissingMusic = JSON.stringify(smokeExpectMusicMissing);
+  return win.webContents.executeJavaScript(`
+    new Promise((resolve, reject) => {
+      const required = {
+        calendarHeading: '#scheduleCalendarHeading',
+        calendarGrid: '.calendar-grid',
+        todayList: '#scheduleTodayList',
+        habitList: '#habitAnimatedList',
+        musicPlayer: '#musicPlayer',
+        reminderButton: '.kairos-reminder-button',
+        aiPanel: '#aiPanel'
+      };
+      const inspect = () => Object.fromEntries(Object.entries(required).map(([key, selector]) => [key, Boolean(document.querySelector(selector))]));
+      const marker = ${marker};
+      const expectMarker = ${expectMarker};
+      const musicFile = ${musicFile};
+      const smokeExpectMusicMissing = ${expectMissingMusic};
+      const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      const hasMarker = (state) =>
+        (state.schedules || []).some(item => item.id === marker) &&
+        (state.habits || []).some(item => item.id === marker);
+      const withMarker = (state) => ({
+        ...state,
+        schedules: [
+          ...(state.schedules || []).filter(item => item.id !== marker),
+          { id: marker, title: 'Kairos smoke persisted task', date: '2026-07-14', end_date: '2026-07-14', type: 'task', status: 'todo', reminder: 'none' }
+        ],
+        habits: [
+          ...(state.habits || []).filter(item => item.id !== marker),
+          { id: marker, name: 'Kairos smoke persisted habit', icon: 'book', dates: ['2026-07-14'] }
+        ]
+      });
+      const verifyPersistence = async () => {
+        const api = window.kairosDesktop?.appState;
+        if (!api) return { available: false };
+        let before = await api.get();
+        let existing = hasMarker(before);
+        for (let attempt = 0; expectMarker && !existing && attempt < 8; attempt += 1) {
+          await delay(100);
+          before = await api.get();
+          existing = hasMarker(before);
+        }
+        if (expectMarker && !existing) {
+          throw new Error('missing persisted smoke marker: ' + JSON.stringify({
+            scheduleIds: (before.schedules || []).map(item => item.id).slice(0, 8),
+            habitIds: (before.habits || []).map(item => item.id).slice(0, 8)
+          }));
+        }
+        if (!marker) return { available: true, existing };
+        await api.save(withMarker(before));
+        await delay(500);
+        await api.save(withMarker(await api.get()));
+        const after = await api.get();
+        return {
+          available: true,
+          existing,
+          saved: hasMarker(after)
+        };
+      };
+      const verifyMusic = async () => {
+        const api = window.kairosDesktop?.music;
+        if (!api) return { available: false };
+        if (!musicFile) return { available: true };
+        let before = await api.getState();
+        let existingTrack = (before.tracks || []).find(track => track.path === musicFile);
+        for (let attempt = 0; expectMarker && !existingTrack && attempt < 8; attempt += 1) {
+          await delay(100);
+          before = await api.getState();
+          existingTrack = (before.tracks || []).find(track => track.path === musicFile);
+        }
+        if (expectMarker && !existingTrack) {
+          throw new Error('missing persisted smoke music track: ' + JSON.stringify({
+            trackPaths: (before.tracks || []).map(track => track.path).slice(0, 8),
+            currentTrackId: before.currentTrackId || ''
+          }));
+        }
+        if (expectMarker && smokeExpectMusicMissing) {
+          if (existingTrack?.available !== false) {
+            throw new Error('expected persisted smoke music track to be unavailable: ' + JSON.stringify({
+              available: existingTrack?.available,
+              unavailableReason: existingTrack?.unavailableReason || ''
+            }));
+          }
+          return { available: true, existing: true, saved: true, unavailable: true, unavailableReason: existingTrack.unavailableReason || '' };
+        }
+        const imported = existingTrack ? { added: [existingTrack] } : await api.addFiles([musicFile]);
+        const track = imported.added?.[0] || existingTrack;
+        if (!track?.id) throw new Error('failed to import smoke music track');
+        await api.updatePlayback({ queueTrackIds: [track.id], currentTrackId: track.id, playing: false, volume: 37, position: { trackId: track.id, seconds: 9 } });
+        await delay(250);
+        await api.updatePlayback({ queueTrackIds: [track.id], currentTrackId: track.id, playing: false, volume: 37, position: { trackId: track.id, seconds: 9 } });
+        const after = await api.getState();
+        return {
+          available: true,
+          existing: Boolean(existingTrack),
+          saved: (after.tracks || []).some(item => item.path === musicFile) && after.currentTrackId === track.id && after.volume === 37 && after.positions?.[track.id] === 9
+        };
+      };
+      const verifyAiData = async () => {
+        const api = window.kairosDesktop?.conversations;
+        if (!api) return { available: false };
+        const title = 'Kairos smoke AI ' + marker;
+        let rows = await api.list();
+        let existing = rows.some(item => item.title === title);
+        for (let attempt = 0; expectMarker && !existing && attempt < 8; attempt += 1) {
+          await delay(100);
+          rows = await api.list();
+          existing = rows.some(item => item.title === title);
+        }
+        if (expectMarker && !existing) throw new Error('missing persisted AI smoke conversation');
+        if (!marker) return { available: true, existing };
+        if (!existing) await api.create({ title, provider: 'openai', model: 'smoke' });
+        rows = await api.list();
+        return { available: true, existing, saved: rows.some(item => item.title === title) };
+      };
+      const started = Date.now();
+      const tick = async () => {
+        const checks = inspect();
+        if (Object.values(checks).every(Boolean)) {
+          try {
+            const persistence = await verifyPersistence();
+            const music = await verifyMusic();
+            const aiData = await verifyAiData();
+            if (marker && !persistence.saved) throw new Error('failed to save persisted smoke marker');
+            if (musicFile && !music.saved) throw new Error('failed to save smoke music state');
+            if (marker && !aiData.saved) throw new Error('failed to save smoke AI data');
+            resolve({ ok: true, checks, persistence, music, aiData, title: document.title, page: document.body?.dataset?.page || '' });
+          } catch (error) {
+            reject(error);
+          }
+          return;
+        }
+        if (Date.now() - started > 5000) {
+          reject(new Error('missing renderer smoke selectors: ' + JSON.stringify(checks)));
+          return;
+        }
+        setTimeout(tick, 100);
+      };
+      tick();
+    })
+  `);
+}
+async function writeSmokeResult(result) {
+  if (!smokeResultPath) return;
+  await fs.mkdir(path.dirname(smokeResultPath), { recursive: true });
+  await fs.writeFile(smokeResultPath, JSON.stringify({ ...result, writtenAt: new Date().toISOString() }, null, 2), "utf8");
 }
 function getAiChatBounds() {
   const width = 520, height = 680, visualOverlap = 96;
@@ -176,6 +512,7 @@ function createAiChatWindow() {
     backgroundColor: "#00000000",
     webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
+  protectAppNavigation(aiChatWindow);
   aiChatWindow.loadFile(path.join(root, "app", "ai-chat-window.html"));
   aiChatWindow.on("closed", () => { stopAiChatFade(); stopAiChatFollow(); aiChatWindow = null; });
   return aiChatWindow;
@@ -201,7 +538,35 @@ function showAiChatWindow() {
   else reveal();
 }
 
-function createWindow() { mainWindow = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } }); mainWindow.webContents.on("did-finish-load", () => { mainWindow?.show(); sendPetVisibility(); }); mainWindow.on("closed", () => { aiChatWindow?.close(); petWindow?.close(); aiChatWindow = null; petWindow = null; mainWindow = null; }); mainWindow.loadFile(path.join(root, "app", "index.html")); }
+async function createWindow() {
+  const savedBounds = restoreWindowBounds(await readWindowState());
+  mainWindow = new BrowserWindow({ ...savedBounds, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  protectAppNavigation(mainWindow);
+  attachWindowStatePersistence(mainWindow);
+  mainWindow.webContents.once("did-fail-load", (_event, errorCode, errorDescription) => {
+    if (!smokeTest) return;
+    console.error(`Kairos smoke test failed to load main window: ${errorCode} ${errorDescription}`);
+    app.exit(1);
+  });
+  mainWindow.webContents.on("did-finish-load", async () => {
+    if (smokeTest) {
+      try {
+        const result = await verifySmokeRenderer(mainWindow);
+        await writeSmokeResult(result);
+        console.log(`Kairos smoke test loaded main window. ${JSON.stringify(result.checks)}`);
+        app.exit(0);
+      } catch (error) {
+        console.error(`Kairos smoke test failed renderer checks: ${error?.message || error}`);
+        app.exit(1);
+      }
+      return;
+    }
+    mainWindow?.show();
+    sendPetVisibility();
+  });
+  mainWindow.on("closed", () => { aiChatWindow?.close(); petWindow?.close(); aiChatWindow = null; petWindow = null; mainWindow = null; });
+  mainWindow.loadFile(path.join(root, "app", "index.html"));
+}
 
 function createPetWindow() {
   try {
@@ -215,6 +580,7 @@ function createPetWindow() {
         contextIsolation: true, nodeIntegration: false, sandbox: true
       }
     });
+    protectAppNavigation(petWindow);
     petWindow.loadFile(path.join(root, "app", "chibi_pet.html"));
     petWindow.setVisibleOnAllWorkspaces(true);
     const display = screen.getPrimaryDisplay();
@@ -236,11 +602,16 @@ function createPetWindow() {
 
 ipcMain.handle("pet:hide", async () => { petVisible = false; await writePetState({ visible: false }); petWindow?.hide(); hideAiChatWindowSmooth(); sendPetVisibility(); return true; });
 ipcMain.handle("pet:show", async () => { petVisible = true; await writePetState({ visible: true }); petWindow?.show(); sendPetVisibility(); return true; });
-ipcMain.handle("pet:click", () => { showAiChatWindow(); return true; });
+ipcMain.handle("pet:click", () => { sendPetAction("talk"); showAiChatWindow(); return true; });
+ipcMain.handle("pet:react", (_event, input = {}) => sendPetAction(input.action, input));
 ipcMain.handle("pet:move", (_event, { dx, dy }) => { queuePetMove(dx, dy); return true; });
 ipcMain.handle("pet:is-ready", () => !!petWindow && !petWindow.isDestroyed());
 ipcMain.handle("pet:get-visibility", () => petVisible);
 ipcMain.handle("pet:resize", (_event, { width, height }) => { if (petWindow) petWindow.setSize(width, height); return true; });
+ipcMain.handle("reminder:notify", (event, input = {}) => {
+  if (event.sender !== mainWindow?.webContents) return { shown: false, reason: "untrusted_sender" };
+  return showNativeReminder(input);
+});
 ipcMain.handle("ai-window:close", event => { const win = BrowserWindow.fromWebContents(event.sender); if (win === aiChatWindow) return hideAiChatWindowSmooth(); return false; });
 ipcMain.on("pet:set-mouse-passthrough", (event, ignore) => {
   if (!petWindow || event.sender !== petWindow.webContents) return;
@@ -298,6 +669,12 @@ ipcMain.handle("ai:permissions:set",(_event,input)=>toolRuntime.setPermissions(i
 ipcMain.handle("app:initialize",(_event,legacy)=>appStateStore.initialize(legacy));
 ipcMain.handle("app:save",(_event,state)=>appStateStore.write(state));
 ipcMain.handle("app:get",()=>appStateStore.read());
+ipcMain.handle("app:audit",async()=>auditAppState(await appStateStore.read()));
+ipcMain.handle("app:list-backups",()=>appStateStore.listBackups());
+ipcMain.handle("app:read-backup",(_event,name)=>appStateStore.readBackup(name));
+ipcMain.handle("app:restore-backup",async(_event,name)=>{const state=await appStateStore.restoreBackup(name);mainWindow?.webContents.send("app:state-changed",state);return state;});
+ipcMain.handle("app:export-current",async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:"Export Kairos app data",defaultPath:`kairos-app-state-${new Date().toISOString().slice(0,10)}.json`,filters:[{name:"JSON",extensions:["json"]}]});if(result.canceled||!result.filePath)return{canceled:true};const state=await appStateStore.read();await fs.writeFile(result.filePath,JSON.stringify(state,null,2),"utf8");return{canceled:false,filePath:result.filePath};});
+ipcMain.handle("app:import-json",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:"Import Kairos app data",properties:["openFile"],filters:[{name:"JSON",extensions:["json"]}]});if(result.canceled||!result.filePaths[0])return{canceled:true};const raw=JSON.parse(await fs.readFile(result.filePaths[0],"utf8"));const backupPath=await appStateStore.backupCurrent("before-import");const state=await appStateStore.write({...raw,imported_from:result.filePaths[0],imported_at:new Date().toISOString(),last_import_backup:backupPath});mainWindow?.webContents.send("app:state-changed",state);return{canceled:false,state,filePath:result.filePaths[0],backupPath};});
 ipcMain.handle("ai:tools:query",(_event,{domain,query})=>toolRuntime.query(domain,query,appAdapters));
 ipcMain.handle("ai:tools:propose",(_event,input)=>toolRuntime.propose(input));
 ipcMain.handle("ai:tools:decide",(_event,input)=>toolRuntime.decide(input,appAdapters));
@@ -309,6 +686,7 @@ ipcMain.handle("music:sync-folders",()=>musicLibrary.syncFolders());
 ipcMain.handle("music:update-playback",(_event,patch)=>musicLibrary.updatePlayback(patch));
 ipcMain.handle("music:update-track",(_event,input)=>musicLibrary.updateTrack(input));
 ipcMain.handle("music:remove-track",(_event,id)=>musicLibrary.removeTrack(id));
+ipcMain.handle("music:remove-unavailable-tracks",()=>musicLibrary.removeUnavailableTracks());
 ipcMain.handle("music:clear",()=>musicLibrary.clear());
 ipcMain.handle("music:reorder",(_event,ids)=>musicLibrary.reorder(ids));
 ipcMain.handle("music:reorder-playlist",(_event,input)=>musicLibrary.reorderPlaylist(input?.id,input?.trackIds));
@@ -340,4 +718,9 @@ ipcMain.handle("netease:get-liked-song-ids",()=>neteaseService.getLikedSongIds()
 ipcMain.handle("netease:set-song-liked",(_event,input)=>neteaseService.setSongLiked(input));
 ipcMain.handle("netease:get-history",(_event,input)=>neteaseService.getHistory(input));
 
-app.whenReady().then(async()=>{const userData=app.getPath("userData");aiStore=new AiDataStore(path.join(userData,"ai-data.json"));appStateStore=new AppStateStore(path.join(userData,"app-state.json"));await appStateStore.migrateStudyPlansToSchedules();musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers")});neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json")});await neteaseService.initialize();attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();createWindow();createPetWindow();}); app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
+if (hasSingleInstanceLock) {
+  app.on("second-instance", () => { focusMainWindow(); });
+  app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));await appDatabase.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.migrateStudyPlansToSchedules();musicLibrary=new MusicLibrary({statePath:path.join(userData,"music-state.json"),coverDir:path.join(userData,"music-covers"),database:appDatabase});neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase});await neteaseService.initialize();attachments=new AttachmentService({rootDir:path.join(userData,"attachments"),tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore});toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await attachments.cleanupTemporary();Menu.setApplicationMenu(buildApplicationMenu());await createWindow();if(!smokeTest)createPetWindow();});
+  app.on("activate", () => { if (!focusMainWindow()) createWindow().catch(error => console.error("Failed to recreate main window:", error)); });
+  app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
+}
