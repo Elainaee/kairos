@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const APP_STATE_SCHEMA_VERSION = 2;
-const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], moods: {}, notes: [], studyPlans: [], theme: "light" };
-const arrays = ["schedules", "checkins", "habits", "notes", "studyPlans"];
+export const APP_STATE_SCHEMA_VERSION = 3;
+const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], moods: {}, notes: [], theme: "light" };
+const arrays = ["schedules", "checkins", "habits", "notes"];
 const SCHEDULE_TYPES = new Set(["task", "deadline", "event", "match", "holiday", "other"]);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -51,12 +51,21 @@ function assertBackupName(name) {
 }
 export function normalize(input = {}) {
   const previousVersion = Number(input?.version || 0);
+  const legacyStudyPlans = Array.isArray(input?.studyPlans) ? input.studyPlans : [];
   const out = { ...structuredClone(EMPTY), ...input, version: APP_STATE_SCHEMA_VERSION };
   for (const key of arrays) if (!Array.isArray(out[key])) out[key] = [];
   if (!out.moods || typeof out.moods !== "object" || Array.isArray(out.moods)) out.moods = {};
   out.migrations = Array.isArray(out.migrations) ? out.migrations.filter(item => item && typeof item === "object") : [];
   if (previousVersion < 2 && !out.migrations.some(item => item.id === "app-state-v2")) {
     out.migrations.push(migrationEntry("app-state-v2", previousVersion || 1, APP_STATE_SCHEMA_VERSION));
+  }
+  if (legacyStudyPlans.length) {
+    const now = new Date().toISOString();
+    out.schedules.push(...legacyStudyPlans.map(plan => repairedSchedule({ ...plan, date: plan.date || plan.start_date, end_date: plan.end_date || plan.start_date, type: "event", migrated_from: "studyPlans" }, now)));
+  }
+  delete out.studyPlans;
+  if (previousVersion < 3 && !out.migrations.some(item => item.id === "app-state-v3-remove-study-plans")) {
+    out.migrations.push(migrationEntry("app-state-v3-remove-study-plans", Math.max(previousVersion, 2), APP_STATE_SCHEMA_VERSION));
   }
   return out;
 }
@@ -109,7 +118,6 @@ export function auditAppState(input = {}) {
     habits: state.habits.length,
     checkins: state.checkins.length,
     notes: state.notes.length,
-    studyPlans: state.studyPlans.length,
     moods: Object.keys(state.moods || {}).length,
     migrations: state.migrations.length,
     settings: state.settings && typeof state.settings === "object" ? 1 : 0
@@ -208,14 +216,12 @@ export class AppStateStore {
     return state;
   }
   async mutate(change) { const state = await this.read(); const result = await change(state); await this.write(state); return { state, result }; }
-  async migrateStudyPlansToSchedules() {
+  async repairSchedules() {
     return this.mutate(data => {
-      const now = new Date().toISOString(); const plans = data.studyPlans || [];
-      const moved = plans.map(plan => repairedSchedule({ ...plan, date: plan.date || plan.start_date, end_date: plan.end_date || plan.start_date, type: plan.type || "other", migrated_from: "studyPlans" }, now));
-      if (moved.length) data.schedules.push(...moved); data.studyPlans = [];
+      const now = new Date().toISOString();
       const before = JSON.stringify(data.schedules);
       data.schedules = data.schedules.map(item => repairedSchedule(item, now));
-      return { moved: moved.length, repaired: before === JSON.stringify(data.schedules) ? 0 : data.schedules.length };
+      return { repaired: before === JSON.stringify(data.schedules) ? 0 : data.schedules.length };
     });
   }
 }

@@ -172,7 +172,7 @@
   };
   const backupSummary = backup => {
     if (!backup) return 'No backup selected.';
-    const counts = ['schedules', 'habits', 'notes', 'studyPlans'].map(key => `${(backup[key] || []).length} ${key}`).join(' · ');
+    const counts = ['schedules', 'habits', 'notes'].map(key => `${(backup[key] || []).length} ${key}`).join(' · ');
     return `Version ${backup.version || 'legacy'} · ${counts}`;
   };
   const auditSummary = audit => {

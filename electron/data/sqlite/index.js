@@ -1,13 +1,13 @@
 import path from "node:path";
+import { normalize as normalizeAppState } from "../app-state/index.js";
 
-export const APP_DB_SCHEMA_VERSION = 1;
+export const APP_DB_SCHEMA_VERSION = 2;
 
 const ENTITY_TABLES = {
   schedules: "app_schedules",
   habits: "app_habits",
   checkins: "app_checkins",
-  notes: "app_notes",
-  studyPlans: "app_study_plans"
+  notes: "app_notes"
 };
 
 function entityId(row, index) {
@@ -96,13 +96,6 @@ export class KairosAppDatabase {
         payload TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS app_study_plans (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        date TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
       CREATE TABLE IF NOT EXISTS json_store_snapshots (
         store TEXT PRIMARY KEY,
         version INTEGER NOT NULL DEFAULT 0,
@@ -111,6 +104,7 @@ export class KairosAppDatabase {
         updated_at TEXT NOT NULL
       );
     `);
+    await this.migrateStudyPlans();
     this.prepare("INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)").run(`app-db-v${APP_DB_SCHEMA_VERSION}`, new Date().toISOString());
     return { available: true, path: this.filePath, version: APP_DB_SCHEMA_VERSION };
   }
@@ -123,6 +117,29 @@ export class KairosAppDatabase {
   prepare(sql) {
     if (!this.db) throw new Error("sqlite_unavailable");
     return this.db.prepare(sql);
+  }
+
+  tableExists(name) {
+    return Boolean(this.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
+  }
+
+  async migrateStudyPlans() {
+    const migrationId = "app-db-v2-remove-study-plans";
+    if (this.prepare("SELECT 1 FROM schema_migrations WHERE id = ?").get(migrationId)) return;
+    const hasLegacyTable = this.tableExists("app_study_plans");
+    const snapshot = this.readAppStateSnapshot();
+    const legacyRows = hasLegacyTable ? this.prepare("SELECT payload FROM app_study_plans ORDER BY updated_at, id").all().map(row => JSON.parse(row.payload)) : [];
+    const legacyPlans = [...(Array.isArray(snapshot?.studyPlans) ? snapshot.studyPlans : []), ...legacyRows];
+    if (snapshot || legacyPlans.length) await this.saveAppStateSnapshot(normalizeAppState({ ...(snapshot || {}), studyPlans: legacyPlans }));
+    this.exec("BEGIN IMMEDIATE");
+    try {
+      if (hasLegacyTable) this.exec("DROP TABLE app_study_plans");
+      this.prepare("INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)").run(migrationId, new Date().toISOString());
+      this.exec("COMMIT");
+    } catch (error) {
+      this.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   saveCollection(table, rows = [], bindRow) {
@@ -152,10 +169,6 @@ export class KairosAppDatabase {
       });
       this.saveCollection(ENTITY_TABLES.notes, state.notes || [], {
         sql: "INSERT OR REPLACE INTO app_notes (id, title, date, payload, updated_at) VALUES (?, ?, ?, ?, ?)",
-        values: (row, index) => [entityId(row, index), entityTitle(row), entityDate(row), safeJson(row), String(row?.updated_at || updatedAt)]
-      });
-      this.saveCollection(ENTITY_TABLES.studyPlans, state.studyPlans || [], {
-        sql: "INSERT OR REPLACE INTO app_study_plans (id, title, date, payload, updated_at) VALUES (?, ?, ?, ?, ?)",
         values: (row, index) => [entityId(row, index), entityTitle(row), entityDate(row), safeJson(row), String(row?.updated_at || updatedAt)]
       });
       this.exec("COMMIT");

@@ -34,6 +34,6 @@
 
 - 启动时会在初始化仓储前执行 `PRAGMA integrity_check`。
 - 第一次采用 SQLite 主库启动时，会先把旧 JSON 复制到 `legacy-json/`，再在单个 SQLite 事务中导入全部数据。
-- v3 会把旧 `app_study_plans` 合并到 `app_schedules`，并把缺失的旧镜像数据提升到 `store_payloads`；验证完成后删除这两张旧表。
+- v2 会把旧 `app_study_plans` 合并到 `app_schedules`，并在验证完成后删除该表；旧应用状态中的 `studyPlans` 字段也会在同一次迁移中移除。
 - 导出采用 `kairos-desktop-export` 格式版本 1，并附带 SHA-256 校验值。
 - 导入会验证格式和校验值，先创建导出备份，再以事务方式替换数据。

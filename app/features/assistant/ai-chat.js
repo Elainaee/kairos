@@ -355,7 +355,7 @@
     const group = document.createElement('section'); group.className = 'ai-schedule-proposals';
     const heading = document.createElement('strong'); heading.textContent = 'Kairos 已生成待确认提案'; group.append(heading);
     rows.forEach((row, index) => {
-      const proposal = row.payload || {}; const targetDomain = row.domain === 'studyPlans' ? 'schedules' : row.domain; const card = document.createElement('form'); card.className = 'ai-schedule-card';
+      const proposal = row.payload || {}; const targetDomain = row.domain; const card = document.createElement('form'); card.className = 'ai-schedule-card';
       const inferred = row.inferredFields?.length ? `推测：${row.inferredFields.join('、')}` : '信息明确';
       if (row.operation === 'delete_many') {
         card.classList.add('ai-schedule-delete-card');
@@ -376,7 +376,7 @@
       card.onsubmit = async event => { event.preventDefault(); const button = card.querySelector('[type="submit"]'); button.disabled = true; try {
         const permissions = await desktop.permissions.get(); if (permissions[targetDomain] !== 'write') { if (!window.confirm(`允许 Kairos 写入${targetDomain === 'tasks' ? '任务' : '日程'}吗？`)) { button.disabled=false; return; } await desktop.permissions.set({ [targetDomain]: 'write' }); }
         const date = card.elements.date.value; const payload = { ...proposal, title: card.elements.title.value.trim(), type: card.elements.type.value, source_url: card.elements.source_url.value.trim(), sourceUrl: card.elements.source_url.value.trim(), notes: card.elements.notes.value.trim() };
-        payload.date = date; payload.end_date = card.elements.end_date.value || date; payload.start_time = card.elements.start_time.value; payload.end_time = card.elements.end_time.value; payload.all_day = !payload.start_time; if (row.domain === 'studyPlans') payload.type = 'other';
+        payload.date = date; payload.end_date = card.elements.end_date.value || date; payload.start_time = card.elements.start_time.value; payload.end_time = card.elements.end_time.value; payload.all_day = !payload.start_time;
         const operation = row.operation || 'create'; const created = await desktop.tools.propose({ conversationId: active.id, domain: targetDomain, operation, payload }); await desktop.tools.decide({ id: created.id, approved: true, payload }); card.dataset.saved='true'; button.textContent = operation === 'update' ? '已修改日程' : '已写入日程';
       } catch (error) { button.disabled=false; appendSystem(`写入失败：${error.message}`); } };
       group.append(card);

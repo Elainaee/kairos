@@ -16,7 +16,7 @@ function printReport(report, source) {
   console.log(`Kairos app-state audit: ${report.ok ? "OK" : "ISSUES_FOUND"}`);
   console.log(`Source: ${source}`);
   console.log(`Version: ${s.version}`);
-  console.log(`Counts: ${s.schedules} schedules, ${s.tasks} tasks, ${s.habits} habits, ${s.checkins} checkins, ${s.notes} notes, ${s.studyPlans} studyPlans, ${s.moods} moods`);
+  console.log(`Counts: ${s.schedules} schedules, ${s.tasks} tasks, ${s.habits} habits, ${s.checkins} checkins, ${s.notes} notes, ${s.moods} moods`);
   if (!report.issues.length) {
     console.log("Issues: none");
     return;

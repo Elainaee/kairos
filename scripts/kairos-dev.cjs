@@ -1,9 +1,18 @@
 const { existsSync } = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
 const isWindows = process.platform === "win32";
+
+// Keep repository launches out of the packaged application's profile. An
+// explicitly supplied value is retained so test runners can use a disposable
+// user-data directory.
+if (!process.env.KAIROS_USER_DATA_DIR) {
+  const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+  process.env.KAIROS_USER_DATA_DIR = path.join(localAppData, "KairosDev");
+}
 
 function localPath(...parts) {
   return path.join(root, ...parts);

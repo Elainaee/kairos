@@ -54,7 +54,7 @@ test("desktop data audit reports SQLite health when the database exists", async 
     return;
   }
 
-  await database.saveAppStateSnapshot({ version: 2, schedules: [], habits: [], checkins: [], notes: [], studyPlans: [] });
+  await database.saveAppStateSnapshot({ version: 3, schedules: [], habits: [], checkins: [], notes: [] });
   database.close();
   const report = await auditDesktopDataDir(dir);
   assert.equal(report.ok, true);

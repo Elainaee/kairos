@@ -57,9 +57,8 @@ test("app state audit reports migration-ready counts and data issues", () => {
     habits: 2,
     checkins: 0,
     notes: 1,
-    studyPlans: 0,
     moods: 1,
-    migrations: 0,
+    migrations: 1,
     settings: 1
   });
   assert.equal(report.issues.some(issue => issue.code === "duplicate_ids" && issue.key === "schedules" && issue.ids.includes("dup")), true);
@@ -179,7 +178,7 @@ test("app state backups can be listed read and restored safely", async () => {
   assert.equal(restored.schedules[0].id, "backup");
   assert.equal(restored.theme, "dark");
   assert.equal(restored.restored_from_backup, backups[0].name);
-  assert.match(path.basename(restored.last_restore_backup), /^app-state-v2-.+-before-restore\.json$/);
+  assert.match(path.basename(restored.last_restore_backup), /^app-state-v3-.+-before-restore\.json$/);
   assert.equal(afterRestoreBackups.some(item => item.path === restored.last_restore_backup), true);
   assert.equal(currentBackup.schedules[0].id, "current");
   assert.equal(disk.schedules[0].id, "backup");
@@ -199,7 +198,7 @@ test("app state can create a current backup before destructive imports", async (
   const backup = JSON.parse(await fs.readFile(backupPath, "utf8"));
   const state = await store.read();
 
-  assert.match(path.basename(backupPath), /^app-state-v2-.+-before-import\.json$/);
+  assert.match(path.basename(backupPath), /^app-state-v3-.+-before-import\.json$/);
   assert.equal(backups.some(item => item.path === backupPath), true);
   assert.equal(backup.schedules[0].id, "current");
   assert.equal(state.schedules[0].id, "imported");
@@ -261,15 +260,14 @@ test("app state restores from SQLite snapshot when the JSON file is corrupt", as
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-test("legacy study plans become visible schedules with an existing type", async () => {
+test("legacy study plans become event schedules during normalization", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-study-migration-"));
   const store = new AppStateStore(path.join(dir, "app.json"));
   await store.initialize({ schedules: [], studyPlans: [{ id: "legacy-study", title: "Summer learning", start_date: "2026-07-01", end_date: "2026-08-31", type: "study" }] });
-  await store.migrateStudyPlansToSchedules();
   const state = await store.read();
-  assert.equal(state.studyPlans.length, 0);
+  assert.equal("studyPlans" in state, false);
   assert.equal(state.schedules.length, 1);
-  assert.equal(state.schedules[0].type, "other");
+  assert.equal(state.schedules[0].type, "event");
   assert.equal(state.schedules[0].date, "2026-07-01");
   await fs.rm(dir, { recursive: true, force: true });
 });
@@ -287,7 +285,7 @@ test("legacy recurring schedules with missing dates are repaired into visible da
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-recurring-repair-"));
   const store = new AppStateStore(path.join(dir, "app.json"));
   await store.initialize({ schedules: [{ id: "summer-friday", title: "Friday meeting", type: "event", date: "", end_date: "", created_at: "2026-07-12T08:00:47.443Z", recurrence: { frequency: "weekly", weekdays: [5], until: "2026-08-31" } }] });
-  await store.migrateStudyPlansToSchedules();
+  await store.repairSchedules();
   const item = (await store.read()).schedules[0];
   assert.equal(item.date, "2026-07-12");
   assert.equal(item.end_date, "2026-08-31");

@@ -85,7 +85,6 @@
 │  │   • habits[]             │  │   • app_habits (索引)             ││
 │  │   • notes[]              │  │   • app_checkins                 ││
 │  │   • moods{}              │  │   • app_notes                    ││
-│  │   • studyPlans[]         │  │   • json_store_snapshots         ││
 │  │   • theme                │  │   • schema_migrations            ││
 │  │                          │  │   • database_metadata            ││
 │  │  AppStateStore           │  │   • data_exports (审计)           ││
@@ -117,7 +116,7 @@
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  AppStateRepository (适配器工厂)                              │  │
 │  │  createAppAdapters() → Proxy { schedules, tasks, habits,     │  │
-│  │    notes, studyPlans }.query/create/update/delete/delete_many│  │
+│  │    notes }.query/create/update/delete/delete_many            │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
