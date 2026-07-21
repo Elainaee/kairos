@@ -6,22 +6,23 @@
   "author": "Kairos",
   "private": true,
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main/index.js",
   "scripts": {
     "start": "node scripts/kairos-dev.cjs",
     "dev": "node scripts/kairos-dev.cjs",
     "doctor": "node scripts/kairos-doctor.cjs",
-    "check": "node --check scripts/kairos-dev.cjs && node --check scripts/kairos-doctor.cjs && node --check app/ai-chat.js && node --check app/calendar-core.cjs && node --check app/habit-core.cjs && node --check app/note-core.cjs && node --check app/notes-feature.js && node --check app/music-player.js && node --check app/reminder-core.cjs && node --check app/reminder-feature.js && node --check app/schedule-feature.js && node --check app/settings-feature.js && node --check app/stitch-shell.js && node --check electron/app-database.js && node --check electron/app-state-audit.js && node --check electron/desktop-data-audit.js && node --check electron/main.js && node --check electron/preload.cjs && node --check electron/providers.js && node --check electron/netease-api-service.js && node --check electron/langchain-agent.js && node --check electron/web-search.js && node --test electron/*.test.js",
-    "audit:app-state": "node electron/app-state-audit.js",
-    "audit:desktop-data": "node electron/desktop-data-audit.js",
-    "verify:dist": "node --test electron/dist-artifacts.verify.js",
-    "verify:installer": "node electron/installer-smoke.js",
-    "release:manifest": "node electron/release-manifest.js",
+    "build:styles": "tailwindcss --config tailwind.config.cjs --input app/assets/styles/tailwind.input.css --output app/assets/styles/tailwind.css --minify",
+    "check": "node --check scripts/kairos-dev.cjs && node --check scripts/kairos-doctor.cjs && node --check app/features/assistant/ai-chat.js && node --check app/features/calendar/calendar-core.cjs && node --check app/features/calendar/schedule-feature.js && node --check app/features/habits/habit-core.cjs && node --check app/features/habits/habits-feature.js && node --check app/features/notes/note-core.cjs && node --check app/features/notes/notes-feature.js && node --check app/features/reminders/reminder-core.cjs && node --check app/features/reminders/reminder-feature.js && node --check app/features/settings/settings-feature.js && node --check app/shell/navigation/stitch-shell.js && node --check app/shell/player/music-player.js && node --check electron/data/sqlite/index.js && node --check electron/data/app-state/index.js && node --check electron/scripts/audit/app-state-audit.js && node --check electron/scripts/audit/desktop-data-audit.js && node --check electron/main/index.js && node --check electron/preload/index.cjs && node --check electron/services/ai/providers.js && node --check electron/services/ai/langchain-agent.js && node --check electron/services/calendar/calendar-backgrounds.js && node --check electron/services/music/netease-api-service.js && node --check electron/services/web/web-search.js && node --test electron/tests/**/*.test.js",
+    "audit:app-state": "node electron/scripts/audit/app-state-audit.js",
+    "audit:desktop-data": "node electron/scripts/audit/desktop-data-audit.js",
+    "verify:dist": "node --test electron/tests/distribution/dist-artifacts.test.js",
+    "verify:installer": "node electron/scripts/release/installer-smoke.js",
+    "release:manifest": "node electron/scripts/release/release-manifest.js",
     "verify:release": "pnpm check && pnpm dist:win && pnpm release:manifest && pnpm verify:dist",
     "verify:release:full": "pnpm verify:release && pnpm verify:installer",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder --win",
-    "dist:win": "electron-builder --win nsis portable"
+    "pack": "pnpm build:styles && electron-builder --dir",
+    "dist": "pnpm build:styles && electron-builder --win",
+    "dist:win": "pnpm build:styles && electron-builder --win nsis portable"
   },
   "build": {
     "appId": "app.kairos.desktop",
@@ -34,26 +35,22 @@
       "package.json",
       "app/**/*",
       "electron/**/*",
-      "!electron/app-state-audit.js",
-      "!electron/desktop-data-audit.js",
       "!**/*.map",
-      "!**/*.test.js",
-      "!electron/static-assets.test.js",
-      "!electron/services.test.js",
-      "!electron/agent/*.test.js",
       "!docs{,/**}",
       "!references{,/**}",
       "!Brainstorm{,/**}",
       "!node_modules/.cache{,/**}",
       "!.env*",
-      "!start-kairos.*"
+      "!start-kairos.*",
+      "!electron/tests{,/**}",
+      "!electron/scripts{,/**}"
     ],
     "asar": true,
     "asarUnpack": [
       "node_modules/NeteaseCloudMusicApi/**/*"
     ],
     "win": {
-      "icon": "app/assets/netease-format.ico",
+      "icon": "app/assets/icons/netease-format.ico",
       "target": [
         {
           "target": "nsis",
@@ -97,7 +94,9 @@
   },
   "devDependencies": {
     "@electron/asar": "^4.2.0",
-    "electron": "^36.0.0",
-    "electron-builder": "^26.15.3"
+    "@tailwindcss/forms": "0.5.10",
+    "electron": "36.9.5",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "3.4.17"
   }
 }

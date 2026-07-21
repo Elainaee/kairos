@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html class="light kairos-boot" lang="en" style="">
+
+<head>
+  <style>
+    html.kairos-boot {
+      visibility: hidden;
+      background: #f5f4f1
+    }
+  </style>
+  <script>setTimeout(() => document.documentElement.classList.remove('kairos-boot'), 3000)</script>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>Clarity Calendar | Intentional Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&amp;display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=block"
+    rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "secondary-container": "#e8e3d0",
+            "inverse-primary": "#ffb59d",
+            "background": "#fbf9f2",
+            "secondary-fixed-dim": "#cbc7b5",
+            "surface-container-low": "#f5f4ed",
+            "primary": "#9e3d19",
+            "on-tertiary-container": "#f6feff",
+            "canvas-bone": "#F9F7F0",
+            "surface-container": "#f0eee7",
+            "surface-bright": "#fbf9f2",
+            "primary-container": "#be552f",
+            "surface-tint": "#a1401b",
+            "error-container": "#ffdad6",
+            "tertiary": "#00666f",
+            "primary-fixed": "#ffdbd0",
+            "surface": "#fbf9f2",
+            "primary-fixed-dim": "#ffb59d",
+            "tertiary-fixed": "#8af2ff",
+            "on-primary": "#ffffff",
+            "on-surface": "#1b1c18",
+            "surface-container-high": "#eae8e1",
+            "tertiary-container": "#00818c",
+            "on-background": "#1b1c18",
+            "tertiary-fixed-dim": "#6bd6e3",
+            "on-secondary-container": "#676556",
+            "on-error-container": "#93000a",
+            "surface-muted": "#EBE6D6",
+            "on-error": "#ffffff",
+            "on-tertiary-fixed": "#001f23",
+            "outline": "#8a726a",
+            "secondary": "#615f50",
+            "on-tertiary": "#ffffff",
+            "accent-terracotta": "#D1633C",
+            "surface-dim": "#dcdad3",
+            "on-primary-fixed-variant": "#812904",
+            "surface-variant": "#e4e2dc",
+            "on-tertiary-fixed-variant": "#004f56",
+            "outline-variant": "#ddc0b7",
+            "surface-container-lowest": "#ffffff",
+            "secondary-fixed": "#e8e3d0",
+            "ink-bold": "#3D3B2E",
+            "on-primary-fixed": "#390c00",
+            "surface-container-highest": "#e4e2dc",
+            "on-secondary-fixed": "#1d1c11",
+            "error": "#ba1a1a",
+            "inverse-on-surface": "#f3f1ea",
+            "on-surface-variant": "#57423c",
+            "on-secondary-fixed-variant": "#494739",
+            "inverse-surface": "#30312c",
+            "on-primary-container": "#fffbff",
+            "on-secondary": "#ffffff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "container-margin": "32px",
+            "stack-md": "16px",
+            "unit": "8px",
+            "stack-lg": "32px",
+            "gutter": "16px",
+            "stack-sm": "8px"
+          },
+          "fontFamily": {
+            "headline-lg": ["Outfit"],
+            "title-md": ["Outfit"],
+            "headline-lg-mobile": ["Outfit"],
+            "body-md": ["Outfit"],
+            "label-md": ["Outfit"],
+            "display-lg": ["Outfit"],
+            "label-sm": ["Outfit"],
+            "body-lg": ["Outfit"]
+          },
+          "fontSize": {
+            "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "title-md": ["20px", { "lineHeight": "1.4", "fontWeight": "500" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+            "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+            "label-md": ["14px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+            "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "label-sm": ["12px", { "lineHeight": "1", "fontWeight": "500" }],
+            "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }]
+          }
+        },
+      },
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: 400;
+      font-style: normal;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-smoothing: antialiased;
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .filled-icon {
+      font-variation-settings: 'FILL' 1;
+    }
+
+    body {
+      background-color: #F9F7F0;
+      color: #1b1c18;
+      font-family: 'Outfit', sans-serif;
+      overflow-x: hidden;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #EBE6D6;
+      border-radius: 10px;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+
+    .day-cell {
+      min-height: 120px;
+      border-right: 1px solid rgba(61, 59, 46, 0.1);
+      border-bottom: 1px solid rgba(61, 59, 46, 0.1);
+    }
+
+    .day-cell:nth-child(7n) {
+      border-right: none;
+    }
+
+    .day-cell.inactive {
+      opacity: 0.4;
+    }
+  </style>
+</head>
+
+<body class="flex bg-canvas-bone" data-page="calendar">
+  <!-- SideNavBar -->
+  <aside
+    class="fixed left-0 top-0 h-full w-[280px] bg-surface-container border-r border-ink-bold/10 flex flex-col h-full py-stack-lg px-gutter gap-stack-md z-40">
+    <div class="flex items-center gap-3 px-2">
+      <div class="w-10 h-10 rounded-xl bg-accent-terracotta flex items-center justify-center text-on-primary">
+        <span class="material-symbols-outlined">auto_awesome</span>
+      </div>
+      <div>
+        <h1 class="font-headline-lg text-[22px] leading-tight text-accent-terracotta">Kairos</h1>
+        <p class="font-label-sm text-on-secondary-fixed-variant">Intentional Living</p>
+      </div>
+    </div>
+    <button
+      class="mt-4 w-full py-3 bg-accent-terracotta text-on-primary rounded-xl font-label-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+      <span class="material-symbols-outlined">add</span>
+      Create New
+    </button>
+    <nav class="mt-8 flex flex-col gap-2">
+      <!-- Active: Calendar -->
+      <a class="flex items-center gap-4 px-4 py-3 text-primary font-bold border-r-4 border-primary bg-secondary-container/30 transition-all hover:bg-surface-variant/50"
+        href="#">
+        <span class="material-symbols-outlined filled-icon">calendar_today</span>
+        <span class="font-label-md">Calendar</span>
+      </a>
+      <a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all"
+        href="#">
+        <span class="material-symbols-outlined">repeat</span>
+        <span class="font-label-md">Habits</span>
+      </a>
+      <a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all"
+        href="#">
+        <span class="material-symbols-outlined">checklist</span>
+        <span class="font-label-md">Tasks</span>
+      </a>
+      <a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all"
+        href="#">
+        <span class="material-symbols-outlined">queue_music</span>
+        <span class="font-label-md">Music</span>
+      </a>
+    </nav>
+    <div class="mt-auto flex flex-col gap-2">
+      <a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all"
+        href="#">
+        <span class="material-symbols-outlined">archive</span>
+        <span class="font-label-md">Archive</span>
+      </a>
+      <a class="flex items-center gap-4 px-4 py-3 text-on-secondary-fixed-variant hover:bg-surface-variant/50 transition-all"
+        href="#">
+        <span class="material-symbols-outlined">help_outline</span>
+        <span class="font-label-md">Help</span>
+      </a>
+    </div>
+  </aside>
+  <main class="ml-[280px] w-full flex flex-col min-h-screen">
+    <!-- TopNavBar -->
+    <header
+      class="sticky top-0 z-30 bg-canvas-bone flex justify-between items-center w-full px-container-margin py-unit h-16 border-b border-ink-bold/10">
+      <div class="flex items-center gap-8">
+        <h2 class="font-title-md font-bold text-accent-terracotta">Dashboard</h2>
+        <div class="hidden md:flex items-center gap-6">
+          <a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md" href="#">Monthly</a>
+          <a class="text-on-surface-variant font-label-md hover:text-accent-terracotta transition-colors"
+            href="#">Weekly</a>
+          <a class="text-on-surface-variant font-label-md hover:text-accent-terracotta transition-colors"
+            href="#">Daily</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline">search</span>
+          <input
+            class="pl-10 pr-4 py-2 bg-surface-container-low border border-ink-bold/5 rounded-full text-sm focus:outline-none focus:border-accent-terracotta w-64"
+            placeholder="Search events..." type="text">
+        </div>
+        <button
+          class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-accent-terracotta transition-colors">
+          <span class="material-symbols-outlined">notifications</span>
+        </button>
+        <button
+          class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-accent-terracotta transition-colors">
+          <span class="material-symbols-outlined">settings</span>
+        </button>
+        <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-secondary-container">
+          <img class="w-full h-full object-cover"
+            data-alt="Close-up professional portrait of a calm and focused individual in a minimalist studio environment with warm, natural sunlight casting soft shadows. High-end aesthetic, soft textures, and a sophisticated color palette of bone, charcoal, and terracota. Light-mode studio photography style."
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBv95L5ZDBHMhVGhM3e9xlST7NeR8ya5MeAibgUaFQBYPmNuMznIBALiBH3Wg_VvM_cFZRo0LO6RC6eF4p_fG01cqmIFxYKGjJs8Ek543j7lLLCGfhhwvuAOq4uki-LUv-ZY6PSPYlM1cmZAqHIqWVEG_KmICmaWLJoIecO0gINrl9iuEtaBA6PX6kR5QfGnt2oJ6zlPqOvbg0J6CI4bLX01-e9T_PoF1ay-XF91gqPQZVTFbUwPicWctHAosW3Yi6fciuMqpv_S60">
+        </div>
+      </div>
+    </header>
+    <!-- Main Content Grid -->
+    <div class="flex flex-1 overflow-hidden p-container-margin gap-stack-lg">
+      <!-- Left Side: Interactive Calendar -->
+      <section
+        class="flex-1 bg-surface-container-lowest rounded-xl border border-ink-bold/10 overflow-hidden flex flex-col shadow-sm">
+        <div class="p-6 flex items-center justify-between border-b border-ink-bold/5">
+          <div class="flex items-center gap-4">
+            <h3 class="font-headline-lg text-2xl text-ink-bold calendar-shiny-heading" id="scheduleCalendarHeading">
+              Calendar</h3>
+            <div class="flex gap-1">
+              <button aria-label="Previous month" class="p-1 hover:bg-surface-container rounded transition-colors"
+                id="schedulePrevMonth"><span class="material-symbols-outlined">chevron_left</span></button>
+              <button aria-label="Next month" class="p-1 hover:bg-surface-container rounded transition-colors"
+                id="scheduleNextMonth"><span class="material-symbols-outlined">chevron_right</span></button>
+            </div>
+          </div>
+          <button
+            class="px-4 py-2 bg-surface-container text-ink-bold rounded-lg font-label-md hover:bg-surface-container-high transition-colors"
+            id="scheduleTodayButton">Today</button>
+        </div>
+        <div class="calendar-grid bg-ink-bold/5">
+          <!-- Day Headers -->
+          <div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span
+              class="font-label-md text-on-surface-variant">SUN</span></div>
+          <div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span
+              class="font-label-md text-on-surface-variant">MON</span></div>
+          <div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span
+              class="font-label-md text-on-surface-variant">TUE</span></div>
+          <div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span
+              class="font-label-md text-on-surface-variant">WED</span></div>
+          <div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span
+              class="font-label-md text-on-surface-variant">THU</span></div>
+          <div class="bg-surface-container py-2 text-center border-r border-ink-bold/10"><span
+              class="font-label-md text-on-surface-variant">FRI</span></div>
+          <div class="bg-surface-container py-2 text-center"><span
+              class="font-label-md text-on-surface-variant">SAT</span></div>
+        </div>
+      </section>
+      <!-- Right Side: Today's Schedule & Habits -->
+      <section class="w-[360px] flex flex-col gap-2">
+        <!-- Habit table, adapted from tweakcn CardsPayments -->
+        <section class="habit-payments-card" aria-labelledby="habitCardTitle">
+          <header class="habit-payments-header">
+            <h4 class="mb-1" id="habitCardTitle">Habits</h4>
+            <p>Build a little momentum every day.</p>
+          </header>
+          <div class="habit-table-frame">
+            <div class="habit-list-heading"><input id="habitSelectAll" type="checkbox"
+                aria-label="Complete all habits"><span>Habit</span><span>Streak</span></div>
+            <div class="habit-animated-list" id="habitAnimatedList" role="list" aria-label="Habits"></div>
+          </div>
+          <footer class="habit-payments-footer">
+            <span id="habitSelectionCount">0 of 0 habit(s) completed.</span>
+          </footer>
+        </section>
+        <!-- Today's Schedule -->
+        <div
+          class="flex-1 bg-surface-container-high pt-5 px-6 pb-2 rounded-xl border border-ink-bold/10 flex flex-col overflow-hidden">
+          <h4 class="font-title-md text-ink-bold mb-3">Today's Schedule</h4>
+          <div class="flex-1 overflow-y-auto space-y-6" id="scheduleTodayList"
+            style="scrollbar-width:none;-ms-overflow-style:none">
+            <div class="schedule-empty">No schedules for this day.</div>
+          </div>
+          <button
+            class="mt-2 w-full py-2 border border-dashed border-outline-variant text-outline rounded-lg font-label-sm hover:bg-canvas-bone transition-colors flex items-center justify-center gap-2"
+            id="scheduleAddSlot" type="button">
+            <span class="material-symbols-outlined text-sm">add</span>
+            Add slot
+          </button>
+        </div>
+      </section>
+    </div>
+  </main>
+  <!-- Draggable Chibi Companion -->
+  <dialog aria-label="AI assistant" id="aiPanel">
+    <header class="ai-chat-header">
+      <div class="ai-chat-contact">
+        <button aria-label="Change AI avatar" class="ai-avatar ai-avatar-editor" id="aiAvatarButton"
+          type="button"></button>
+        <input accept="image/*" hidden id="aiAvatarInput" type="file">
+        <div><strong id="aiAssistantName">Kairos Assistant</strong><span><i></i> Online</span></div>
+      </div>
+      <div class="ai-chat-header-actions">
+        <button aria-label="Rename AI assistant" id="renameAiAssistant" type="button"><span
+            class="material-symbols-outlined">edit</span></button>
+        <button aria-label="New AI session" id="newAiSession" type="button"><span
+            class="material-symbols-outlined">add_comment</span></button>
+        <button aria-label="Delete AI session" id="deleteAiSession" type="button"><span
+            class="material-symbols-outlined">delete</span></button>
+        <button aria-label="Close AI panel" id="closeAiPanel" type="button"><span
+            class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="ai-chat-controls">
+        <label><span>Session</span><select aria-label="Switch session" id="aiSessionSelect">
+            <option>Loading...</option>
+          </select></label>
+        <label><span>Provider</span><select aria-label="Model provider" id="aiProviderSelect">
+            <option>Loading...</option>
+          </select></label>
+        <label><span>Model</span><select aria-label="Select model" id="aiModelInput">
+            <option>Loading...</option>
+          </select></label>
+        <span id="aiUsageSummary">0 requests</span>
+      </div>
+    </header>
+    <main aria-live="polite" id="aiMessages">
+      <div class="ai-chat-date">Today</div>
+    </main>
+    <div aria-live="polite" class="ai-attachment-tray" id="aiAttachmentTray"></div>
+    <footer class="ai-chat-composer">
+      <button aria-label="Add attachment" class="ai-attach-button" id="aiAttachButton" type="button"><span
+          class="material-symbols-outlined">add</span></button>
+      <input accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.txt,.md" hidden id="aiAttachmentInput" multiple type="file">
+      <label class="ai-retain-option"><input id="aiRetainAttachments" type="checkbox"><span
+          id="aiRetainLabel">附件</span></label>
+      <textarea aria-label="Message AI" id="aiInput" placeholder="Type your message..." rows="1"></textarea>
+      <button aria-label="Send" id="sendAiMessage" type="button"><span
+          class="material-symbols-outlined">arrow_upward</span></button>
+    </footer>
+  </dialog>
+  <style>
+    @media(max-width:700px) {}
+    .kairos-sonner{position:fixed;right:28px;top:92px;z-index:9999;display:flex;flex-direction:column;gap:12px;pointer-events:none}
+    .kairos-toast{position:relative;overflow:hidden;display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;gap:12px;min-width:260px;max-width:360px;padding:14px 16px;border:1px solid rgba(255,255,255,.68);border-radius:12px;background:linear-gradient(135deg,rgba(255,255,255,.52),rgba(255,255,255,.24));box-shadow:0 18px 48px rgba(27,28,24,.18),inset 0 1px 0 rgba(255,255,255,.78),inset 0 -1px 0 rgba(255,255,255,.2);backdrop-filter:blur(28px) saturate(1.55);-webkit-backdrop-filter:blur(28px) saturate(1.55);color:var(--text,#1b1c18);opacity:0;transform:translateY(-8px) scale(.98);transition:opacity .18s ease,transform .18s ease}
+    .kairos-toast::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 0%,rgba(255,255,255,.7),transparent 32%),linear-gradient(90deg,rgba(255,255,255,.22),transparent 45%);pointer-events:none}
+    .kairos-toast>*{position:relative}
+    .kairos-toast.is-visible{opacity:1;transform:translateY(0) scale(1)}
+    .kairos-toast-icon{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:rgba(255,255,255,.38);color:var(--text,#1b1c18);box-shadow:inset 0 1px 0 rgba(255,255,255,.78),0 1px 4px rgba(27,28,24,.08)}
+    .kairos-toast-icon .material-symbols-outlined{font-size:15px;width:15px}
+    .kairos-toast.success .kairos-toast-icon{background:color-mix(in srgb,var(--accent,#d1633c) 18%,#fff 82%);color:var(--accent,#d1633c)}
+    .kairos-toast.error .kairos-toast-icon{background:rgba(186,26,26,.12);color:#ba1a1a}
+    .kairos-toast-title{font-size:13px;font-weight:850;line-height:1.2;text-shadow:0 1px 0 rgba(255,255,255,.34)}
+    .kairos-toast-description{margin-top:3px;color:var(--muted,#6f6a5f);font-size:12px;font-weight:600;line-height:1.3}
+  </style>
+
+
+
+  <link href="../../shell/navigation/stitch-shell.css?v=7" rel="stylesheet">
+  <link href="../../shared/styles/stitch-layout.css?v=28" rel="stylesheet">
+  <link href="../../shared/styles/tweakcn-theme.css?v=11" rel="stylesheet">
+  <link href="../../features/assistant/ai-chat.css?v=11" rel="stylesheet">
+  <link href="../../shell/player/music-player.css?v=28" rel="stylesheet">
+  <script src="../../features/assistant/ai-chat.js?v=16"></script>
+  <script src="../../shell/player/music-player.js?v=42"></script>
+  <script src="../../shell/navigation/stitch-shell.js?v=91"></script>
+
+  <script>
+    (() => {
+      let root = null;
+      const ensureRoot = () => {
+        if (root) return root;
+        root = document.createElement('div');
+        root.className = 'kairos-sonner';
+        root.setAttribute('aria-live', 'polite');
+        document.body.append(root);
+        return root;
+      };
+      const show = (type, title, description = '') => {
+        const item = document.createElement('div');
+        item.className = `kairos-toast ${type}`;
+        const icon = type === 'success' ? 'check' : type === 'error' ? 'priority_high' : 'info';
+        item.innerHTML = `<span class="kairos-toast-icon"><span class="material-symbols-outlined">${icon}</span></span><span><span class="kairos-toast-title"></span><span class="kairos-toast-description"></span></span>`;
+        item.querySelector('.kairos-toast-title').textContent = title;
+        const descriptionNode = item.querySelector('.kairos-toast-description');
+        descriptionNode.textContent = description;
+        descriptionNode.hidden = !description;
+        ensureRoot().prepend(item);
+        requestAnimationFrame(() => item.classList.add('is-visible'));
+        setTimeout(() => {
+          item.classList.remove('is-visible');
+          setTimeout(() => item.remove(), 220);
+        }, 2600);
+      };
+      window.addEventListener('kairos:toast', event => {
+        const detail = event.detail || {};
+        show(['success','error','message'].includes(detail.type) ? detail.type : 'message', detail.title || '', detail.description || '');
+      });
+    })();
+
+    // Electron standalone pet window communication
+    if (window.kairosDesktop?.isDesktop) {
+      // Restore button shown when pet is hidden
+      const petRestoreBtn = document.createElement('button');
+      petRestoreBtn.innerHTML = '<span class="material-symbols-outlined">pets</span>';
+      petRestoreBtn.style.cssText = 'position:fixed;z-index:65;right:20px;bottom:112px;width:42px;height:42px;border:1px solid var(--line,#ccc);border-radius:50%;background:var(--panel,#fff);color:var(--accent,#d1633c);cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,.1);align-items:center;justify-content:center;font-size:20px';
+      petRestoreBtn.onclick = () => {
+        petRestoreBtn.style.display = 'none';
+        window.kairosDesktop.pet?.show();
+      };
+      document.body.appendChild(petRestoreBtn);
+      const syncPetVisibility = visible => {
+        petRestoreBtn.style.display = visible === false ? 'flex' : 'none';
+      };
+
+      window.kairosDesktop.pet?.onOpenAi?.(() => {
+        document.getElementById('aiPanel').showModal();
+      });
+      window.kairosDesktop.pet?.onVisibilityChanged?.(syncPetVisibility);
+      window.kairosDesktop.pet?.getVisibility?.().then(syncPetVisibility);
+    } else {
+      // Browser mode: listen for postMessage from pet
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'kairos-pet-click') {
+          document.getElementById('aiPanel').showModal();
+        }
+        if (event.data?.type === 'kairos-pet-hide') {
+          localStorage.setItem('kairos-pet-hidden', '1');
+        }
+      });
+    }
+  </script>
+
+</body>
+
+</html>
+

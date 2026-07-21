@@ -35,11 +35,13 @@ function runElectron() {
   const electronCmd = localPath("node_modules", ".bin", isWindows ? "electron.cmd" : "electron");
   const electronExe = localPath("node_modules", "electron", "dist", isWindows ? "electron.exe" : "electron");
 
-  if (existsSync(electronCmd)) {
-    return spawnSync(electronCmd, ["."], { cwd: root, stdio: "inherit", shell: false }).status ?? 1;
-  }
+  // Windows .cmd shims require a command shell. Prefer Electron's real binary so
+  // double-click launchers surface the app instead of silently returning code 1.
   if (existsSync(electronExe)) {
     return spawnSync(electronExe, ["."], { cwd: root, stdio: "inherit", shell: false }).status ?? 1;
+  }
+  if (existsSync(electronCmd)) {
+    return spawnSync(electronCmd, ["."], { cwd: root, stdio: "inherit", shell: isWindows }).status ?? 1;
   }
 
   printInstallHelp();

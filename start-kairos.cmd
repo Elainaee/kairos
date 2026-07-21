@@ -11,6 +11,8 @@ if errorlevel 1 (
   echo.
   echo Run this for details:
   echo   "%NODE_EXE%" "%~dp0scripts\kairos-doctor.cjs"
+  echo.
+  pause
   exit /b 1
 ) else (
   exit /b 0

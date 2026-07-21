@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html class="pet-window-mode" lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>桌宠</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: transparent !important;
+  overflow: hidden;
+  user-select: none;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+#pet-wrap {
+  position: fixed;
+  bottom: 0px;
+  right: 8px;
+  width: 180px;
+  cursor: grab;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#pet-wrap:active { cursor: grabbing; }
+
+#bubble {
+  background: rgba(255,255,255,0.95);
+  border: 1.5px solid #9dd4c8;
+  border-radius: 14px 14px 14px 4px;
+  padding: 8px 13px;
+  color: #3a5a58;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 210px;
+  white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(100,200,180,0.25);
+  margin-bottom: 6px;
+  opacity: 0;
+  transform: translateY(6px) scale(0.95);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  pointer-events: none;
+  position: relative;
+}
+#bubble.show { opacity: 1; transform: translateY(0) scale(1); }
+#bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 16px;
+  width: 0; height: 0;
+  border-right: 8px solid transparent;
+  border-top: 8px solid #9dd4c8;
+}
+
+#pet-img {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  transform-origin: bottom center;
+  display: block;
+  position: relative;
+}
+
+@keyframes float {
+  0%,100% { bottom: 0px; }
+  50% { bottom: 9px; }
+}
+@keyframes bounce {
+  0%   { transform: translateY(0) scale(1,1); }
+  20%  { transform: translateY(-16px) scale(1.05,0.95); }
+  45%  { transform: translateY(0) scale(0.95,1.08); }
+  65%  { transform: translateY(-6px) scale(1.02,0.98); }
+  100% { transform: translateY(0) scale(1,1); }
+}
+@keyframes shake {
+  0%,100% { transform: rotate(0deg); }
+  15% { transform: rotate(-10deg); }
+  35% { transform: rotate(10deg); }
+  55% { transform: rotate(-7deg); }
+  75% { transform: rotate(7deg); }
+}
+@keyframes happy {
+  0%,100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.08) rotate(-4deg); }
+  75% { transform: scale(1.08) rotate(4deg); }
+}
+
+#pet-img.idle   { animation: float 3.2s ease-in-out infinite; }
+#pet-img.bounce { animation: bounce 0.55s cubic-bezier(.36,.07,.19,.97); }
+#pet-img.shake  { animation: shake 0.5s ease; }
+#pet-img.happy  { animation: happy 0.6s ease; }
+
+.particle {
+  position: fixed;
+  pointer-events: none;
+  font-size: 15px;
+  line-height: 1;
+  animation: particleUp 0.9s ease-out forwards;
+  z-index: 99999;
+}
+@keyframes particleUp {
+  0%   { opacity:1; transform: translate(0,0) scale(1); }
+  100% { opacity:0; transform: translate(var(--dx), var(--dy)) scale(0.2); }
+}
+
+#ctx-menu {
+  position: fixed;
+  background: rgba(255,255,255,0.97);
+  border: 1px solid #c8e8e4;
+  border-radius: 10px;
+  padding: 4px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  font-size: 13px;
+  color: #3a5a58;
+  z-index: 99999;
+  display: none;
+  min-width: 130px;
+}
+#ctx-menu div {
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 2px 4px;
+}
+#ctx-menu div:hover { background: #e8f5f2; }
+</style>
+</head>
+<body class="chibi-theme">
+<style>html.pet-window-mode,html.pet-window-mode body.chibi-theme{background:rgba(0,0,0,0)!important;background-color:rgba(0,0,0,0)!important}body.chibi-theme{color:#463f3a!important}body.chibi-theme #bubble,body.chibi-theme #ctx-menu{font-family:"Microsoft YaHei","PingFang SC",sans-serif!important;background:rgba(255,255,255,.97)!important;color:#3a5a58!important;border-color:#c8e8e4!important;border-radius:14px!important;box-shadow:0 4px 16px rgba(0,0,0,.12)!important}body.chibi-theme #ctx-menu div:hover{background:#e8f5f2!important;color:#3a5a58!important}</style>
+
+<div id="pet-wrap">
+  <div id="bubble"></div>
+  <div style="position:relative;width:180px;height:180px;">
+    <img id="pet-img" class="idle"
+         src="../../assets/pets/desk-pet.png"
+         alt="桌宠" draggable="false"/>
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <div id="menu-open-ai" onclick="openAi()">😳 与Ta对话</div>
+  <div onclick="sayRandom()">💬 说句话</div>
+  <div onclick="playHappy()">✨ 开心一下</div>
+  <div onclick="showTime()">🕐 现在几点了</div>
+  <div onclick="hidePet()">🌸 隐藏桌宠</div>
+  <div onclick="hideMenu()">关闭菜单</div>
+</div>
+
+<script>
+const wrap   = document.getElementById('pet-wrap');
+const bubble = document.getElementById('bubble');
+const img    = document.getElementById('pet-img');
+const menu   = document.getElementById('ctx-menu');
+
+// Electron's transparent pixels are still part of the native window and would
+// block the applications below it. Keep only the visible pet UI interactive.
+function pointInside(rect, x, y) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+let mousePassthrough = null;
+function setMousePassthrough(ignore) {
+  if (mousePassthrough === ignore) return;
+  mousePassthrough = ignore;
+  window.kairosDesktop?.pet?.setMousePassthrough(ignore);
+}
+function updateMousePassthrough(event) {
+  if (startX !== undefined || isDragging) {
+    setMousePassthrough(false);
+    return;
+  }
+  const x = event.clientX;
+  const y = event.clientY;
+  const overPet = pointInside(img.getBoundingClientRect(), x, y);
+  const overBubble = bubble.classList.contains('show') && pointInside(bubble.getBoundingClientRect(), x, y);
+  const overMenu = menu.style.display === 'block' && pointInside(menu.getBoundingClientRect(), x, y);
+  setMousePassthrough(!(overPet || overBubble || overMenu));
+}
+document.addEventListener('mousemove', updateMousePassthrough);
+document.addEventListener('mouseleave', () => {
+  if (startX === undefined && !isDragging) setMousePassthrough(true);
+});
+
+const greetings = {
+  morning: ["早上好～今天也要元气满满哦！","晨安！记得吃早饭了吗？","新的一天开始了，加油！"],
+  noon:    ["午休时间到，要吃午饭哦～","工作半天辛苦了！","下午好！记得喝水哦。"],
+  evening: ["傍晚了，今天过得怎么样？","工作别太累，注意休息～","记得活动一下身体哦！"],
+  night:   ["夜深了，早点休息哦～","不要熬夜！身体最重要！","今天辛苦了，好好睡一觉吧。"]
+};
+const clickLines = [
+  "唔……别戳我啦！","是、是在叫我吗？","我还在呢，放心吧。",
+  "今天你还好吗？","嘿！轻一点！","……我有在认真工作的！",
+  "需要帮什么忙吗？","( ˘ω˘ ) 嗯？","哼哼～"
+];
+const idleLines = [
+  "好困……打个小盹可以吗？","你还在工作吗？要加油哦！",
+  "要不要喝杯水？","记得保护眼睛，看看远处吧。",
+  "外面天气怎么样呀～","我在这里陪着你哦～"
+];
+
+let bubbleTimer = null;
+let isDragging  = false;
+let clickCount  = 0;
+let startX, startY, prevSX, prevSY, origR, origB;
+let pendingMoveDx = 0, pendingMoveDy = 0, moveFrame = 0;
+
+function flushDesktopMove() {
+  moveFrame = 0;
+  if (!pendingMoveDx && !pendingMoveDy) return;
+  const dx = pendingMoveDx, dy = pendingMoveDy;
+  pendingMoveDx = 0; pendingMoveDy = 0;
+  window.kairosDesktop?.pet?.move(dx, dy);
+}
+function queueDesktopMove(dx, dy) {
+  pendingMoveDx += dx;
+  pendingMoveDy += dy;
+  if (!moveFrame) moveFrame = requestAnimationFrame(flushDesktopMove);
+}
+
+function getSlot() {
+  const h = new Date().getHours();
+  if (h>=6&&h<12) return 'morning';
+  if (h>=12&&h<18) return 'noon';
+  if (h>=18&&h<22) return 'evening';
+  return 'night';
+}
+function rand(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+
+function showBubble(text, dur=4000) {
+  clearTimeout(bubbleTimer);
+  bubble.textContent = text;
+  bubble.classList.add('show');
+  bubbleTimer = setTimeout(() => bubble.classList.remove('show'), dur);
+}
+
+function playAnim(name, dur=600) {
+  img.className = name;
+  clearTimeout(img._t);
+  img._t = setTimeout(() => img.className = 'idle', dur);
+}
+
+function spawnParticles(cx, cy) {
+  const pool = ['✨','❄️','🌸','💫','⭐','🤍'];
+  for (let i=0; i<6; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.textContent = pool[Math.floor(Math.random()*pool.length)];
+    const angle = (Math.random()*260-130)*Math.PI/180;
+    const dist  = 40+Math.random()*50;
+    p.style.setProperty('--dx', Math.sin(angle)*dist+'px');
+    p.style.setProperty('--dy', (-Math.abs(Math.cos(angle))*dist)+'px');
+    p.style.left = cx+'px';
+    p.style.top  = cy+'px';
+    p.style.animationDelay = (i*0.06)+'s';
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(), 1000);
+  }
+}
+
+setTimeout(() => showBubble(rand(greetings[getSlot()]), 5000), 1000);
+
+wrap.addEventListener('click', (e) => {
+  if (isDragging) return;
+  hideMenu();
+  clickCount++;
+  if (clickCount >= 5) {
+    showBubble('好啦好啦，别再戳了！(｡>﹏<｡)', 3000);
+    playAnim('shake', 500);
+    clickCount = 0;
+  } else {
+    showBubble(rand(clickLines));
+    playAnim('bounce', 560);
+  }
+  spawnParticles(e.clientX, e.clientY);
+  setTimeout(()=>{ if(clickCount>0) clickCount--; }, 3000);
+});
+
+wrap.addEventListener('dblclick', (e) => {
+  e.stopPropagation();
+  playAnim('happy', 600);
+  showBubble('哎呀！不要摇我～ (>ω<)');
+});
+
+wrap.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.kairosDesktop?.pet?.resize(260, 280);
+  menu.style.display = 'block';
+  menu.style.left = Math.min(e.clientX, window.innerWidth-150)+'px';
+  menu.style.top  = Math.min(e.clientY, window.innerHeight-230)+'px';
+});
+document.addEventListener('click', hideMenu);
+window.addEventListener('blur', hideMenu);
+if (window.kairosDesktop?.pet?.onBlur) window.kairosDesktop.pet.onBlur(hideMenu);
+function hideMenu() { menu.style.display='none'; window.kairosDesktop?.pet?.resize(195, 230) }
+function openAi() { hideMenu(); window.parent!==window?(window.parent.postMessage({type:'kairos-pet-click'},'*')):window.kairosDesktop?.pet?.click() }
+function hidePet() { hideMenu(); window.parent!==window?window.parent.postMessage({type:'kairos-pet-hide'},'*'):window.kairosDesktop?.pet?.hide() }
+function sayRandom() { showBubble(rand(clickLines)); hideMenu(); }
+function playHappy() {
+  playAnim('happy',600);
+  const r=wrap.getBoundingClientRect();
+  spawnParticles(r.left+90, r.top+90);
+  hideMenu();
+}
+function showTime() {
+  const now=new Date(), h=now.getHours(), m=String(now.getMinutes()).padStart(2,'0');
+  showBubble(`现在是 ${h}:${m} ～`, 4000);
+  hideMenu();
+}
+
+setInterval(()=>{
+  const m=new Date().getMinutes(), h=new Date().getHours();
+  if(m===0) showBubble(`现在是 ${h}:00，注意休息一下哦～`,5000);
+  else if(m===30) showBubble(`${h}:30 啦，时间过得真快！`,4500);
+}, 60000);
+
+setInterval(()=>{
+  if(!bubble.classList.contains('show')&&Math.random()<0.6)
+    showBubble(rand(idleLines),4200);
+}, 5*60*1000);
+
+wrap.addEventListener('mousedown',(e)=>{
+  if(e.button!==0) return;
+  startX=e.screenX; startY=e.screenY;
+  prevSX=e.screenX; prevSY=e.screenY;
+  const r=wrap.getBoundingClientRect();
+  origR=window.innerWidth-r.right;
+  origB=window.innerHeight-r.bottom;
+  isDragging=false;
+  e.preventDefault();
+});
+document.addEventListener('mousemove',(e)=>{
+  if(startX===undefined) return;
+  if(!isDragging&&Math.hypot(e.screenX-startX,e.screenY-startY)>5) isDragging=true;
+  if(!isDragging) return;
+  window.parent!==window?window.parent.postMessage({type:'kairos-pet-drag',dx:e.screenX-startX,dy:e.screenY-startY},'*'):queueDesktopMove(e.screenX-prevSX,e.screenY-prevSY)
+  prevSX=e.screenX; prevSY=e.screenY;
+});
+document.addEventListener('mouseup',()=>{
+  if(window.parent===window) flushDesktopMove();
+  if(isDragging&&window.parent!==window) window.parent.postMessage({type:'kairos-pet-drop'},'*');
+  setTimeout(()=>isDragging=false,10);
+  startX=undefined;
+});
+</script>
+</body>
+</html>

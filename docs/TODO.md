@@ -45,7 +45,7 @@
 - [x] 保存主窗口尺寸与位置，重启后恢复并防止恢复到屏幕外
 - [x] 建立单实例运行保护，重复启动时聚焦已有主窗口
 - [x] 拦截外部链接并交给系统浏览器打开
-- [x] 建立原生应用菜单与受限快捷键路由：Alt+1 至 Alt+5 切换核心页面，Ctrl+, 打开设置，Ctrl+Shift+A 打开 AI 对话，并可从菜单显示/隐藏 FireFly
+- [x] 建立原生应用菜单与受限快捷键路由：Alt+1 至 Alt+5 切换核心页面，Ctrl+, 打开设置，Ctrl+Shift+A 打开 AI 对话，并可从菜单显示/隐藏 桌宠
 - [x] 支持 macOS activate 事件恢复或重建主窗口
 - [x] 配置 Electron Builder、Windows NSIS 安装包和 portable 产物脚本
 - [x] 打包配置已排除 `.env*`、测试、参考资料和设计源文件
@@ -54,9 +54,9 @@
 - [x] 安装并配置系统 Node.js/npm，避免只依赖 Codex 内置运行时；当前 Node/npm 已存在于 `D:\nodejs\`，启动脚本会在 PATH 缺失时尝试该路径
 - [x] 增加一键开发启动脚本/说明，优先使用本机 Node，启动缺依赖时给出 `pnpm install` / `npm install` / `doctor` 提示
 - [ ] 评估是否继续 Electron 原生 HTML 架构，或迁移到 React + TypeScript
-- [ ] 若迁移 React，拆分主视图、日程、习惯、音乐、AI、FireFly 和 shell 组件
+- [ ] 若迁移 React，拆分主视图、日程、习惯、音乐、AI、桌宠 和 shell 组件
 - [ ] 建立正式主题、字体、颜色、间距、图标和图片资源系统
-- [~] 接入 SQLite，并建立数据库迁移机制；当前已生成 `kairos.sqlite`、`schema_migrations`、app-state snapshot、日程/习惯/打卡/笔记/学习计划索引表和 `json_store_snapshots`，完整数据读写迁移仍待继续
+- [x] 接入 SQLite 并建立数据库迁移机制；`kairos.sqlite` 是运行时唯一主库，v3 已将学习计划合并为日程并删除旧镜像表。
 - [~] 建立任务、日程、习惯、打卡、笔记、设置、音乐、网易云账号缓存的正式数据模型；当前 app-state JSON 已有 schema v2、设置页迁移审计摘要、`pnpm audit:app-state`、`pnpm audit:desktop-data`、SQLite app-state 镜像，以及 AI/音乐/网易云/设置 store 摘要索引和恢复 fallback，完整 repository 模型仍待设计
 - [~] 将数据访问封装为独立 repository/service 层；当前 `AppStateRepository` 已承接日程/任务/笔记等 app-state collection CRUD，`SettingsRepository` 已承接 AI/联网设置和网易云登录状态的原子排队写入与 SQLite 恢复，音乐和 AI 会话 store 仍待继续统一
 
@@ -145,7 +145,7 @@
 - [x] 已有上下文长度评估、摘要和新会话延续基础
 - [x] 已有工具权限、提案、确认写入日程/任务/习惯/笔记/学习计划的基础运行时
 - [x] 已有从图片/附件提取日程结构的基础接口
-- [x] 已有独立 AI 聊天窗口，FireFly 点击可打开
+- [x] 已有独立 AI 聊天窗口，桌宠 点击可打开
 - [x] 已有 AI intent 识别，可区分附件提取、URL 提取、赛事搜索澄清等场景
 - [x] 已有 LangChain Agent 雏形和工具封装
 - [x] 已有外部公开来源搜索权限控制
@@ -153,7 +153,7 @@
 - [~] AI 工具调用事件协议仍需最终联调
 - [~] AI 不可用时，日历、任务、习惯、提醒和音乐仍可独立运行；已有服务层和静态契约测试，仍需界面端到端验收
 - [ ] 约定 AI 面板打开/关闭、发送消息和接收回复的接口类型
-- [x] 已建立 FireFly 状态、动作和气泡文本的安全 IPC 事件协议（主进程白名单校验）
+- [x] 已建立 桌宠 状态、动作和气泡文本的安全 IPC 事件协议（主进程白名单校验）
 - [ ] 合并/整理 AI 分支后解决组件、样式、状态管理和数据模型冲突
 - [ ] 对 AI 入口、流式回复、错误状态、取消响应、上下文摘要和工具确认进行端到端联调
 - [ ] 继续追踪 `docs/AI-INTERFACE-GAPS.md` 中列出的接口缺口
@@ -164,8 +164,8 @@
 - [x] 截止日期任务默认提前一天提醒
 - [x] 比赛或活动默认提前 30 分钟提醒
 - [x] 提醒支持完成、稍后提醒和打开详情
-- [x] 提醒可通过 FireFly 气泡展示，但不依赖 AI 服务可用性
-- [x] 桌面环境支持可在 Settings > Reminders 开关的 Windows 原生通知（默认开启）；Windows AppUserModelID 与安装包 `app.kairos.desktop` 已统一，点击通知会聚焦 Kairos、打开日程页并定位到对应日程，关闭或系统不支持时自动保留页面内提醒和 FireFly 提醒
+- [x] 提醒可通过 桌宠 气泡展示，但不依赖 AI 服务可用性
+- [x] 桌面环境支持可在 Settings > Reminders 开关的 Windows 原生通知（默认开启）；Windows AppUserModelID 与安装包 `app.kairos.desktop` 已统一，点击通知会聚焦 Kairos、打开日程页并定位到对应日程，关闭或系统不支持时自动保留页面内提醒和 桌宠 提醒
 - [x] 处理睡眠唤醒、系统时间变化和错过提醒的补发逻辑
 - [x] 提醒时间计算已抽成 `app/reminder-core.cjs`
 - [x] 已覆盖默认提前规则、重启后到期触发、错过提醒、稍后提醒、已完成/已关闭不触发
@@ -174,13 +174,13 @@
 - [x] 增加提醒规则的用户可配置入口
 - [ ] 联调赛事日程、AI 提取日程与提醒默认规则
 
-## P1 FireFly 桌面陪伴
+## P1 桌宠 桌面陪伴
 
 - [x] Electron 已有独立 pet window 创建、隐藏、显示、移动、点击打开 AI 的 IPC
 - [x] 已保存 pet 可见性状态
 - [x] 已支持 pet mouse passthrough、拖动节流和右下角 restore 按钮
-- [x] 主界面 FireFly 已作为 AI 入口方向接入
-- [~] 已确认直接使用现有原参考图 `app/assets/firefly.jpg`，并已有呼吸、低频眨眼、对话、开心、提醒、困倦和减少动态效果降级；逐帧角色动作精修仍未完成
+- [x] 主界面 桌宠 已作为 AI 入口方向接入
+- [~] 桌宠已恢复为原版角色图，运行时资源位于 `app/assets/pets/desk-pet.png`；现有浮动、开心和右键菜单交互继续保留
 - [~] 已实现眨眼、呼吸、困倦、开心和安静待机的轻量动画；当前原图是完整插画，真正的手臂挥手等逐帧动作需未来提供分层或动作素材
 - [ ] 动画保持轻柔，避免频繁跳动或打断用户
 - [ ] 支持主窗口右上角入口与独立悬浮角色两种状态的统一状态管理
@@ -251,7 +251,7 @@
 - [ ] 第四优先级：按发布验收清单完整手测本地音乐导入、文件夹扫描、封面读取、队列恢复和路径失效
 - [ ] 第五优先级：补充 AI provider 不可用时的日程、任务、习惯、提醒、音乐界面端到端验收记录
 - [ ] 第六优先级：按发布验收清单补充提醒恢复、窗口缩放和真实界面日期行为相关自动化/人工验收
-- [ ] 第七优先级：把 FireFly 动作素材精修成稳定、温柔、不打扰的动画
+- [ ] 第七优先级：把 桌宠 动作素材精修成稳定、温柔、不打扰的动画
 - [ ] 第八优先级：决定是否迁移 React + TypeScript；如果不迁移，则整理当前原生 HTML/CSS/JS 的模块边界
 - [ ] 第九优先级：继续把音乐、网易云、AI、设置等 JSON store 升级到 SQLite repository，并准备完整数据迁移
 
@@ -261,6 +261,12 @@
 - [~] 日程、任务、习惯和音乐核心流程已基本可用，仍需完整离线/在线验收
 - [ ] 本地音乐和网易云音乐可在同一队列中稳定播放，并能处理不可播、过期、断网和路径失效
 - [~] 数据重启后不丢失；打包后 app-state 已覆盖任务/习惯 marker 重启读回，并已加入 app-state schema v2、设置页/CLI 迁移审计、桌面 userData 目录审计、迁移前备份、导入/恢复前自动备份、备份列表/读取/恢复、导出/导入、迁移落盘测试、`kairos.sqlite` 镜像、辅助 store 摘要索引，以及 app-state / music-state / ai-data / ai-settings / netease-api-state JSON 丢失或损坏时从 SQLite 快照恢复；完整 SQLite repository 升级尚未实现
-- [ ] FireFly 动画和 AI 入口不影响主界面性能与操作
+- [ ] 桌宠 动画和 AI 入口不影响主界面性能与操作
 - [~] AI 不可用时核心日程、任务、习惯、提醒、音乐仍可独立运行；已有服务层和提醒前端静态契约自动化证据，仍缺界面端到端验收记录
 - [~] 已重新生成可安装的 Windows 应用，并完成临时 `userData` 干净启动、unpacked app-state 重启读回、portable renderer smoke 与二次启动读回、静默安装、快捷方式创建与清理、重复启动聚焦、静默卸载、重装与数据保留验收；仍需完成交互安装和 portable 普通双击数据目录手测
+# 2026-07-19 Structure Refactor
+
+- [x] Reorganized renderer code into `pages/`, `features/`, `shell/`, `shared/`, and classified `assets/` directories without changing user data paths.
+- [x] Reorganized Electron code into `main/`, `preload/`, `services/`, `data/`, `migrations/`, `scripts/`, and categorized tests.
+- [x] Rebuilt `release/win-unpacked`, refreshed `release/manifest.json`, and passed source tests (151/151) plus distribution verification (5/5).
+- [ ] Manually verify real NetEase Cloud Music account workflows, window scaling, keyboard focus, and real desktop reminder timing before public release.
