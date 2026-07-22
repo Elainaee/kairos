@@ -34,18 +34,16 @@
     let state = { tracks: [], queueTrackIds: [], currentTrackId: null, mode: 'sequence', playing: false, volume: 70, muted: false, positions: {} };
     let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null, externalRefreshVersion = 0, lastAppliedRefreshAt = 0;
     const durationCache = new Map();
-    const PLAY_COUNT_KEY = 'kairos-music-play-counts';
-    const NETEASE_PLAYBACK_KEY = 'kairos-netease-playback-state';
-    const LAST_SOURCE_KEY = 'kairos-music-last-source';
-    try { localStorage.removeItem('kairos-music-runtime'); localStorage.removeItem('kairos-music-owner'); } catch {}
     const desktop = () => window.kairosDesktop?.music || null;
+    const runtime = () => state.runtime ||= { lastSource:'local', neteasePlayback:null, playCounts:{} };
+    const persistRuntime = patch => { state.runtime = { ...runtime(), ...patch }; desktop()?.updateRuntime?.(state.runtime).catch(() => {}); };
     const neteaseDesktop = () => {
       if (window.kairosDesktop?.netease) return window.kairosDesktop.netease;
       try { return window.parent?.kairosDesktop?.netease || null; } catch { return null; }
     };
     const getNeteaseQualityPreference = () => {
       try {
-        const settings = window.KairosSettingsFeature?.read?.() || window.parent?.KairosSettingsFeature?.read?.() || JSON.parse(localStorage.getItem('kairos-settings') || '{}');
+        const settings = window.KairosSettingsFeature?.read?.() || window.parent?.KairosSettingsFeature?.read?.() || {};
         const value = settings?.music?.neteaseQuality || 'standard';
         return ['standard','higher','exhigh','lossless'].includes(value) ? value : 'standard';
       } catch {
@@ -76,7 +74,7 @@
     const currentTrack = () => queueTracks().find(t => t.id === state.currentTrackId) || queueTracks()[0] || null;
     const readNeteasePlayback = () => {
       try {
-        const saved = JSON.parse(localStorage.getItem(NETEASE_PLAYBACK_KEY) || 'null');
+        const saved = runtime().neteasePlayback;
         const queueTrackIds = Array.isArray(saved?.queueTrackIds) ? saved.queueTrackIds.filter(isNeteaseId) : [];
         const tracks = Array.isArray(saved?.tracks) ? saved.tracks.filter(track => isNeteaseId(track?.id)) : [];
         if (!queueTrackIds.length || !tracks.length) return null;
@@ -95,35 +93,34 @@
       const tracks = (state.tracks || []).filter(track => isNeteaseId(track?.id));
       if (!queueTrackIds.length || !tracks.length) return;
       const positions = Object.fromEntries(Object.entries(state.positions || {}).filter(([id]) => isNeteaseId(id)));
-      localStorage.setItem(NETEASE_PLAYBACK_KEY, JSON.stringify({
+      persistRuntime({ neteasePlayback: {
         tracks,
         queueTrackIds,
         currentTrackId: queueTrackIds.includes(state.currentTrackId) ? state.currentTrackId : queueTrackIds[0],
         mode: state.mode || 'sequence',
         positions,
         updatedAt: new Date().toISOString()
-      }));
-      localStorage.setItem(LAST_SOURCE_KEY, 'netease');
+      }, lastSource: 'netease' });
     };
     const rememberPlaybackSource = () => {
       if (hasNeteaseQueue()) { saveNeteasePlayback(); return; }
       const queueTrackIds = state.queueTrackIds || [];
       if (state.currentTrackId || queueTrackIds.length) {
-        localStorage.setItem(LAST_SOURCE_KEY, 'local');
+        persistRuntime({ lastSource: 'local' });
         return;
       }
-      localStorage.setItem(LAST_SOURCE_KEY, 'empty');
+      persistRuntime({ lastSource: 'empty' });
     };
     const clearNeteasePlayback = () => {
-      localStorage.removeItem(NETEASE_PLAYBACK_KEY);
-      localStorage.setItem(LAST_SOURCE_KEY, 'empty');
+      persistRuntime({ neteasePlayback: null, lastSource: 'empty' });
     };
     window.addEventListener('kairos:netease-cache-cleared', clearNeteasePlayback);
     const restoreLastPlaybackSource = nextState => {
-      const lastSource = localStorage.getItem(LAST_SOURCE_KEY) || 'local';
+      const savedRuntime = nextState.runtime || {};
+      const lastSource = savedRuntime.lastSource || 'local';
       if (lastSource === 'empty') return { ...nextState, queueTrackIds: [], currentTrackId: null, playing: false };
       if (lastSource !== 'netease') return nextState;
-      const saved = readNeteasePlayback();
+      const saved = savedRuntime.neteasePlayback;
       if (!saved) return nextState;
       const localTracks = (nextState.tracks || []).filter(track => !isNeteaseId(track?.id));
       return {
@@ -203,12 +200,12 @@
       if (response?.error) throw new Error(response.error);
       return null;
     };
-    const readLocalPlayCounts = () => { try { return JSON.parse(localStorage.getItem(PLAY_COUNT_KEY)||'{}')||{}; } catch { return {}; } };
+    const readLocalPlayCounts = () => runtime().playCounts || {};
     const writeLocalPlayCount = id => {
       const counts=readLocalPlayCounts();
       const entry=counts[id]||{};
       counts[id]={count:Math.max(0,Number(entry.count)||0)+1,lastPlayedAt:new Date().toISOString()};
-      localStorage.setItem(PLAY_COUNT_KEY,JSON.stringify(counts));
+      persistRuntime({ playCounts: counts });
       state.tracks=(state.tracks||[]).map(track=>track.id===id?{...track,playCount:Math.max(Number(track.playCount)||0,counts[id].count),lastPlayedAt:counts[id].lastPlayedAt}:track);
     };
     const emitMusicRefresh = detail => {

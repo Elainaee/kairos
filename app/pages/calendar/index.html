@@ -471,7 +471,7 @@
           document.getElementById('aiPanel').showModal();
         }
         if (event.data?.type === 'kairos-pet-hide') {
-          localStorage.setItem('kairos-pet-hidden', '1');
+          document.documentElement.dataset.kairosPetHidden = '1';
         }
       });
     }
@@ -480,4 +480,3 @@
 </body>
 
 </html>
-

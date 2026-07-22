@@ -17,9 +17,7 @@
     return `${(value / 1024 / 1024).toFixed(value < 10 * 1024 * 1024 ? 1 : 0)} MB`;
   };
   const readLocal = () => { try { return normalizeState(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { return normalizeState({}); } };
-  const writeLocal = () => localStorage.setItem(KEY, JSON.stringify(state));
   const save = () => {
-    writeLocal();
     window.dispatchEvent(new CustomEvent('kairos:state-changed', { detail: state }));
     try { if (window.top !== window) window.top.postMessage({ type: 'kairos:state-sync', state }, '*'); } catch {}
     window.kairosDesktop?.appState?.save?.(state).catch(console.error);
@@ -29,13 +27,13 @@
     state = readLocal();
     if (window.kairosDesktop?.appState?.initialize) {
       window.kairosDesktop.appState.initialize(state).then(next => {
-        state = normalizeState(next);
-        writeLocal();
+        state = normalizeState({ ...state, ...next, notes: [...(next.notes || []), ...(state.notes || []).filter(note => !(next.notes || []).some(existing => existing.id === note.id))] });
+        window.kairosDesktop.appState.save(state).catch(console.error);
+        localStorage.removeItem(KEY);
         render();
       }).catch(console.error);
       window.kairosDesktop.appState.onChanged?.(next => {
         state = normalizeState(next);
-        writeLocal();
         render();
       });
     }
@@ -171,8 +169,8 @@
       render();
     });
     window.addEventListener('storage', event => { if (event.key === KEY) { state = readLocal(); render(); } });
-    window.addEventListener('message', event => { if (event.data?.type === 'kairos:state-sync') { state = normalizeState(event.data.state); writeLocal(); render(); } });
-    window.addEventListener('kairos:state-changed', event => { if (event.detail) { state = normalizeState(event.detail); writeLocal(); render(); } });
+    window.addEventListener('message', event => { if (event.data?.type === 'kairos:state-sync') { state = normalizeState(event.data.state); render(); } });
+    window.addEventListener('kairos:state-changed', event => { if (event.detail) { state = normalizeState(event.detail); render(); } });
   }
 
   if (!core) return;

@@ -17,7 +17,8 @@
     document.documentElement.style.setProperty('--kairos-calendar-background-brightness', `${brightness}%`);
   };
   if (!document.getElementById('kairos-motion-preference-style')) document.head.insertAdjacentHTML('beforeend', '<style id="kairos-motion-preference-style">html.kairos-reduce-motion *,html.kairos-reduce-motion *::before,html.kairos-reduce-motion *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}</style>');
-  try { const settings = JSON.parse(localStorage.getItem('kairos-settings') || '{}'); applyMotionPreference(settings?.accessibility?.reduceMotion === true); applyCalendarBackground(settings); } catch { applyCalendarBackground({}); }
+  applyCalendarBackground({});
+  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; applyMotionPreference(settings?.accessibility?.reduceMotion === true); applyCalendarBackground(settings); });
   const embedded = new URLSearchParams(location.search).get('embed') === '1';
   if (embedded) {
     window.addEventListener('message', event => {
@@ -105,10 +106,7 @@
   };
   const syncScheduleState = frame => {
     if (!frame?.contentWindow) return;
-    try {
-      const state = JSON.parse(localStorage.getItem('kairos-mvp-state') || '{}');
-      frame.contentWindow.postMessage({ type:'kairos:state-sync', state }, '*');
-    } catch {}
+    window.kairosDesktop?.appState?.get?.().then(state => frame.contentWindow?.postMessage({ type:'kairos:state-sync', state }, '*')).catch(() => {});
   };
   const syncMotionPreference = frame => frame?.contentWindow?.postMessage({ type:'kairos:motion-preference', reduce:document.documentElement.classList.contains(MOTION_CLASS) }, '*');
   const getSpaView = () => {
@@ -162,11 +160,6 @@
         frame = document.createElement('iframe');
         frame.className = 'kairos-spa-view';
         let frameUrl = spaPages[nextView][0];
-        try {
-          const sharedState = JSON.parse(localStorage.getItem('kairos-mvp-state') || '{}');
-          frame.name = `kairos-state:${JSON.stringify(sharedState)}`;
-          if (nextView === 'schedule') frameUrl += `&scheduleState=${encodeURIComponent(JSON.stringify({schedules:Array.isArray(sharedState.schedules)?sharedState.schedules:[]}))}`;
-        } catch {}
         frame.src = frameUrl;
         frame.title = `Kairos ${spaPages[nextView][1]}`;
         frame.dataset.view = nextView;

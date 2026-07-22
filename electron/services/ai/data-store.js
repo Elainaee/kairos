@@ -1,31 +1,23 @@
 import fs from "node:fs/promises";
-import path from "node:path";
+import { KairosAppDatabase } from "../../data/sqlite/index.js";
 
 const EMPTY = { version: 2, conversations: [], messages: [], attachments: [], proposals: [], usage: [], permissions: {}, entities: {}, memories: [] };
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const retryableRenameError = error => ["EPERM", "EACCES", "EBUSY"].includes(error?.code);
 
 export class AiDataStore {
-  constructor(filePath, options = {}) { this.filePath = filePath; this.queue = Promise.resolve(); this.database = options.database || null; }
+  constructor(legacyPath, options = {}) { this.legacyPath = legacyPath; this.queue = Promise.resolve(); this.database = options.database || null; this.databaseReady = null; this.databasePath = options.databasePath || ":memory:"; }
+  async ensureDatabase() { if (this.database?.available) return this.database; if (!this.databaseReady) this.databaseReady = (async () => { this.database ||= new KairosAppDatabase(this.databasePath); const status = await this.database.initialize(); if (!status.available) throw new Error("sqlite_unavailable"); return this.database; })(); return this.databaseReady; }
   normalize(input = {}) { return { ...structuredClone(EMPTY), ...input }; }
   readDatabaseSnapshot() {
     try {
-      const snapshot = this.database?.readJsonStorePayload?.("ai-data");
-      return snapshot ? this.normalize({ ...snapshot, recoveredFromSqlite: true }) : null;
+      const snapshot = this.database?.readStorePayload?.("ai-data");
+      return snapshot ? this.normalize(snapshot) : null;
     } catch {
       return null;
     }
   }
-  async read() { try { return this.normalize(JSON.parse(await fs.readFile(this.filePath, "utf8"))); } catch { return this.readDatabaseSnapshot() || structuredClone(EMPTY); } }
-  async ensureStateFile() {
-    try {
-      JSON.parse(await fs.readFile(this.filePath, "utf8"));
-      return;
-    } catch {}
-    const snapshot = this.readDatabaseSnapshot();
-    if (snapshot) await this.writeAtomic({ ...snapshot, restoredFromSqliteAt: new Date().toISOString() });
-  }
-  async writeAtomic(data) { await fs.mkdir(path.dirname(this.filePath), { recursive: true }); const temp = `${this.filePath}.${process.pid}.${crypto.randomUUID()}.tmp`; try { await fs.writeFile(temp, JSON.stringify(data, null, 2), "utf8"); for (let attempt = 0; ; attempt++) { try { await fs.rename(temp, this.filePath); break; } catch (error) { if (!retryableRenameError(error) || attempt >= 6) throw error; await sleep(25 * (attempt + 1)); } } if (this.database?.saveJsonStoreSnapshot) this.database.saveJsonStoreSnapshot("ai-data", data, { conversations: data.conversations?.length || 0, messages: data.messages?.length || 0, attachments: data.attachments?.length || 0, proposals: data.proposals?.length || 0, memories: data.memories?.length || 0, usage: data.usage?.length || 0 }); } finally { await fs.unlink(temp).catch(() => {}); } }
+  async read() { await this.ensureDatabase(); const snapshot = this.readDatabaseSnapshot(); if (snapshot) return snapshot; try { const legacy = this.normalize(JSON.parse(await fs.readFile(this.legacyPath, "utf8"))); await this.writeAtomic(legacy); return legacy; } catch { const empty = structuredClone(EMPTY); await this.writeAtomic(empty); return empty; } }
+  async ensureStateFile() { await this.read(); }
+  async writeAtomic(data) { await this.ensureDatabase(); if (!this.database?.saveStorePayload) throw new Error("sqlite_unavailable"); this.database.saveStorePayload("ai-data", this.normalize(data), { conversations: data.conversations?.length || 0, messages: data.messages?.length || 0, attachments: data.attachments?.length || 0, proposals: data.proposals?.length || 0, memories: data.memories?.length || 0, usage: data.usage?.length || 0 }); }
   async mutate(change) {
     const run = async () => { const data = await this.read(); const result = await change(data); await this.writeAtomic(data); return result; };
     this.queue = this.queue.then(run, run);

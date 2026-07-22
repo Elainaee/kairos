@@ -5,15 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import { SettingsRepository } from "../../data/settings/index.js";
 
-test("settings repository writes atomically, serializes updates, and mirrors a snapshot", async () => {
+test("settings repository serializes SQLite writes without creating a JSON state file", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-settings-"));
   const filePath = path.join(dir, "settings.json");
   const snapshots = [];
+  let saved = null;
   const repository = new SettingsRepository({
     filePath,
     defaults: { theme: "light", count: 0 },
     normalize: value => ({ theme: value?.theme || "light", count: Number(value?.count || 0) }),
-    database: { saveJsonStoreSnapshot: (...args) => snapshots.push(args) },
+    database: { saveStorePayload: (...args) => { snapshots.push(args); saved = args[1]; }, readStorePayload: () => saved },
     storeKey: "desktop-settings",
     summarize: value => ({ theme: value.theme })
   });
@@ -26,6 +27,7 @@ test("settings repository writes atomically, serializes updates, and mirrors a s
   assert.deepEqual(await repository.read(), { theme: "light", count: 2 });
   assert.equal(snapshots.length, 2);
   assert.deepEqual(snapshots.at(-1), ["desktop-settings", { theme: "light", count: 2 }, { theme: "light" }]);
+  await assert.rejects(fs.access(filePath));
   await fs.rm(dir, { recursive: true, force: true });
 });
 
@@ -36,11 +38,11 @@ test("settings repository restores the SQLite snapshot when its JSON state is un
     filePath,
     defaults: { theme: "light" },
     normalize: value => ({ theme: value?.theme || "light" }),
-    database: { readJsonStorePayload: key => key === "desktop-settings" ? { theme: "dark" } : null },
+    database: { readStorePayload: key => key === "desktop-settings" ? { theme: "dark" } : null },
     storeKey: "desktop-settings"
   });
 
   assert.deepEqual(await repository.read(), { theme: "dark" });
-  assert.deepEqual(JSON.parse(await fs.readFile(filePath, "utf8")), { theme: "dark" });
+  await assert.rejects(fs.access(filePath));
   await fs.rm(dir, { recursive: true, force: true });
 });

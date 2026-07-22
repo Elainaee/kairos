@@ -1,31 +1,4 @@
 import fs from "node:fs/promises";
-import path from "node:path";
-
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-const isTransientFileError = error => ["EPERM", "EACCES", "EBUSY"].includes(error?.code);
-
-async function replaceFileWithRetry(tempPath, targetPath) {
-  let lastError;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      await fs.rename(tempPath, targetPath);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFileError(error)) throw error;
-    }
-    try {
-      await fs.copyFile(tempPath, targetPath);
-      await fs.unlink(tempPath).catch(() => {});
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFileError(error)) throw error;
-      await wait(40 * (attempt + 1));
-    }
-  }
-  throw lastError;
-}
 
 export class SettingsRepository {
   constructor({ filePath, defaults = {}, normalize = value => value || {}, database = null, storeKey = "settings", summarize = () => ({}) } = {}) {
@@ -44,7 +17,7 @@ export class SettingsRepository {
 
   readSnapshot() {
     try {
-      const snapshot = this.database?.readJsonStorePayload?.(this.storeKey);
+      const snapshot = this.database?.readStorePayload?.(this.storeKey);
       return snapshot ? this.normalize(snapshot) : null;
     } catch {
       return null;
@@ -52,24 +25,20 @@ export class SettingsRepository {
   }
 
   async read() {
+    const snapshot = this.readSnapshot();
+    if (snapshot) return snapshot;
     try {
-      return this.normalize(JSON.parse(await fs.readFile(this.filePath, "utf8")));
-    } catch {
-      const snapshot = this.readSnapshot();
-      if (!snapshot) return this.fallback();
-      await this.write(snapshot);
-      return snapshot;
-    }
+      const legacy = this.normalize(JSON.parse(await fs.readFile(this.filePath, "utf8")));
+      await this.write(legacy);
+      return legacy;
+    } catch { const fallback = this.fallback(); await this.write(fallback); return fallback; }
   }
 
   async write(value) {
     const normalized = this.normalize(value);
     this.queue = this.queue.catch(() => {}).then(async () => {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-      await fs.writeFile(tempPath, JSON.stringify(normalized, null, 2), "utf8");
-      await replaceFileWithRetry(tempPath, this.filePath);
-      await this.database?.saveJsonStoreSnapshot?.(this.storeKey, normalized, this.summarize(normalized));
+      if (!this.database?.saveStorePayload) throw new Error("sqlite_unavailable");
+      await this.database.saveStorePayload(this.storeKey, normalized, this.summarize(normalized));
       return normalized;
     });
     return this.queue;

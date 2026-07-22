@@ -1,37 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { KairosAppDatabase } from "../sqlite/index.js";
 
 export const APP_STATE_SCHEMA_VERSION = 3;
 const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], moods: {}, notes: [], theme: "light" };
 const arrays = ["schedules", "checkins", "habits", "notes"];
 const SCHEDULE_TYPES = new Set(["task", "deadline", "event", "match", "holiday", "other"]);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-const isTransientFileError = error => ["EPERM", "EACCES", "EBUSY"].includes(error?.code);
-
-async function replaceFileWithRetry(tempPath, targetPath) {
-  let lastError;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      await fs.rename(tempPath, targetPath);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFileError(error)) throw error;
-    }
-    try {
-      await fs.copyFile(tempPath, targetPath);
-      await fs.unlink(tempPath).catch(() => {});
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFileError(error)) throw error;
-      await wait(40 * (attempt + 1));
-    }
-  }
-  throw lastError;
-}
-
 function migrationEntry(id, from, to) {
   return { id, from, to, applied_at: new Date().toISOString() };
 }
@@ -142,34 +117,37 @@ export function auditAppState(input = {}) {
 }
 
 export class AppStateStore {
-  constructor(filePath, options = {}) { this.filePath = filePath; this.queue = Promise.resolve(); this.database = options.database || null; }
-  backupDir() { return path.join(path.dirname(this.filePath), "backups"); }
+  constructor(legacyPath, options = {}) { this.legacyPath = legacyPath; this.queue = Promise.resolve(); this.database = options.database || null; this.databaseReady = null; this.databasePath = options.databasePath || ":memory:"; }
+  async ensureDatabase() {
+    if (this.database?.available) return this.database;
+    if (!this.databaseReady) this.databaseReady = (async () => { this.database ||= new KairosAppDatabase(this.databasePath); const status = await this.database.initialize(); if (!status.available) throw new Error("sqlite_unavailable"); return this.database; })();
+    return this.databaseReady;
+  }
+  backupDir() { return path.join(path.dirname(this.legacyPath), "backups"); }
   backupPath(name) { return path.join(this.backupDir(), assertBackupName(name)); }
-  async exists() { try { await fs.access(this.filePath); return true; } catch { return false; } }
+  async exists() { try { await fs.access(this.legacyPath); return true; } catch { return false; } }
   readDatabaseSnapshot() {
     try {
       const snapshot = this.database?.readAppStateSnapshot?.();
-      return snapshot ? normalize({ ...snapshot, recovered_from_sqlite: true }) : null;
+      return snapshot ? normalize(snapshot) : null;
     } catch {
       return null;
     }
   }
-  async read() { try { return normalize(JSON.parse(await fs.readFile(this.filePath, "utf8"))); } catch { return this.readDatabaseSnapshot() || normalize(); } }
+  async read() { await this.ensureDatabase(); const snapshot = this.readDatabaseSnapshot(); if (snapshot) return snapshot; try { const legacy = normalize(JSON.parse(await fs.readFile(this.legacyPath, "utf8"))); await this.write(legacy); return legacy; } catch { const empty = normalize(); await this.write(empty); return empty; } }
   async backupBeforeMigration(raw) {
     const backupDir = this.backupDir();
     await fs.mkdir(backupDir, { recursive: true });
     const backupPath = path.join(backupDir, backupName(raw?.version));
-    await fs.copyFile(this.filePath, backupPath);
+    await fs.copyFile(this.legacyPath, backupPath);
     return backupPath;
   }
   async backupCurrent(reason = "manual") {
-    if (!(await this.exists())) return "";
     const backupDir = this.backupDir();
     await fs.mkdir(backupDir, { recursive: true });
-    let raw = {};
-    try { raw = JSON.parse(await fs.readFile(this.filePath, "utf8")); } catch {}
+    const raw = await this.read();
     const backupPath = path.join(backupDir, backupName(raw?.version, reason));
-    await fs.copyFile(this.filePath, backupPath);
+    await fs.writeFile(backupPath, JSON.stringify(raw, null, 2), "utf8");
     return backupPath;
   }
   async listBackups() {
@@ -196,24 +174,14 @@ export class AppStateStore {
     await this.write(restored);
     return restored;
   }
-  async write(input) { const state = normalize(input); this.queue = this.queue.catch(() => {}).then(async () => { await fs.mkdir(path.dirname(this.filePath), { recursive: true }); const temp = `${this.filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`; await fs.writeFile(temp, JSON.stringify(state, null, 2), "utf8"); await replaceFileWithRetry(temp, this.filePath); if (this.database?.saveAppStateSnapshot) await this.database.saveAppStateSnapshot(state).catch(error => console.error("Failed to mirror app-state into SQLite:", error)); return state; }); return this.queue; }
+  async write(input) { const state = normalize(input); await this.ensureDatabase(); this.queue = this.queue.catch(() => {}).then(async () => { if (!this.database?.saveAppStateSnapshot) throw new Error("sqlite_unavailable"); await this.database.saveAppStateSnapshot(state); return state; }); return this.queue; }
   async initialize(legacy) {
-    if (!(await this.exists())) {
-      const snapshot = this.readDatabaseSnapshot();
-      if (snapshot) return this.write({ ...snapshot, restored_from_sqlite_at: new Date().toISOString() });
-      return this.write(legacy || {});
+    const snapshot = this.readDatabaseSnapshot();
+    if (snapshot) return snapshot;
+    if (await this.exists()) {
+      try { return this.write(JSON.parse(await fs.readFile(this.legacyPath, "utf8"))); } catch {}
     }
-    let raw = {};
-    try { raw = JSON.parse(await fs.readFile(this.filePath, "utf8")); } catch {
-      const snapshot = this.readDatabaseSnapshot();
-      if (snapshot) return this.write({ ...snapshot, restored_from_sqlite_at: new Date().toISOString() });
-    }
-    const state = normalize(raw);
-    if (Number(raw.version || 0) !== APP_STATE_SCHEMA_VERSION || !Array.isArray(raw.migrations)) {
-      state.last_migration_backup = await this.backupBeforeMigration(raw);
-      await this.write(state);
-    }
-    return state;
+    return this.write(legacy || {});
   }
   async mutate(change) { const state = await this.read(); const result = await change(state); await this.write(state); return { state, result }; }
   async repairSchedules() {

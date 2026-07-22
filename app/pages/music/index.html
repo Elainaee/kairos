@@ -800,7 +800,7 @@ const neteaseAccountPanel = document.getElementById('neteaseAccountPanel');
 const neteaseUrlStatus = document.getElementById('neteaseUrlStatus');
 const getNeteaseQualityPreference = () => {
   try {
-    const settings = window.KairosSettingsFeature?.read?.() || JSON.parse(localStorage.getItem('kairos-settings') || '{}');
+    const settings = window.KairosSettingsFeature?.read?.() || {};
     const value = settings?.music?.neteaseQuality || 'standard';
     return ['standard', 'higher', 'exhigh', 'lossless'].includes(value) ? value : 'standard';
   } catch {
@@ -868,6 +868,8 @@ const getDesktopMusic = () => {
     return null;
   }
 };
+const musicRuntime = () => musicState.runtime ||= { sourceOrder: [], playCounts: {}, playlistOrders: {}, playlistCovers: {}, likedCover: '', sidebarState: 'expanded' };
+const persistMusicRuntime = patch => { musicState.runtime = { ...musicRuntime(), ...patch }; getDesktopMusic()?.updateRuntime?.(musicState.runtime).catch(() => {}); };
 
 const getDesktopNetease = () => {
   if (window.kairosDesktop?.netease) return window.kairosDesktop.netease;
@@ -879,12 +881,8 @@ const getDesktopNetease = () => {
 };
 
 const readMusicSourceOrder = () => {
-  try {
-    const order = JSON.parse(localStorage.getItem(SOURCE_ORDER_KEY) || '[]');
-    return Array.isArray(order) ? order.filter(id => id === 'local' || id === 'netease') : [];
-  } catch {
-    return [];
-  }
+  const order = musicRuntime().sourceOrder;
+  return Array.isArray(order) ? order.filter(id => id === 'local' || id === 'netease') : [];
 };
 
 const writeMusicSourceOrder = () => {
@@ -892,7 +890,7 @@ const writeMusicSourceOrder = () => {
   const order = Array.from(musicSourceList.querySelectorAll('[data-source-group]'))
     .map(item => item.dataset.sourceGroup)
     .filter(Boolean);
-  localStorage.setItem(SOURCE_ORDER_KEY, JSON.stringify(order));
+  persistMusicRuntime({ sourceOrder: order });
 };
 
 const initMusicSourceSort = () => {
@@ -2282,14 +2280,13 @@ const cleanMusicText = value => String(value || '').split('').filter(ch => { con
 const historyPlayIcon = () => '<svg class="history-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="history-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg>';
 
 const readLocalPlayCounts = () => {
-  try { return JSON.parse(localStorage.getItem(PLAY_COUNT_KEY) || '{}') || {}; }
-  catch { return {}; }
+  return musicRuntime().playCounts || {};
 };
 
 const clearLocalPlayCount = trackId => {
   const counts = readLocalPlayCounts();
   delete counts[trackId];
-  localStorage.setItem(PLAY_COUNT_KEY, JSON.stringify(counts));
+  persistMusicRuntime({ playCounts: counts });
 };
 
 const toast = (() => {
@@ -2378,8 +2375,7 @@ const getMusicStateSignature = state => JSON.stringify({
 });
 
 const readPlaylistOrders = () => {
-  try { return JSON.parse(localStorage.getItem(PLAYLIST_ORDER_KEY) || '{}') || {}; }
-  catch { return {}; }
+  return musicRuntime().playlistOrders || {};
 };
 
 const playlistOrderKey = playlist => playlist?.id || playlist?.folderPath || playlist?.name || 'playlist';
@@ -2388,26 +2384,25 @@ const savePlaylistOrder = (playlist, trackIds) => {
   const orders = readPlaylistOrders();
   orders[playlistOrderKey(playlist)] = trackIds;
   if (playlist?.folderPath) orders[playlist.folderPath] = trackIds;
-  localStorage.setItem(PLAYLIST_ORDER_KEY, JSON.stringify(orders));
+  persistMusicRuntime({ playlistOrders: orders });
 };
 
 const removeSavedPlaylistOrder = playlist => {
   const orders = readPlaylistOrders();
   delete orders[playlistOrderKey(playlist)];
   if (playlist?.folderPath) delete orders[playlist.folderPath];
-  localStorage.setItem(PLAYLIST_ORDER_KEY, JSON.stringify(orders));
+  persistMusicRuntime({ playlistOrders: orders });
 };
 
 const readPlaylistCovers = () => {
-  try { return JSON.parse(localStorage.getItem(PLAYLIST_COVER_KEY) || '{}') || {}; }
-  catch { return {}; }
+  return musicRuntime().playlistCovers || {};
 };
 
 const playlistCoverKey = playlist => playlist?.id || playlist?.folderPath || '';
 
 const getCustomPlaylistCover = playlist => {
   if (!playlist) return '';
-  if (playlist.id === LIKED_PLAYLIST_ID) return localStorage.getItem(LIKED_COVER_KEY) || '';
+  if (playlist.id === LIKED_PLAYLIST_ID) return musicRuntime().likedCover || '';
   const covers = readPlaylistCovers();
   return covers[playlistCoverKey(playlist)] || covers[playlist.folderPath] || '';
 };
@@ -2415,13 +2410,13 @@ const getCustomPlaylistCover = playlist => {
 const saveCustomPlaylistCover = (playlist, dataUrl) => {
   if (!playlist) return;
   if (playlist.id === LIKED_PLAYLIST_ID) {
-    localStorage.setItem(LIKED_COVER_KEY, dataUrl);
+    persistMusicRuntime({ likedCover: dataUrl });
     return;
   }
   const covers = readPlaylistCovers();
   covers[playlistCoverKey(playlist)] = dataUrl;
   if (playlist.folderPath) covers[playlist.folderPath] = dataUrl;
-  localStorage.setItem(PLAYLIST_COVER_KEY, JSON.stringify(covers));
+  persistMusicRuntime({ playlistCovers: covers });
 };
 
 const orderPlaylistTrackIds = playlist => {
@@ -3508,7 +3503,7 @@ playlistDetailBack.addEventListener('click', () => {
 trigger.addEventListener('click', () => {
   const next = group.dataset.state === 'expanded' ? 'collapsed' : 'expanded';
   group.dataset.state = next;
-  localStorage.setItem(KEY, next);
+  persistMusicRuntime({ sidebarState: next });
 });
 
 document.addEventListener('keydown', (e) => {
@@ -3518,7 +3513,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-const saved = localStorage.getItem(KEY);
+const saved = musicRuntime().sidebarState;
 if (saved) group.dataset.state = saved;
 initMusicSourceSort();
 

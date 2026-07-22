@@ -7,15 +7,15 @@
     classifyReminder:(item,m,now)=>{if(item.status==='done'||m.dismissedAt||m.firedAt&&!m.snoozedUntil)return null;const target=m.snoozedUntil||+(core.dueAt(item)||0);return target&&target<=now&&target>=now-GRACE?{target,missed:now-target>CHECK*1.5}:null}
   };
   let state, timer, lastCheck=Date.now(), toastTimer;
-  const load=()=>{try{return {...{schedules:[],reminders:{}},...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return{schedules:[],reminders:{}}}};
+  const load=()=>state || { schedules:[], reminders:{} };
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const readSettings=()=>{try{return window.KairosSettingsFeature?.read?.()||JSON.parse(localStorage.getItem('kairos-settings')||'{}')}catch{return {}}};
+  const readSettings=()=>{try{return window.KairosSettingsFeature?.read?.()||{}}catch{return {}}};
   const snoozeMinutes=()=>{const value=Number(readSettings()?.reminders?.snoozeMinutes||10);return Number.isFinite(value)&&value>0?value:10};
   const desktopNotificationsEnabled=()=>readSettings()?.reminders?.desktopNotifications!==false;
   const snoozeLabel=()=>`Snooze ${snoozeMinutes()} min`;
   function dueAt(item){return core.dueAt(item)}
   const meta=id=>state.reminders[id]||{};
-  function save(){localStorage.setItem(KEY,JSON.stringify(state));window.kairosDesktop?.appState.save(state).catch(console.error)}
+  function save(){window.kairosDesktop?.appState.save(state).catch(console.error)}
   function upcoming(){const now=Date.now();return state.schedules.filter(x=>x.status!=='done'&&!meta(x.id).dismissedAt&&dueAt(x)&&+dueAt(x)>=now).sort((a,b)=>dueAt(a)-dueAt(b))}
   function pending(){return state.schedules.filter(x=>meta(x.id).firedAt&&!meta(x.id).dismissedAt&&x.status!=='done').sort((a,b)=>meta(b.id).firedAt-meta(a.id).firedAt)}
   function timeText(item){const d=dueAt(item);return d?d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}

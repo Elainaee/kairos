@@ -1,6 +1,6 @@
 import { createAgent, tool } from "langchain";
-import { ChatOpenAI } from "@langchain/openai";
 import * as z from "zod";
+import { createProviderChatModel, normalizeProviderError } from "./provider-registry.js";
 
 const domains = ["schedules", "tasks", "habits", "notes"];
 const weeklyRecurrenceSchema = z.object({ frequency: z.literal("weekly"), weekdays: z.array(z.number().int().min(0).max(6)).min(1), until: z.string().optional() });
@@ -41,6 +41,19 @@ function isFinalAiMessage(message) {
   const type = message?._getType?.() || message?.getType?.();
   return type === "ai" && !message?.tool_calls?.length && Boolean(contentOf(message).trim());
 }
+function usageOf(message) {
+  const usage = message?.usage_metadata || message?.response_metadata?.tokenUsage || message?.response_metadata?.token_usage;
+  if (!usage) return null;
+  return {
+    input_tokens: usage.input_tokens ?? usage.prompt_tokens ?? 0,
+    output_tokens: usage.output_tokens ?? usage.completion_tokens ?? 0,
+    total_tokens: usage.total_tokens ?? (usage.input_tokens ?? usage.prompt_tokens ?? 0) + (usage.output_tokens ?? usage.completion_tokens ?? 0),
+  };
+}
+function streamEnvelope(chunk) {
+  if (!Array.isArray(chunk) || typeof chunk[0] !== "string") return { mode: null, payload: chunk };
+  return { mode: chunk[0], payload: chunk[1] };
+}
 function matchingMemories(rows, query) {
   const needle = String(query || "").trim().toLowerCase();
   return !needle ? rows : rows.filter(row => `${row.key} ${row.value}`.toLowerCase().includes(needle));
@@ -62,7 +75,7 @@ const scheduleUpdateSchema = z.object({
   recurrence: weeklyRecurrenceSchema.optional(),
 });
 
-export async function runKairosAgent({ apiKey, model, baseURL, chatModel, messages, conversationTitle = "新对话", store, toolRuntime, appAdapters, searchWeb, ensureExternalSearch, ensureDomainAccess, onToolEvent = () => {}, onSetTitle = async () => {}, replyStyle = "companion", memoryEnabled = true, now = new Date() }) {
+export async function runKairosAgent({ provider = "openai", apiKey, model, chatModel, messages, conversationTitle = "新对话", store, toolRuntime, appAdapters, searchWeb, ensureExternalSearch, ensureDomainAccess, onToolEvent = () => {}, onSetTitle = async () => {}, replyStyle = "companion", memoryEnabled = true, signal, now = new Date() }) {
   if (!apiKey && !chatModel) throw new Error("missing_key");
   const proposals = [];
   const allowDomainRead = ensureDomainAccess || (async domain => {
@@ -122,12 +135,32 @@ export async function runKairosAgent({ apiKey, model, baseURL, chatModel, messag
     return { proposed: true, count: items.length, requires_user_confirmation: true };
   }, { name: "propose_delete_schedules", description: "Create one pending confirmation to delete or cancel one or more existing schedules. First query schedules, identify every exact ID matching the user's request, then pass those IDs here. Never delete without confirmation.", schema: z.object({ ids: z.array(z.string().min(1)).min(1).max(100), reason: z.string().max(300).optional() }) });
   const styles = { companion: "Reply with warm companionship: acknowledge feelings first when appropriate, then offer grounded help.", concise: "Reply concisely and action-first. Prefer clear conclusions, short steps, and no unnecessary preamble.", learning: "Reply as a focused learning partner: explain the reasoning clearly, structure the material, and encourage deliberate practice." };
-  const chat = chatModel || new ChatOpenAI({ apiKey, model, temperature: 0.35, ...(baseURL ? { configuration: { baseURL } } : {}) });
+  const chat = chatModel || createProviderChatModel(provider, { apiKey, model, temperature: 0.35 });
   const tools = [setConversationTitle, webSearch, queryData, proposeSchedule, proposeTask, proposeUpdateSchedule, proposeDeleteSchedules];
   if (memoryEnabled) tools.unshift(readMemories, remember, forget);
   const memoryInstruction = memoryEnabled ? "Long-term memory is enabled. Use memory tools only for explicit, durable user facts." : "Long-term memory is disabled. Do not imply that you remember or save anything beyond this conversation.";
   const agent = createAgent({ model: chat, tools, systemPrompt: `${KAIROS_AGENT_PROMPT.replace("{now}", now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }))}\n${styles[replyStyle] || styles.companion}\n${memoryInstruction}\nCurrent conversation title: ${conversationTitle}\nFor any request to change, move, rename, reschedule, or retype an existing calendar item, first call query_kairos_data for schedules, identify the exact ID, then call propose_update_schedule. For requests to cancel, remove, or delete schedules, first query schedules, identify all exact matching IDs, then call propose_delete_schedules once with those IDs. When the user provides attachment text containing dates, times, meetings, tasks, or schedules, extract every concrete item with model reasoning and create separate pending schedule/task proposals; use attachment provenance in notes. Never create a replacement schedule unless the user explicitly asks for a new one. A weekly recurrence must be encoded as recurrence.frequency='weekly' and recurrence.weekdays (Sunday=0 through Saturday=6), never only as prose in notes or cadence.` });
-  const result = await agent.invoke({ messages });
-  const final = [...(result.messages || [])].reverse().find(isFinalAiMessage);
-  return { text: contentOf(final).trim(), proposals };
+  let result = null;
+  let streamedText = "";
+  let usage = null;
+  try {
+    const stream = await agent.stream({ messages }, { signal, streamMode: ["messages", "tools", "values"] });
+    for await (const chunk of stream) {
+      const { mode, payload } = streamEnvelope(chunk);
+      if (mode === "messages") {
+        const [message] = payload || [];
+        if (message?._getType?.() === "ai") {
+          const delta = contentOf(message);
+          if (delta) { streamedText += delta; onToolEvent({ type: "text_delta", delta }); }
+          usage ||= usageOf(message);
+        }
+      } else if (mode === "tools" && payload) {
+        const type = payload.event === "on_tool_start" ? "tool_started" : payload.event === "on_tool_end" ? "tool_completed" : payload.event === "on_tool_error" ? "tool_failed" : "tool_event";
+        onToolEvent({ type, tool: payload.name, toolCallId: payload.toolCallId, ...(payload.input !== undefined ? { input: payload.input } : {}), ...(payload.output !== undefined ? { output: payload.output } : {}), ...(payload.error !== undefined ? { error: String(payload.error) } : {}) });
+      } else if (mode === "values") result = payload;
+    }
+  } catch (error) { throw normalizeProviderError(provider, error); }
+  const final = [...(result?.messages || [])].reverse().find(isFinalAiMessage);
+  const text = contentOf(final).trim() || streamedText.trim();
+  return { text, proposals, usage: usage || usageOf(final) };
 }

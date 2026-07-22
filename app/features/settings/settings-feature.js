@@ -4,7 +4,7 @@
   const STORAGE_KEY = 'kairos-settings';
   const defaults = {
     general: { language: 'system', timeFormat: 'system' },
-    appearance: { theme: 'system', calendarBackground: { source: 'custom', id: 'default.jpg', blur: 6, brightness: 95 } },
+    appearance: { theme: 'system', calendarBackground: { source: 'builtin', id: 'default.jpg', blur: 6, brightness: 95 } },
     accessibility: { reduceMotion: false },
     ai: { replyStyle: 'companion', memoryEnabled: true, webSearchMode: 'ask' },
     habits: { allowBackfillDefault: false },
@@ -40,7 +40,6 @@
     reminders: { ...defaults.reminders, ...(input?.reminders || {}) }
   });
   const readLocal = () => { try { return merge(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')); } catch { return merge({}); } };
-  const writeLocal = value => localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
   const readDesktopSettings = async () => {
     const api = window.kairosDesktop?.appState;
     if (!api?.get) return null;
@@ -75,7 +74,6 @@
   const persist = patch => {
     state = merge({ ...state, ...patch, ai: { ...state.ai, ...(patch.ai || {}) } });
     applyMotionPreference();
-    writeLocal(state);
     writeDesktopSettings(state).catch(error => console.warn('Unable to save Kairos settings:', error));
     window.dispatchEvent(new CustomEvent('kairos:settings-changed', { detail: state }));
     flashSaved();
@@ -100,7 +98,7 @@
     </label>`;
   const calendarBackgroundValue = value => {
     const candidate = { ...defaults.appearance.calendarBackground, ...(value || {}) };
-    const source = 'custom';
+    const source = candidate.source === 'custom' ? 'custom' : 'builtin';
     const candidateId = String(candidate.id || '').normalize('NFC');
     const id = candidateId && !candidateId.startsWith('.') && !/[\\/<>:"|?*\u0000-\u001f\u007f]/.test(candidateId) && /\.(?:jpe?g|png|webp)$/i.test(candidateId) ? candidateId : defaults.appearance.calendarBackground.id;
     const blur = Math.max(0, Math.min(32, Number(candidate.blur) || 0));
@@ -155,14 +153,19 @@
     const provider = agentProviderIds.has(savedProvider) ? savedProvider : availableProviders[0]?.id || 'openai';
     const entry = providerSettings?.providers?.[provider] || {};
     const catalogEntry = availableProviders.find(item => item.id === provider);
-    const models = catalogEntry?.models || [entry.model || ''];
+    const models = [...new Set([...(catalogEntry?.availableModels || catalogEntry?.models || []), ...(entry.discoveredModels || []), entry.model].filter(Boolean))];
+    const enabledModels = new Set(Array.isArray(entry.enabledModels) ? entry.enabledModels : []);
+    const defaultModel = enabledModels.has(entry.model) ? entry.model : models.find(model => enabledModels.has(model)) || '';
+    const modelPicker = `<div class="kairos-setting-row kairos-model-picker-row"><span class="kairos-setting-copy"><span class="kairos-setting-label">Default model</span></span><details class="kairos-model-picker" data-model-picker><summary><span>${escapeHtml(defaultModel || 'Select models')}</span><span class="material-symbols-outlined">expand_more</span></summary><div class="kairos-model-picker-menu"><small>勾选后显示在聊天中；点击已勾选模型的名称设为默认。</small>${models.map(model => `<div class="kairos-model-picker-option"><label><input type="checkbox" data-provider-model-toggle value="${escapeHtml(model)}" ${enabledModels.has(model) ? 'checked' : ''}><span class="material-symbols-outlined">${enabledModels.has(model) ? 'check_box' : 'check_box_outline_blank'}</span></label><button type="button" data-set-default-model value="${escapeHtml(model)}" ${enabledModels.has(model) ? '' : 'disabled'}>${escapeHtml(model)}${model === defaultModel ? '<em>Default</em>' : ''}</button></div>`).join('') || '<span class="kairos-setting-hint">Refresh from account to load models.</span>'}</div></details></div>`;
+    const refreshedAt = entry.modelCatalogUpdatedAt ? `Last refreshed ${new Date(entry.modelCatalogUpdatedAt).toLocaleString('zh-CN')}` : 'Refresh lists the chat-capable models visible to this account.';
     return `
       <div class="kairos-settings-group">
         ${select('kairosAgentProvider', 'Default provider', provider, availableProviders.map(item => [item.id, item.name]), 'provider')}
-        ${select('kairosAgentModel', 'Default model', entry.model || models[0] || '', models.map(model => [model, model]), 'model')}
+        ${modelPicker}
       </div>
       ${credentialRow('provider', 'Model API Key', entry.configured, entry.createdAt, entry.keyHint, entry.source)}
-      <div class="kairos-key-utility"><button type="button" data-test-provider><span class="material-symbols-outlined">network_check</span>Test connection</button><output data-test-result aria-live="polite"></output></div>`;
+      <div class="kairos-key-utility"><button type="button" data-test-provider><span class="material-symbols-outlined">network_check</span>Test connection</button><button type="button" data-refresh-provider-models ${entry.configured ? '' : 'disabled'} title="${entry.configured ? 'Refresh models available to this account' : 'Configure an API key first'}"><span class="material-symbols-outlined">sync</span>Refresh from account</button><output data-test-result aria-live="polite"></output></div>
+      <small class="kairos-setting-hint" data-model-refresh-result>${refreshedAt}</small>`;
   };
   const formatBytes = value => {
     const size = Number(value) || 0;
@@ -416,8 +419,15 @@
     return calendarBackground;
   };
   const saveProvider = async input => {
+    const keepModelPickerOpen = dialog.querySelector('[data-model-picker]')?.open;
+    const scrollTop = dialog.querySelector('.kairos-settings-content')?.scrollTop || 0;
     providerSettings = await window.kairosDesktop.saveProviderSettings(input);
     render();
+    requestAnimationFrame(() => {
+      if (keepModelPickerOpen) dialog.querySelector('[data-model-picker]')?.setAttribute('open', '');
+      const content = dialog.querySelector('.kairos-settings-content');
+      if (content) content.scrollTop = scrollTop;
+    });
     flashSaved('Model settings saved');
   };
   const saveKey = async (kind, apiKey) => {
@@ -443,14 +453,19 @@
     flashSaved('API key cleared');
   }});
   const clearNeteaseLocalCache = () => {
-    try {
-      localStorage.removeItem('kairos-netease-playback-state');
-      if (localStorage.getItem('kairos-music-last-source') === 'netease') localStorage.setItem('kairos-music-last-source', 'empty');
-    } catch {}
+    window.kairosDesktop?.music?.updateRuntime?.({ neteasePlayback: null, lastSource: 'empty' }).catch(() => {});
     window.dispatchEvent(new CustomEvent('kairos:netease-cache-cleared'));
     if (window.parent && window.parent !== window) window.parent.dispatchEvent(new CustomEvent('kairos:netease-cache-cleared'));
   };
   const bindDialog = () => {
+    if (!dialog.dataset.modelPickerDismissBound) {
+      document.addEventListener('pointerdown', event => {
+        if (!dialog.open) return;
+        const picker = dialog.querySelector('[data-model-picker][open]');
+        if (picker && !picker.contains(event.target)) picker.removeAttribute('open');
+      }, true);
+      dialog.dataset.modelPickerDismissBound = 'true';
+    }
     dialog.querySelector('[data-settings-back]')?.addEventListener('click', () => dialog.close());
     dialog.querySelectorAll('[data-settings-tab]').forEach(tab => tab.addEventListener('click', () => showSection(tab.dataset.settingsTab)));
     dialog.querySelectorAll('[data-setting-path]').forEach(input => input.addEventListener('change', async event => {
@@ -461,12 +476,20 @@
         await saveProvider({ provider, defaultProvider: provider, model, credentialMode: providerSettings?.providers?.[provider]?.credentialMode || 'session' });
         return;
       }
-      if (path === 'model') {
-        const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-        await saveProvider({ provider, defaultProvider: provider, model: event.target.value, credentialMode: providerSettings?.providers?.[provider]?.credentialMode || 'session' });
-        return;
-      }
       setByPath(path, event.target.type === 'checkbox' ? event.target.checked : event.target.value);
+    }));
+    dialog.querySelectorAll('[data-provider-model-toggle]').forEach(input => input.addEventListener('change', async event => {
+      const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
+      const checkedModels = [...dialog.querySelectorAll('[data-provider-model-toggle]:checked')].map(item => item.value);
+      const entry = providerSettings?.providers?.[provider] || {};
+      const model = checkedModels.includes(entry.model) ? entry.model : checkedModels[0] || entry.model || providerCatalog.find(item => item.id === provider)?.defaultModel || '';
+      await saveProvider({ provider, defaultProvider: provider, model, enabledModels: checkedModels, credentialMode: entry.credentialMode || 'session' });
+    }));
+    dialog.querySelectorAll('[data-set-default-model]').forEach(button => button.addEventListener('click', async event => {
+      const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
+      const entry = providerSettings?.providers?.[provider] || {};
+      const enabledModels = [...dialog.querySelectorAll('[data-provider-model-toggle]:checked')].map(input => input.value);
+      await saveProvider({ provider, defaultProvider: provider, model: event.currentTarget.value, enabledModels, credentialMode: entry.credentialMode || 'session' });
     }));
     dialog.querySelectorAll('[data-calendar-background-card-select]').forEach(button => button.addEventListener('click', () => {
       const card = button.closest('[data-calendar-background-card]');
@@ -580,6 +603,24 @@
       } catch (error) { result.textContent = error?.message || 'Connection failed. Check your key and network.'; result.className = 'is-error'; }
       finally { event.currentTarget.disabled = false; }
     });
+    dialog.querySelector('[data-refresh-provider-models]')?.addEventListener('click', async event => {
+      const result = dialog.querySelector('[data-model-refresh-result]');
+      event.currentTarget.disabled = true;
+      result.textContent = 'Refreshing models from this account...';
+      try {
+        const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
+        const outcome = await window.kairosDesktop.refreshProviderModels(provider);
+        providerSettings = outcome?.settings || await window.kairosDesktop.getProviderSettings();
+        providerCatalog = await window.kairosDesktop.listProviders();
+        render();
+        flashSaved(outcome?.models?.length ? `${outcome.models.length} account models refreshed` : 'No chat-capable models returned by this account');
+      } catch (error) {
+        result.textContent = error?.message || 'Unable to refresh models. Check your key and account permissions.';
+        result.className = 'is-error';
+      } finally {
+        if (event.currentTarget.isConnected) event.currentTarget.disabled = false;
+      }
+    });
     dialog.querySelector('[data-reset-memories]')?.addEventListener('click', () => confirmAction({ title: 'Clear all AI memories?', copy: 'This permanently deletes every long-term memory saved by Kairos.', action: 'Clear all', dangerous: true, onConfirm: async () => {
       await window.kairosDesktop.memories.clear();
       flashSaved('All AI memories cleared');
@@ -675,9 +716,9 @@
   bind();
   window.dispatchEvent(new CustomEvent('kairos:settings-changed', { detail: state }));
   readDesktopSettings().then(desktopSettings => {
-    if (!desktopSettings) return;
-    state = desktopSettings;
-    writeLocal(state);
+    if (desktopSettings) state = desktopSettings;
+    else writeDesktopSettings(state).catch(error => console.warn('Unable to migrate Kairos settings:', error));
+    localStorage.removeItem(STORAGE_KEY);
     applyMotionPreference();
     window.dispatchEvent(new CustomEvent('kairos:settings-changed', { detail: state }));
   }).catch(error => console.warn('Unable to load Kairos settings:', error));

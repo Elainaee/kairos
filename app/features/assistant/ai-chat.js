@@ -54,8 +54,10 @@
   let initialized = false;
   let followLatest = true;
   let unseenUpdates = 0;
-  const assistantNameKey = 'kairos-ai-assistant-name';
-  const getAssistantName = () => localStorage.getItem(assistantNameKey) || 'Kairos Assistant';
+  const legacyAssistantNameKey = 'kairos-ai-assistant-name';
+  const legacyAvatarKey = 'kairos-ai-avatar';
+  let assistantProfile = { name: 'Kairos Assistant', avatar: '', updatedAt: '', migratedAt: '' };
+  const getAssistantName = () => assistantProfile.name || 'Kairos Assistant';
   if (ui.name) ui.name.textContent = getAssistantName();
   const enhanceAiCombobox = select => {
     if (!select || select.dataset.comboboxReady) return () => {};
@@ -89,23 +91,28 @@
     dialog.addEventListener('close',onClose,{once:true});dialog.showModal();dialog.querySelector('.kairos-alert-cancel')?.focus();
   });
 
-  const avatarKey = 'kairos-ai-avatar';
   const setAvatar = value => value
     ? document.documentElement.style.setProperty('--ai-avatar-url', `url("${value}")`)
     : document.documentElement.style.removeProperty('--ai-avatar-url');
-  setAvatar(localStorage.getItem(avatarKey));
+  const applyAssistantProfile = value => { assistantProfile = { ...assistantProfile, ...value }; if (ui.name) ui.name.textContent = getAssistantName(); setAvatar(assistantProfile.avatar); };
+  const initializeAssistantProfile = async () => {
+    const legacy = { name: localStorage.getItem(legacyAssistantNameKey) || '', avatar: localStorage.getItem(legacyAvatarKey) || '' };
+    const profile = await desktop.initializeAssistantProfile(legacy);
+    localStorage.removeItem(legacyAssistantNameKey); localStorage.removeItem(legacyAvatarKey); applyAssistantProfile(profile);
+  };
+  const supportedProviderIds = new Set(['openai', 'doubao']);
   ui.avatarButton?.addEventListener('click', () => ui.avatarInput?.click());
   ui.avatarInput?.addEventListener('change', () => {
     const file = ui.avatarInput.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       const image = new Image();
-      image.onload = () => {
+      image.onload = async () => {
         const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
         const context = canvas.getContext('2d'); const scale = Math.max(256 / image.width, 256 / image.height);
         const width = image.width * scale; const height = image.height * scale;
         context.drawImage(image, (256 - width) / 2, (256 - height) / 2, width, height);
-        const value = canvas.toDataURL('image/jpeg', .86); localStorage.setItem(avatarKey, value); setAvatar(value);
+        const value = canvas.toDataURL('image/jpeg', .86); applyAssistantProfile(await desktop.saveAssistantProfile({ name: getAssistantName(), avatar: value }));
       };
       image.src = reader.result;
     };
@@ -150,8 +157,13 @@
   };
   const renderProviders = () => {
     ui.provider.replaceChildren(...providers.map(item => { const option = document.createElement('option'); option.value = item.id; option.textContent = item.name; return option; }));
-    if (active) ui.provider.value = active.provider || 'openai';
-    renderModels(active?.model);
+    const provider = providers.some(item => item.id === active?.provider) ? active.provider : providers[0]?.id || '';
+    if (active) ui.provider.value = provider;
+    const model = renderModels(active?.model);
+    if (active && (active.provider !== provider || (model && active.model !== model))) {
+      active = { ...active, provider, ...(model ? { model } : {}) };
+      desktop?.conversations.update(active.id, { provider: active.provider, ...(model ? { model } : {}) }).catch(() => {});
+    }
     aiComboboxSync.forEach(sync=>sync?.());
   };
   const renderModels = selectedModel => {
@@ -160,7 +172,13 @@
     ui.model.replaceChildren(...models.map(model => { const option = document.createElement('option'); option.value = model; option.textContent = model; return option; }));
     ui.model.value = models.includes(selectedModel) ? selectedModel : provider?.defaultModel || models[0] || '';
     aiComboboxSync.forEach(sync=>sync?.());
+    return ui.model.value;
   };
+  desktop?.onProviderSettingsChanged?.(({ providers: nextProviders }) => {
+    if (!Array.isArray(nextProviders) || !nextProviders.length) return;
+    providers = nextProviders.filter(item => supportedProviderIds.has(item.id));
+    if (active) renderProviders();
+  });
   const updateUsage = async () => {
     if (!desktop || !active) return;
     const usage = await desktop.getUsage({ conversationId: active.id });
@@ -189,7 +207,8 @@
   };
   const initialize = async () => {
     if (!desktop) throw new Error('AI 功能仅在 Kairos 桌面端可用');
-    providers = await desktop.listProviders();
+    await initializeAssistantProfile();
+    providers = (await desktop.listProviders()).filter(item => supportedProviderIds.has(item.id));
     const settings = await desktop.getProviderSettings();
     sessions = await desktop.conversations.list();
     if (!sessions.length) { const provider = settings.defaultProvider || providers[0]?.id || 'openai'; sessions = [await desktop.conversations.create({ title: '新对话', provider, model: settings.providers?.[provider]?.model || '' })]; }
@@ -336,8 +355,7 @@
     streamText = ''; streamArticle = appendMessage('assistant', ''); setThinkingState(streamArticle);
     waitingForRequest = true; updateComposer();
     try {
-      let aiPreferences = {};
-      try { aiPreferences = JSON.parse(localStorage.getItem('kairos-settings') || '{}').ai || {}; } catch {}
+      const aiPreferences = window.KairosSettingsFeature?.read?.().ai || {};
       const result = await desktop.sendMessage({ conversationId: active.id, provider, model, messages: history, attachmentIds, attachmentNames, isRetry, aiPreferences });
       currentRequestId = result.requestId; updateComposer();
     } catch (error) { finishRequest('failed', errorText(error)); }
@@ -426,9 +444,9 @@
     if (!ui.name || ui.name.parentElement.querySelector('.ai-assistant-name-editor')) return;
     const editor = document.createElement('input'); editor.className = 'ai-assistant-name-editor'; editor.value = getAssistantName(); editor.maxLength = 32; editor.setAttribute('aria-label', 'AI 助手名称');
     let cancelled = false;
-    const finish = save => { if (!editor.isConnected) return; const next = editor.value.trim(); if (save && next) localStorage.setItem(assistantNameKey, next.slice(0, 32)); editor.remove(); ui.name.hidden = false; ui.name.textContent = getAssistantName(); if (save && next) renderMessages(); };
-    editor.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); finish(true); } if (event.key === 'Escape') { event.preventDefault(); cancelled = true; finish(false); } };
-    editor.onblur = () => finish(!cancelled); ui.name.hidden = true; ui.name.after(editor); editor.focus(); editor.select();
+    const finish = async save => { if (!editor.isConnected) return; const next = editor.value.trim(); editor.remove(); ui.name.hidden = false; if (save && next) { applyAssistantProfile(await desktop.saveAssistantProfile({ name: next.slice(0, 32), avatar: assistantProfile.avatar })); renderMessages(); } else ui.name.textContent = getAssistantName(); };
+    editor.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); void finish(true); } if (event.key === 'Escape') { event.preventDefault(); cancelled = true; void finish(false); } };
+    editor.onblur = () => void finish(!cancelled); ui.name.hidden = true; ui.name.after(editor); editor.focus(); editor.select();
   });
   ui.session?.addEventListener('change', runAction(() => loadConversation(ui.session.value)));
   ui.create?.addEventListener('click', runAction(createConversation));

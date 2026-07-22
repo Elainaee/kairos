@@ -29,6 +29,7 @@ test("LangChain model selects the schedule proposal tool and no write occurs", a
   assert.equal(result.text, "我已生成一张待确认的例会日程卡。");
   assert.equal((await appStore.read()).schedules.length, 0);
   assert.ok(events.some(event => event.type === "tool_proposal"));
+  assert.ok(events.some(event => event.type === "text_delta" && event.delta.includes("待确认")));
   await fs.rm(dir, { recursive: true, force: true });
 });
 

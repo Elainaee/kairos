@@ -4,9 +4,17 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   isDesktop: true,
   listProviders: () => ipcRenderer.invoke("ai:list-providers"),
   getProviderSettings: () => ipcRenderer.invoke("ai:get-settings"),
+  initializeAssistantProfile: (legacy) => ipcRenderer.invoke("ai:initialize-assistant-profile", legacy),
+  saveAssistantProfile: (profile) => ipcRenderer.invoke("ai:save-assistant-profile", profile),
   saveProviderSettings: (settings) => ipcRenderer.invoke("ai:save-settings", settings),
   saveFirecrawlSettings: (settings) => ipcRenderer.invoke("ai:save-firecrawl-settings", settings),
   testProvider: (provider, sessionKey = "") => ipcRenderer.invoke("ai:test-provider", { provider, sessionKey }),
+  refreshProviderModels: (provider, sessionKey = "") => ipcRenderer.invoke("ai:refresh-provider-models", { provider, sessionKey }),
+  onProviderSettingsChanged: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on("ai:settings-changed", listener);
+    return () => ipcRenderer.removeListener("ai:settings-changed", listener);
+  },
   closeAiWindow: () => ipcRenderer.invoke("ai-window:close"),
   setAiMousePassthrough: (ignore) => ipcRenderer.send("ai-window:set-mouse-passthrough", Boolean(ignore)),
   onShellCommand: (handler) => {
@@ -35,6 +43,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     addFiles: (filePaths) => ipcRenderer.invoke("music:add-files", filePaths),
     syncFolders: () => ipcRenderer.invoke("music:sync-folders"),
     updatePlayback: (patch) => ipcRenderer.invoke("music:update-playback", patch),
+    updateRuntime: (patch) => ipcRenderer.invoke("music:update-runtime", patch),
     updateTrack: (input) => ipcRenderer.invoke("music:update-track", input),
     removeTrack: (id) => ipcRenderer.invoke("music:remove-track", id),
     removeUnavailableTracks: () => ipcRenderer.invoke("music:remove-unavailable-tracks"),

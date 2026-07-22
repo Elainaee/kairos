@@ -11,7 +11,7 @@
   const from=key=>core?.fromDateKey?core.fromDateKey(key):(()=>{const [y,m,d]=key.split('-').map(Number);return new Date(y,m-1,d)})();
   const shift=(key,days)=>core?.shiftDateKey?core.shiftDateKey(key,days):(()=>{const d=from(key);d.setDate(d.getDate()+days);return dateKey(d)})();
   const clean=habit=>({...habit,icon:LEGACY_ICONS[habit.icon]||habit.icon||'📚',dates:core?.normalizeDates?core.normalizeDates(habit.dates):[...new Set(habit.dates||[])].sort(),allowBackfill:!!habit.allowBackfill});
-  const readSettings=()=>{try{return window.KairosSettingsFeature?.read?.()||window.top?.KairosSettingsFeature?.read?.()||JSON.parse((window.top||window).localStorage.getItem('kairos-settings')||'{}')}catch{return {}}};
+  const readSettings=()=>{try{return window.KairosSettingsFeature?.read?.()||window.top?.KairosSettingsFeature?.read?.()||{}}catch{return {}}};
   const backfillDefault=()=>!!readSettings()?.habits?.allowBackfillDefault;
   const reactPet=(action,payload={})=>{if(window.kairosDesktop?.pet?.react)return window.kairosDesktop.pet.react(action,payload).catch(()=>{});if(window.top!==window)window.top.postMessage({type:'kairos:pet-react',action,payload},'*')};
   const escape=value=>String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -50,13 +50,15 @@
     let local={};try{local=JSON.parse(localStorage.getItem(KEY)||'{}')}catch{}
     state={...local,habits:(Array.isArray(local.habits)?local.habits:[]).map(clean)};
     if(window.kairosDesktop){
-      state=await window.kairosDesktop.appState.initialize(state);
+      const persisted=await window.kairosDesktop.appState.get();
+      state={...state,...persisted,habits:[...(persisted.habits||[]),...(state.habits||[]).filter(item=>!(persisted.habits||[]).some(existing=>existing.id===item.id))]};
+      await window.kairosDesktop.appState.save(state);localStorage.removeItem(KEY);
       state.habits=(Array.isArray(state.habits)?state.habits:[]).map(clean);
       window.kairosDesktop.appState.onChanged(next=>{state=next;state.habits=(next.habits||[]).map(clean);render()});
     }
     render();
   }
-  function save(){localStorage.setItem(KEY,JSON.stringify(state));if(window.top!==window)window.top.postMessage({type:'kairos:state-sync',state},'*');window.dispatchEvent(new CustomEvent('kairos:state-changed',{detail:state}));window.kairosDesktop?.appState.save(state)}
+  function save(){if(window.top!==window)window.top.postMessage({type:'kairos:state-sync',state},'*');window.dispatchEvent(new CustomEvent('kairos:state-changed',{detail:state}));window.kairosDesktop?.appState.save(state)}
   function toggle(id,date=today()){
     const habit=state.habits.find(item=>item.id===id);
     if(!habit)return;
@@ -159,9 +161,7 @@
       card.onpointerleave=()=>card.style.setProperty('--magic-intensity','0');
     });
   }
-  function sync(){let local={};try{local=JSON.parse(localStorage.getItem(KEY)||'{}')}catch{}state={...local,habits:(Array.isArray(local.habits)?local.habits:[]).map(clean)};render()}
-  window.addEventListener('storage',event=>{if(event.key===KEY)sync()});
-  window.addEventListener('message',event=>{if(event.data?.type==='kairos:state-sync'&&event.data.state){state=event.data.state;state.habits=(Array.isArray(state.habits)?state.habits:[]).map(clean);localStorage.setItem(KEY,JSON.stringify(state));render()}});
+  window.addEventListener('message',event=>{if(event.data?.type==='kairos:state-sync'&&event.data.state){state=event.data.state;state.habits=(Array.isArray(state.habits)?state.habits:[]).map(clean);render()}});
   document.addEventListener('click',event=>{const button=event.target.closest?.('.habit-check-button[data-toggle]');if(!button||button.classList.contains('done'))return;const title=button.closest('.real-habit-card')?.querySelector('h3')?.textContent||'';queueMicrotask(()=>reactPet('happy',{title}))},true);
   load();
 })();

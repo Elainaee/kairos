@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { KairosAppDatabase } from "../../data/sqlite/index.js";
 
 const SUPPORTED_EXTENSIONS = new Set([".mp3", ".flac", ".wav", ".m4a", ".mp4", ".aac"]);
 const COVER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
@@ -16,7 +17,8 @@ const EMPTY = {
   playing: false,
   volume: 70,
   muted: false,
-  positions: {}
+  positions: {},
+  runtime: { lastSource: "local", neteasePlayback: null, playCounts: {} }
 };
 
 const textDecoder = new TextDecoder("utf-8", { fatal: false });
@@ -35,7 +37,8 @@ function normalize(input = {}) {
     playing: input.playing,
     volume: input.volume,
     muted: input.muted,
-    positions: input.positions
+    positions: input.positions,
+    runtime: input.runtime
   };
   if (!Array.isArray(out.tracks)) out.tracks = [];
   if (!Array.isArray(out.playlists)) out.playlists = [];
@@ -47,6 +50,9 @@ function normalize(input = {}) {
   }));
   if (!Array.isArray(out.queueTrackIds)) out.queueTrackIds = [];
   if (!out.positions || typeof out.positions !== "object" || Array.isArray(out.positions)) out.positions = {};
+  if (!out.runtime || typeof out.runtime !== "object" || Array.isArray(out.runtime)) out.runtime = structuredClone(EMPTY.runtime);
+  out.runtime.lastSource = ["local", "netease", "empty"].includes(out.runtime.lastSource) ? out.runtime.lastSource : "local";
+  if (!out.runtime.playCounts || typeof out.runtime.playCounts !== "object" || Array.isArray(out.runtime.playCounts)) out.runtime.playCounts = {};
   if (!["sequence", "loop", "shuffle", "single"].includes(out.mode)) out.mode = "sequence";
   const validIds = new Set(out.tracks.map(track => track.id));
   out.queueTrackIds = out.queueTrackIds.filter(id => validIds.has(id));
@@ -183,74 +189,55 @@ function coverExtension(mimeType = "") {
   return ".jpg";
 }
 
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-const isTransientFileError = error => ["EPERM", "EACCES", "EBUSY"].includes(error?.code);
-
-async function replaceFileWithRetry(tempPath, targetPath) {
-  let lastError;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      await fs.rename(tempPath, targetPath);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFileError(error)) throw error;
-    }
-    try {
-      await fs.copyFile(tempPath, targetPath);
-      await fs.unlink(tempPath).catch(() => {});
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFileError(error)) throw error;
-      await wait(40 * (attempt + 1));
-    }
-  }
-  throw lastError;
-}
-
 export class MusicLibrary {
-  constructor({ statePath, coverDir, database }) {
-    this.statePath = statePath;
-    this.coverDir = coverDir;
+  constructor({ legacyPath, statePath, database } = {}) {
+    this.legacyPath = legacyPath || statePath || path.join(process.cwd(), "music-state.json");
     this.database = database || null;
+    this.databaseReady = null;
+    this.databasePath = ":memory:";
     this.queue = Promise.resolve();
   }
 
+  async ensureDatabase() {
+    if (this.database?.available) return this.database;
+    if (!this.databaseReady) this.databaseReady = (async () => { this.database ||= new KairosAppDatabase(this.databasePath); const status = await this.database.initialize(); if (!status.available) throw new Error("sqlite_unavailable"); return this.database; })();
+    return this.databaseReady;
+  }
+
   async read() {
-    try {
-      return normalize(JSON.parse(await fs.readFile(this.statePath, "utf8")));
-    } catch {
-      return this.readDatabaseSnapshot() || normalize();
+    await this.ensureDatabase();
+    const snapshot = this.readDatabaseSnapshot();
+    const state = snapshot || await (async () => { try { const legacy = normalize(JSON.parse(await fs.readFile(this.legacyPath, "utf8"))); await this.write(legacy); return legacy; } catch { const empty = normalize(); await this.write(empty); return empty; } })();
+    let changed = false;
+    for (const track of state.tracks) {
+      if (track.coverAssetId || !track.coverPath) continue;
+      const bytes = await fs.readFile(track.coverPath).catch(() => null);
+      if (!bytes?.length || !this.database?.saveBinaryAsset) continue;
+      const assetId = `music-cover:${track.id}`;
+      this.database.saveBinaryAsset({ id: assetId, ownerType: "music-cover", ownerId: track.id, name: path.basename(track.coverPath), mimeType: COVER_EXTENSIONS.has(path.extname(track.coverPath).toLowerCase()) ? ({ ".png": "image/png", ".webp": "image/webp" }[path.extname(track.coverPath).toLowerCase()] || "image/jpeg") : "image/jpeg", payload: bytes });
+      track.coverAssetId = assetId; delete track.coverPath; changed = true;
     }
+    if (changed) await this.write(state);
+    return state;
   }
 
   readDatabaseSnapshot() {
     try {
-      const snapshot = this.database?.readJsonStorePayload?.("music-state");
-      return snapshot ? normalize({ ...snapshot, recoveredFromSqlite: true }) : null;
+      const snapshot = this.database?.readStorePayload?.("music-state");
+      return snapshot ? normalize(snapshot) : null;
     } catch {
       return null;
     }
   }
 
-  async ensureStateFile() {
-    try {
-      JSON.parse(await fs.readFile(this.statePath, "utf8"));
-      return;
-    } catch {}
-    const snapshot = this.readDatabaseSnapshot();
-    if (snapshot) await this.write({ ...snapshot, restoredFromSqliteAt: new Date().toISOString() });
-  }
+  async ensureStateFile() { await this.read(); }
 
   async write(input) {
     const state = normalize(input);
+    await this.ensureDatabase();
     this.queue = this.queue.catch(() => {}).then(async () => {
-      await fs.mkdir(path.dirname(this.statePath), { recursive: true });
-      const temp = `${this.statePath}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(temp, JSON.stringify(state, null, 2), "utf8");
-      await replaceFileWithRetry(temp, this.statePath);
-      if (this.database?.saveJsonStoreSnapshot) this.database.saveJsonStoreSnapshot("music-state", state, { tracks: state.tracks.length, playlists: state.playlists.length, queue: state.queueTrackIds.length, currentTrackId: state.currentTrackId || "", playing: state.playing, volume: state.volume });
+      if (!this.database?.saveStorePayload) throw new Error("sqlite_unavailable");
+      this.database.saveStorePayload("music-state", state, { tracks: state.tracks.length, playlists: state.playlists.length, queue: state.queueTrackIds.length, currentTrackId: state.currentTrackId || "", playing: state.playing, volume: state.volume });
       return state;
     });
     return this.queue;
@@ -274,7 +261,7 @@ export class MusicLibrary {
             title: track.title,
             artist: track.artist,
             album: track.album,
-            coverUrl: track.coverPath ? pathToFileURL(track.coverPath).href : "",
+            coverUrl: this.coverUrlFor(track),
             available: true
           } : {
             path: hiddenPath,
@@ -307,8 +294,14 @@ export class MusicLibrary {
       available,
       unavailableReason,
       playUrl: pathToFileURL(track.path).href,
-      coverUrl: track.coverPath ? pathToFileURL(track.coverPath).href : ""
+      coverUrl: this.coverUrlFor(track)
     };
+  }
+
+  coverUrlFor(track) {
+    const asset = track?.coverAssetId ? this.database?.readBinaryAsset?.(track.coverAssetId) : null;
+    if (asset) return `data:${asset.mimeType};base64,${asset.payload.toString("base64")}`;
+    return track?.coverPath ? pathToFileURL(track.coverPath).href : "";
   }
 
   async addFiles(filePaths) {
@@ -337,11 +330,10 @@ export class MusicLibrary {
         }
         const metadata = await parseMetadata(resolved);
         const id = crypto.randomUUID();
-        let coverPath = "";
+        let coverAssetId = "";
         if (metadata.cover?.data?.length && metadata.cover.data.length <= MAX_EMBEDDED_COVER_BYTES) {
-          await fs.mkdir(this.coverDir, { recursive: true });
-          coverPath = path.join(this.coverDir, `${id}${coverExtension(metadata.cover.mimeType)}`);
-          await fs.writeFile(coverPath, metadata.cover.data);
+          coverAssetId = `music-cover:${id}`;
+          this.database?.saveBinaryAsset?.({ id: coverAssetId, ownerType: "music-cover", ownerId: id, name: `${id}${coverExtension(metadata.cover.mimeType)}`, mimeType: metadata.cover.mimeType, payload: metadata.cover.data });
         }
         const now = new Date().toISOString();
         const fileName = path.basename(resolved);
@@ -353,7 +345,8 @@ export class MusicLibrary {
           artist: metadata.artist || "Local music",
           album: metadata.album || "",
           duration: 0,
-          coverPath,
+          coverAssetId,
+          coverPath: "",
           format: ext.slice(1).toUpperCase(),
           fileSize: stat.size,
           addedAt: now,
@@ -471,6 +464,13 @@ export class MusicLibrary {
     if (patch.position?.trackId) state.positions[patch.position.trackId] = Math.max(0, Number(patch.position.seconds) || 0);
     await this.write(state);
     return this.publicState();
+  }
+
+  async updateRuntime(patch = {}) {
+    const state = await this.read();
+    state.runtime = { ...(state.runtime || {}), ...patch };
+    await this.write(state);
+    return state.runtime;
   }
 
   async updateTrack(input = {}) {
