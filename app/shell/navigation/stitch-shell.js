@@ -33,7 +33,7 @@
     embeddedMain?.classList.add('kairos-page-main');
     return;
   }
-  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=30">');
+  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=31">');
   if (!document.querySelector('link[href^="../../features/calendar/date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/date-range-picker.css?v=3">');
   if (!document.querySelector('link[href^="../../features/reminders/reminder-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/reminders/reminder-feature.css?v=1">');
   if (!document.querySelector('link[href^="../../features/settings/settings-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/settings/settings-feature.css?v=1">');
@@ -361,12 +361,12 @@
 })();
 
 {
-  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=30">');
+  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=31">');
   if (!document.querySelector('link[href^="../../features/calendar/date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/date-range-picker.css?v=3">');
   const loadScheduleFeature=()=>{
     if (document.querySelector('script[src^="../../features/calendar/schedule-feature.js"]')) return;
     const scheduleFeatureScript=document.createElement('script');
-    scheduleFeatureScript.src='../../features/calendar/schedule-feature.js?v=42';
+    scheduleFeatureScript.src='../../features/calendar/schedule-feature.js?v=45';
     document.body.appendChild(scheduleFeatureScript);
   };
   const calendarCoreScript=document.createElement('script');
