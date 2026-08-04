@@ -24,8 +24,7 @@ test("SQLite app database mirrors app-state into queryable tables", async () => 
   const store = new AppStateStore(path.join(dir, "app-state.json"), { database });
   await store.write({
     schedules: [{ id: "task-1", title: "Read", type: "task", date: "2026-07-15", end_date: "2026-07-15", status: "todo" }],
-    habits: [{ id: "habit-1", name: "Reading", dates: ["2026-07-15"] }],
-    notes: [{ id: "note-1", title: "Reflection", date: "2026-07-15" }]
+    habits: [{ id: "habit-1", name: "Reading", dates: ["2026-07-15"] }]
   });
 
   const snapshot = database.readAppStateSnapshot();
@@ -34,7 +33,7 @@ test("SQLite app database mirrors app-state into queryable tables", async () => 
   assert.equal(audit.version, APP_DB_SCHEMA_VERSION);
   assert.equal(audit.tables.schedules, 1);
   assert.equal(audit.tables.habits, 1);
-  assert.equal(audit.tables.notes, 1);
+  assert.equal(Object.hasOwn(audit.tables, "notes"), false);
   assert.equal(audit.migrations.some(row => row.id === `app-db-v${APP_DB_SCHEMA_VERSION}`), true);
 
   database.close();
@@ -54,7 +53,7 @@ test("desktop data audit reports SQLite health when the database exists", async 
     return;
   }
 
-  await database.saveAppStateSnapshot({ version: 3, schedules: [], habits: [], checkins: [], notes: [] });
+  await database.saveAppStateSnapshot({ version: 4, schedules: [], habits: [], checkins: [] });
   database.close();
   const report = await auditDesktopDataDir(dir);
   assert.equal(report.ok, true);

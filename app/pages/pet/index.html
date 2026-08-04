@@ -91,6 +91,9 @@ html, body {
 #pet-img.bounce { animation: bounce 0.55s cubic-bezier(.36,.07,.19,.97); }
 #pet-img.shake  { animation: shake 0.5s ease; }
 #pet-img.happy  { animation: happy 0.6s ease; }
+html.kairos-reduce-motion #pet-img,
+html.kairos-reduce-motion .particle { animation: none !important; }
+html.kairos-reduce-motion .particle { display: none !important; }
 
 .particle {
   position: fixed;
@@ -302,6 +305,36 @@ function playHappy() {
   spawnParticles(r.left+90, r.top+90);
   hideMenu();
 }
+function handleDesktopAction(payload={}) {
+  const action=payload.action||'idle', title=String(payload.title||'').trim();
+  if(action==='happy') {
+    playAnim('happy',600);
+    showBubble(title?`${title} 完成啦，做得真棒！`:'完成啦，做得真棒！',4200);
+    const r=wrap.getBoundingClientRect();
+    spawnParticles(r.left+90,r.top+90);
+    return;
+  }
+  if(action==='reminder') {
+    playAnim('bounce',560);
+    showBubble(title?`提醒：${title}`:'有一条新提醒哦～',5200);
+    return;
+  }
+  if(action==='sleepy') {
+    playAnim('shake',500);
+    showBubble(title?`错过提醒：${title}`:'好像错过了一条提醒……',5200);
+    return;
+  }
+  if(action==='talk') {
+    playAnim('bounce',560);
+    showBubble(rand(clickLines));
+    return;
+  }
+  playAnim('idle',0);
+}
+const applyMotionPreference=state=>document.documentElement.classList.toggle('kairos-reduce-motion',state?.settings?.accessibility?.reduceMotion===true);
+window.kairosDesktop?.appState?.get?.().then(applyMotionPreference).catch(()=>{});
+window.kairosDesktop?.appState?.onChanged?.(applyMotionPreference);
+window.kairosDesktop?.pet?.onAction?.(handleDesktopAction);
 function showTime() {
   const now=new Date(), h=now.getHours(), m=String(now.getMinutes()).padStart(2,'0');
   showBubble(`现在是 ${h}:${m} ～`, 4000);

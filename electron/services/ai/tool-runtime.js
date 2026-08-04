@@ -1,4 +1,4 @@
-const DOMAINS=["schedules","tasks","habits","notes","externalSearch"];
+const DOMAINS=["schedules","tasks","habits","externalSearch"];
 const LEVELS=["none","read","write"];
 const READ_ONLY_DOMAINS=new Set(["externalSearch"]);
 const OPERATIONS=["create","update","delete","delete_many"];

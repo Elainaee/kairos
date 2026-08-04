@@ -16,18 +16,6 @@
     -webkit-backdrop-filter: blur(26px) saturate(1.12)
 }
 
-#musicPlayer::before {
-    content: "";
-    position: absolute;
-    z-index: -2;
-    inset: -28px;
-    pointer-events: none;
-    background: var(--kairos-calendar-background-image, url("../../assets/calendar-backgrounds/default.jpg")) center/cover no-repeat;
-    filter: blur(var(--kairos-calendar-background-blur, 6px)) saturate(.72) brightness(var(--kairos-calendar-background-brightness, 95%));
-    transform: scale(1.06);
-    opacity: .68
-}
-
 #musicPlayer::after {
     content: "";
     position: absolute;

@@ -21,7 +21,7 @@ test("SQLite is the only business persistence target", async () => {
 });
 
 test("renderers do not persist business state in Local Storage", async () => {
-  const files = ["app/features/calendar/schedule-feature.js", "app/features/habits/habits-feature.js", "app/features/notes/notes-feature.js", "app/features/reminders/reminder-feature.js", "app/features/settings/settings-feature.js", "app/shell/player/music-player.js", "app/pages/music/index.html"];
+  const files = ["app/features/calendar/schedule-feature.js", "app/features/habits/habits-feature.js", "app/features/reminders/reminder-feature.js", "app/features/settings/settings-feature.js", "app/shell/player/music-player.js", "app/pages/music/index.html"];
   const source = (await Promise.all(files.map(read))).join("\n");
   assert.doesNotMatch(source, /localStorage\.setItem/);
   assert.match(source, /updateRuntime/);

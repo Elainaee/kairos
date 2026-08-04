@@ -2,9 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { KairosAppDatabase } from "../sqlite/index.js";
 
-export const APP_STATE_SCHEMA_VERSION = 3;
-const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], moods: {}, notes: [], theme: "light" };
-const arrays = ["schedules", "checkins", "habits", "notes"];
+export const APP_STATE_SCHEMA_VERSION = 4;
+const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], theme: "light" };
+const arrays = ["schedules", "checkins", "habits"];
 const SCHEDULE_TYPES = new Set(["task", "deadline", "event", "match", "holiday", "other"]);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function migrationEntry(id, from, to) {
@@ -29,7 +29,6 @@ export function normalize(input = {}) {
   const legacyStudyPlans = Array.isArray(input?.studyPlans) ? input.studyPlans : [];
   const out = { ...structuredClone(EMPTY), ...input, version: APP_STATE_SCHEMA_VERSION };
   for (const key of arrays) if (!Array.isArray(out[key])) out[key] = [];
-  if (!out.moods || typeof out.moods !== "object" || Array.isArray(out.moods)) out.moods = {};
   out.migrations = Array.isArray(out.migrations) ? out.migrations.filter(item => item && typeof item === "object") : [];
   if (previousVersion < 2 && !out.migrations.some(item => item.id === "app-state-v2")) {
     out.migrations.push(migrationEntry("app-state-v2", previousVersion || 1, APP_STATE_SCHEMA_VERSION));
@@ -41,6 +40,15 @@ export function normalize(input = {}) {
   delete out.studyPlans;
   if (previousVersion < 3 && !out.migrations.some(item => item.id === "app-state-v3-remove-study-plans")) {
     out.migrations.push(migrationEntry("app-state-v3-remove-study-plans", Math.max(previousVersion, 2), APP_STATE_SCHEMA_VERSION));
+  }
+  // Notes and mood journals were intentionally removed from Kairos. Strip
+  // both keys during every read, import, and write so old exports cannot
+  // restore deleted Notes data.
+  const hadNotesData = Array.isArray(out.notes) && out.notes.length > 0 || out.moods && Object.keys(out.moods).length > 0;
+  delete out.notes;
+  delete out.moods;
+  if (hadNotesData && !out.migrations.some(item => item.id === "app-state-v4-remove-notes")) {
+    out.migrations.push(migrationEntry("app-state-v4-remove-notes", Math.min(previousVersion || 3, 3), APP_STATE_SCHEMA_VERSION));
   }
   return out;
 }
@@ -92,8 +100,6 @@ export function auditAppState(input = {}) {
     tasks: state.schedules.filter(item => ["task", "deadline"].includes(item.type)).length,
     habits: state.habits.length,
     checkins: state.checkins.length,
-    notes: state.notes.length,
-    moods: Object.keys(state.moods || {}).length,
     migrations: state.migrations.length,
     settings: state.settings && typeof state.settings === "object" ? 1 : 0
   };

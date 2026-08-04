@@ -90,7 +90,7 @@ function printReport(report) {
     console.log(`- ${report.database.name}: ${status}${size}${report.database.issue ? ` ${report.database.issue}` : ""}`);
   }
   const s = report.appState?.summary;
-  if (s) console.log(`App-state: ${s.schedules} schedules, ${s.tasks} tasks, ${s.habits} habits, ${s.notes} notes, ${s.moods} moods`);
+  if (s) console.log(`App-state: ${s.schedules} schedules, ${s.tasks} tasks, ${s.habits} habits`);
   if (!report.appState?.issues?.length) return;
   console.log(`App-state issues: ${report.appState.issues.length}`);
   for (const issue of report.appState.issues) console.log(`  - ${issue.code}: ${issue.message}`);

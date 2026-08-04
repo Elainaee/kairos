@@ -30,6 +30,11 @@ test("html inline scripts stay syntactically valid", async () => {
 test("embedded music pages rely on the shell player instance", async () => {
   const playerScript = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
   const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
+  const appShell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
+  const embeddedView = await fs.readFile(path.join(root, "renderer/src/views/EmbeddedLegacyView.vue"), "utf8");
+  const musicView = await fs.readFile(path.join(root, "renderer/src/views/MusicView.vue"), "utf8");
+  const musicStore = await fs.readFile(path.join(root, "renderer/src/stores/music-runtime.ts"), "utf8");
+  const vueStyles = await fs.readFile(path.join(root, "renderer/src/styles.css"), "utf8");
 
   assert.match(
     playerScript,
@@ -61,6 +66,29 @@ test("embedded music pages rely on the shell player instance", async () => {
     /\.music-sidebar-footer \{[\s\S]*?position:\s*absolute[\s\S]*?bottom:\s*80px/,
     "sidebar footer should use flex layout instead of a second hard-coded player offset"
   );
+  assert.equal(
+    [...playerScript.matchAll(/<audio id="musicAudio"><\/audio>/g)].length,
+    1,
+    "the original shell should define exactly one persistent playback audio element"
+  );
+  assert.doesNotMatch(appShell, /<audio\b|id=["']musicPlayer["']|id=["']musicAudio["']/i, "Vue's shell must not render a second player or audio element");
+  assert.doesNotMatch(musicView, /<audio\b|musicPlayer|musicAudio/i, "the Vue Music route should only host the original embedded page");
+  assert.doesNotMatch(embeddedView, /syncMusicFramePlayerOffset|data-vue-music-player-offset|vue-music-player-height/, "Music should reserve the shared player through outer iframe geometry, not an inner duplicate offset");
+  assert.match(
+    vueStyles,
+    /\.vue-shell-content\.vue-shell-content--music\s*\{\s*height:\s*calc\(100vh - 144px\);/,
+    "the Vue Music iframe should use the original outer topbar-and-player geometry"
+  );
+  assert.match(appShell, /document\.body\.classList\.toggle\("kairos-secondary-view", view !== "calendar"\)/, "Vue should mirror the original secondary-route body class");
+  assert.match(appShell, /document\.body\.classList\.toggle\("kairos-music-view", view === "music"\)/, "Vue should mirror the original Music-route body class");
+  assert.match(appShell, /new CustomEvent\("kairos:player-route-layout", \{ detail: \{ view \} \}\)/, "Vue should notify the original player about route layout changes");
+  assert.match(appShell, /window\.addEventListener\("kairos:music-command", handleMusicCommand\)/, "Vue should forward explicit Music commands through the shared original controller");
+  assert.match(musicStore, /async function apply\(command: unknown\)[\s\S]*?KairosMusicPlayer[\s\S]*?applyRefresh/, "the Vue store should send commands back to the original player without owning audio");
+  assert.match(
+    musicHtml,
+    /const hydrateTrackDuration = \(track, cell\) => \{[\s\S]*?const audio = new Audio\(\);[\s\S]*?audio\.preload = 'metadata';[\s\S]*?audio\.onloadedmetadata/,
+    "the original page's conditional metadata probe remains non-playback behaviour, not a Vue player"
+  );
 });
 
 test.skip("habit dashboard uses shared date and streak core", async () => {
@@ -91,13 +119,8 @@ test.skip("habit dashboard uses shared date and streak core", async () => {
   );
   assert.match(
     habitsScript,
-    /const backfillDefault=\(\)=>!!readSettings\(\)\?\.habits\?\.allowBackfillDefault/,
-    "new habit editor should read the saved default backfill rule"
-  );
-  assert.match(
-    habitsScript,
-    /const allowBackfill=habit\?!!habit\.allowBackfill:backfillDefault\(\);[\s\S]*?<input name="backfill" type="checkbox" \$\{allowBackfill\?'checked':''\}>/,
-    "new habits should use the global backfill default while existing habits keep their own setting"
+    /const allowBackfill=!!habit\?\.allowBackfill;[\s\S]*?<input name="backfill" type="checkbox" \$\{allowBackfill\?'checked':''\}>/,
+    "new habits should start with backfill off, while existing habits keep their own setting"
   );
   assert.match(habitsScript, /const reactPet=\(action,payload=\{\}\)=>\{[\s\S]*?window\.top\.postMessage\(\{type:'kairos:pet-react',action,payload\}/, "embedded habit pages should route companion reactions through the desktop shell when preload is unavailable");
   assert.match(habitsScript, /habit-check-button\[data-toggle\][\s\S]*?reactPet\('happy',\{title\}\)/, "new habit completions should give the desktop companion a single happy response");
@@ -105,106 +128,6 @@ test.skip("habit dashboard uses shared date and streak core", async () => {
     habitCore,
     /function currentStreak\(habit = \{\}, todayKey = dateKey\(\)\)[\s\S]*?function bestStreak\(habit = \{\}\)[\s\S]*?function heatmapWindow/,
     "habit core should keep streak and heatmap logic in one reusable module"
-  );
-});
-
-test("note and mood core defines local dated journal behavior", async () => {
-  const noteCore = await fs.readFile(path.join(root, "app/features/notes/note-core.cjs"), "utf8");
-  const packageJson = await fs.readFile(path.join(root, "package.json"), "utf8");
-  const appState = await fs.readFile(path.join(root, "electron/data/app-state/index.js"), "utf8");
-
-  assert.match(
-    appState,
-    /const EMPTY = \{[\s\S]*?moods: \{\}, notes: \[\][\s\S]*?\};/,
-    "app-state should reserve durable notes and dated mood storage"
-  );
-  assert.match(
-    noteCore,
-    /if \(root\) root\.KairosNoteCore = core;[\s\S]*?function normalizeNote\(input = \{\}, fallbackDate = dateKey\(\)\)/,
-    "note core should be reusable from browser UI and Node tests"
-  );
-  assert.match(
-    noteCore,
-    /function searchNotes\(notes = \[\], query = "", options = \{\}\)[\s\S]*?options\.date[\s\S]*?options\.mood[\s\S]*?note\.tags\.join\(" "\)/,
-    "note core should support date mood and keyword search"
-  );
-  assert.match(
-    noteCore,
-    /function setMood\(moods = \{\}, date = dateKey\(\), mood = ""\)[\s\S]*?if \(clean\) next\[key\] = clean;[\s\S]*?else delete next\[key\]/,
-    "note core should manage one mood label per date"
-  );
-  assert.match(
-    packageJson,
-    /node --check app\/features\/notes\/note-core\.cjs/,
-    "check script should syntax-check the note core"
-  );
-});
-
-test("notes page is wired into the desktop shell and app-state", async () => {
-  const notesHtml = await fs.readFile(path.join(root, "app/pages/notes/index.html"), "utf8");
-  const notesFeature = await fs.readFile(path.join(root, "app/features/notes/notes-feature.js"), "utf8");
-  const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
-  const packageJson = await fs.readFile(path.join(root, "package.json"), "utf8");
-
-  assert.match(
-    notesHtml,
-    /<body data-page="notes">[\s\S]*data-note-search[\s\S]*data-note-date[\s\S]*data-mood-grid[\s\S]*<script src="[^\"]*note-core\.cjs\?v=1"><\/script>[\s\S]*<script src="[^\"]*notes-feature\.js\?v=1"><\/script>/,
-    "notes page should render search date filters mood picker and load the note core before the feature"
-  );
-  assert.match(
-    shell,
-    /\['notes','#notes','edit_note','Notes'\][\s\S]*notes: \['\.\.\/notes\/index\.html\?embed=1&v=1', 'Notes'\]/,
-    "desktop shell should expose Notes in the SPA navigation"
-  );
-  assert.match(
-    notesFeature,
-    /const KEY = 'kairos-mvp-state';[\s\S]*?window\.kairosDesktop\?\.appState\?\.save\?\.\(state\)[\s\S]*?window\.kairosDesktop\.appState\.initialize\(state\)/,
-    "notes feature should persist through shared local state and the desktop app-state bridge"
-  );
-  assert.match(
-    notesFeature,
-    /core\.searchNotes\(state\.notes, query, date \? \{ date \} : \{\}\)/,
-    "notes feature should use the shared core for search"
-  );
-  assert.match(
-    notesFeature,
-    /core\.upsertNote\(state\.notes,/,
-    "notes feature should use the shared core for save"
-  );
-  assert.match(
-    notesFeature,
-    /core\.deleteNote\(state\.notes, id\)/,
-    "notes feature should use the shared core for delete"
-  );
-  assert.match(
-    notesFeature,
-    /core\.setMood\(state\.moods, today\(\)/,
-    "notes feature should use the shared core for mood updates"
-  );
-  assert.match(
-    notesHtml,
-    /data-note-attachments[\s\S]*data-note-attachment-list/,
-    "notes page should expose an attachment file picker and attachment list"
-  );
-  assert.match(
-    notesFeature,
-    /function readAttachment\(file\)[\s\S]*?FileReader[\s\S]*?readAsDataURL\(file\)/,
-    "notes feature should preserve local image previews for attachments"
-  );
-  assert.match(
-    notesFeature,
-    /renderAttachmentList\(\)[\s\S]*?data-remove-attachment[\s\S]*?selectedAttachments\.splice/,
-    "notes feature should render and remove selected attachments"
-  );
-  assert.match(
-    notesFeature,
-    /attachments: selectedAttachments,/,
-    "notes feature should save selected attachments with the note"
-  );
-  assert.match(
-    packageJson,
-    /node --check app\/features\/notes\/notes-feature\.js/,
-    "check script should syntax-check the notes feature"
   );
 });
 
@@ -242,27 +165,6 @@ test.skip("schedule calendar uses shared date and schedule core", async () => {
     calendarCore,
     /function monthGrid\(year, monthIndex, options = \{\}\)[\s\S]*?function coversDate\(item = \{\}, key\)[\s\S]*?function schedulesForDate/,
     "calendar core should keep month grid and schedule coverage logic in one reusable module"
-  );
-});
-
-test("schedule calendar shows lightweight note and mood markers", async () => {
-  const scheduleScript = await fs.readFile(path.join(root, "app/features/calendar/schedule-feature.js"), "utf8");
-  const scheduleCss = await fs.readFile(path.join(root, "app/features/calendar/schedule-feature.css"), "utf8");
-
-  assert.match(
-    scheduleScript,
-    /function noteMarkerForDate\(key\)[\s\S]*?state\.notes[\s\S]*?state\.moods[\s\S]*?calendar-note-marker/,
-    "schedule calendar should derive date markers from notes and moods"
-  );
-  assert.match(
-    scheduleScript,
-    /cell\.innerHTML=`<span class="font-label-sm">[\s\S]*?\$\{noteMarkerForDate\(key\)\}`/,
-    "day cells should render the note and mood marker"
-  );
-  assert.match(
-    scheduleCss,
-    /\.calendar-note-marker[\s\S]*?\.calendar-grid \.day-cell\.calendar-day-selected \.calendar-note-marker/,
-    "note and mood markers should be styled for normal and selected calendar days"
   );
 });
 
@@ -405,8 +307,13 @@ test("main window restores and persists desktop bounds", async () => {
   );
   assert.match(
     main,
-    /const result = await verifySmokeRenderer\(mainWindow\);[\s\S]*?Kairos smoke test loaded main window\.[\s\S]*?JSON\.stringify\(result\.checks\)/,
-    "smoke mode should fail if core renderer selectors are missing"
+    /rendererMode === "vue"[\s\S]*?verifyVuePreviewRenderer\(mainWindow\)[\s\S]*?verifySmokeRenderer\(mainWindow\)[\s\S]*?Kairos smoke test loaded \$\{rendererMode\} renderer/,
+    "smoke mode should verify both the opt-in Vue preview and the default legacy renderer"
+  );
+  assert.match(
+    main,
+    /async function verifyVuePreviewRenderer\(win\) \{[\s\S]*?document\.querySelector\('\.vue-shell'\)/,
+    "Vue smoke verification must check the real Vue shell rather than a stale preview title"
   );
   assert.match(
     main,
@@ -562,14 +469,14 @@ test("desktop application menu routes only approved workspace commands", async (
   const shellScript = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
 
   assert.match(main, /import \{[\s\S]*?Menu[\s\S]*?\} from "electron"/, "main process should use Electron's native application menu");
-  assert.match(main, /const SHELL_VIEWS = new Set\(\["calendar", "schedule", "habits", "notes", "music", "settings"\]\);/, "desktop menu commands should be limited to known workspace views");
+  assert.match(main, /const SHELL_VIEWS = new Set\(\["calendar", "schedule", "habits", "music", "settings"\]\);/, "desktop menu commands should be limited to known workspace views");
   assert.match(main, /label: "日历", accelerator: "Alt\+1"/, "application menu should expose a calendar shortcut");
-  assert.match(main, /label: "音乐", accelerator: "Alt\+5"/, "application menu should expose a music shortcut");
+  assert.match(main, /label: "音乐", accelerator: "Alt\+4"/, "application menu should expose a music shortcut");
   assert.match(main, /label: "设置", accelerator: "CommandOrControl\+,"/, "application menu should expose a settings shortcut");
   assert.match(main, /label: "打开 AI 对话", accelerator: "CommandOrControl\+Shift\+A"/, "application menu should expose an AI shortcut");
   assert.match(main, /Menu\.setApplicationMenu\(buildApplicationMenu\(\)\)/, "native menu should be installed when Electron is ready");
   assert.match(preload, /onShellCommand: \(handler\) => \{[\s\S]*?ipcRenderer\.on\("shell:command", listener\)[\s\S]*?removeListener\("shell:command", listener\)/, "preload should expose a disposable shell command listener");
-  assert.match(shellScript, /onShellCommand\?\.\(command => \{[\s\S]*?type === 'settings'[\s\S]*?KairosSettingsFeature\?\.open\?\.[\s\S]*?\['calendar', 'schedule', 'habits', 'notes', 'music'\]\.includes\(type\)/, "shell commands should reuse the settings dialog and route only supported SPA views");
+  assert.match(shellScript, /onShellCommand\?\.\(command => \{[\s\S]*?type === 'settings'[\s\S]*?KairosSettingsFeature\?\.open\?\.[\s\S]*?\['calendar', 'schedule', 'habits', 'music'\]\.includes\(type\)/, "shell commands should reuse the settings dialog and route only supported SPA views");
 });
 
 test("settings expose configurable reminder defaults", async () => {
@@ -583,12 +490,12 @@ test("settings expose configurable reminder defaults", async () => {
   );
   assert.match(
     settingsScript,
-    /\['reminders', 'notifications', 'Reminders'\]/,
+    /\['reminders', 'notifications', t\('settings\.reminders', 'Reminders'\)\]/,
     "settings navigation should expose a Reminders panel"
   );
   assert.match(
     settingsScript,
-    /const remindersMarkup = \(\) => sectionView\('reminders', 'Reminders'[\s\S]*?Deadline default[\s\S]*?Event default[\s\S]*?Match default[\s\S]*?Snooze duration[\s\S]*?Windows notifications[\s\S]*?reminders\.desktopNotifications/,
+    /const remindersMarkup = \(\) => sectionView\('reminders', t\('settings\.reminders', 'Reminders'\)[\s\S]*?Deadline default[\s\S]*?Event default[\s\S]*?Match default[\s\S]*?Snooze duration[\s\S]*?Windows notifications[\s\S]*?reminders\.desktopNotifications/,
     "Reminders settings should let the user configure default offsets, snooze duration, and native notifications"
   );
   assert.match(
@@ -603,24 +510,21 @@ test("settings expose configurable reminder defaults", async () => {
   );
 });
 
-test("settings expose configurable habit backfill defaults", async () => {
+test("settings do not expose a global habit backfill default", async () => {
   const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
 
-  assert.match(
-    settingsScript,
-    /habits: \{ allowBackfillDefault: false \}/,
-    "habit backfill should be disabled by default"
-  );
-  assert.match(
-    settingsScript,
-    /\['habits', 'potted_plant', 'Habits'\]/,
-    "settings navigation should expose a Habits panel"
-  );
-  assert.match(
-    settingsScript,
-    /const habitsMarkup = \(\) => sectionView\('habits', 'Habits'[\s\S]*?Allow past-date check-ins for new habits[\s\S]*?habits\.allowBackfillDefault[\s\S]*?Existing habits keep their own backfill setting/,
-    "Habit settings should configure the backfill default for newly created habits"
-  );
+  assert.doesNotMatch(settingsScript, /allowBackfillDefault|\['habits', 'potted_plant', 'Habits'\]|const habitsMarkup/, "settings should not expose a global habit backfill default");
+});
+
+test("time format preference is applied in the shell and refreshed in legacy calendar views", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
+  const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
+  const scheduleScript = await fs.readFile(path.join(root, "app/features/calendar/schedule-feature.js"), "utf8");
+
+  assert.match(settingsScript, /setTimeFormat\?\.\(state\.general\.timeFormat\)/, "saving or loading settings should apply the persisted time format");
+  assert.match(shell, /message\.state\?\.settings[\s\S]*?setTimeFormat\?\.\(settings\?\.general\?\.timeFormat\)/, "embedded pages should receive the time format through state synchronization");
+  assert.match(scheduleScript, /displayTimeForDate=[\s\S]*?formatClock/, "the calendar agenda should format clock labels without changing schedule values");
+  assert.match(scheduleScript, /kairos:time-format-changed[\s\S]*?renderToday\(\)/, "the visible calendar agenda should refresh when the preference changes");
 });
 
 test("settings can reduce motion across shell and embedded pages", async () => {
@@ -630,7 +534,7 @@ test("settings can reduce motion across shell and embedded pages", async () => {
   assert.match(settingsScript, /accessibility: \{ reduceMotion: false \}/, "reduce motion should default off for existing users");
   assert.match(settingsScript, /accessibility: \{ \.\.\.defaults\.accessibility, \.\.\.\(input\?\.accessibility \|\| \{\}\) \}/, "legacy settings should merge the accessibility preference safely");
   assert.match(settingsScript, /const applyMotionPreference = \(\) => document\.documentElement\.classList\.toggle\('kairos-reduce-motion', state\.accessibility\.reduceMotion === true\)/, "settings should apply the saved motion preference to the current document");
-  assert.match(settingsScript, /kairosReduceMotion', 'Reduce motion', state\.accessibility\.reduceMotion, 'accessibility\.reduceMotion'/, "Appearance settings should expose a reduce motion toggle");
+  assert.match(settingsScript, /kairosReduceMotion', t\('settings\.reduceMotion', 'Reduce motion'\), state\.accessibility\.reduceMotion, 'accessibility\.reduceMotion'/, "Appearance settings should expose a reduce motion toggle");
   assert.match(shellScript, /html\.kairos-reduce-motion \*,html\.kairos-reduce-motion \*::before,html\.kairos-reduce-motion \*::after\{animation-duration:\.001ms!important/, "manual reduce motion should neutralize animations and transitions globally");
   assert.match(shellScript, /message\?\.type === 'kairos:motion-preference' && event\.source === window\.top/, "embedded pages should only accept motion preferences from their shell");
   assert.match(shellScript, /const syncMotionPreference = frame => frame\?\.contentWindow\?\.postMessage\(\{ type:'kairos:motion-preference'/, "shell should propagate the preference to embedded pages");
@@ -661,7 +565,7 @@ test.skip("calendar backgrounds are configurable, isolated, and rendered by the 
   assert.match(main, /calendar-background:delete[\s\S]*?calendarBackgroundService\(\)\.remove/, "The main process should constrain background deletion to the service");
   assert.match(preload, /calendarBackgrounds: Object\.freeze\(\{ listBuiltins:[\s\S]*?chooseImport:[\s\S]*?completeImport:[\s\S]*?rename:[\s\S]*?remove:/, "The renderer should receive only the narrow calendar background bridge");
   assert.match(shellScript, /applyCalendarBackground[\s\S]*?kairos-calendar-background-active/, "The shell should apply saved background settings to the calendar view");
-  assert.match(playerCss, /#musicPlayer::before\s*\{[\s\S]*?var\(--kairos-calendar-background-image[\s\S]*?--kairos-calendar-background-blur[\s\S]*?--kairos-calendar-background-brightness/, "The shared player should use the active calendar background settings");
+  assert.doesNotMatch(playerCss, /#musicPlayer::before\s*\{[\s\S]*?var\(--kairos-calendar-background-image/, "The shared player should not render a second copy of the calendar background");
   assert.match(layoutCss, /calendar-is-fullscreen::before\{[\s\S]*?--kairos-calendar-background-image[\s\S]*?--kairos-calendar-background-blur[\s\S]*?--kairos-calendar-background-brightness/, "Fullscreen calendar should keep the active background image and adjustments");
 });
 
@@ -695,13 +599,17 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.equal(pkg.main, "electron/main/index.js");
   assert.equal(pkg.scripts.start, "node scripts/kairos-dev.cjs");
   assert.equal(pkg.scripts.dev, "node scripts/kairos-dev.cjs");
+  assert.equal(pkg.scripts["dev:vue"], "node scripts/kairos-vue-dev.cjs");
+  assert.equal(pkg.scripts["build:renderer"], "pnpm renderer:build");
   assert.equal(pkg.scripts.doctor, "node scripts/kairos-doctor.cjs");
-  assert.equal(pkg.scripts.pack, "pnpm build:styles && electron-builder --dir");
-  assert.equal(pkg.scripts.dist, "pnpm build:styles && electron-builder --win");
-  assert.equal(pkg.scripts["dist:win"], "pnpm build:styles && electron-builder --win nsis portable");
+  assert.equal(pkg.scripts.pack, "pnpm build:styles && pnpm build:renderer && electron-builder --dir");
+  assert.equal(pkg.scripts.dist, "pnpm build:styles && pnpm build:renderer && electron-builder --win");
+  assert.equal(pkg.scripts["dist:win"], "pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable");
   assert.equal(pkg.scripts["audit:app-state"], "node electron/scripts/audit/app-state-audit.js");
   assert.equal(pkg.scripts["audit:desktop-data"], "node electron/scripts/audit/desktop-data-audit.js");
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-dev\.cjs/);
+  assert.match(pkg.scripts.check, /pnpm typecheck/);
+  assert.match(pkg.scripts.check, /node --check scripts\/kairos-vue-dev\.cjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-doctor\.cjs/);
   assert.match(pkg.scripts.check, /node --check electron\/data\/sqlite\/index\.js/);
   assert.match(pkg.scripts.check, /node --check electron\/scripts\/audit\/app-state-audit\.js/);
@@ -727,6 +635,10 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.ok(pkg.build.files.includes("!.env*"), "local secret files must not be packaged");
   assert.ok(pkg.build.files.includes("!docs{,/**}"), "project docs should stay out of the runtime package");
   assert.ok(pkg.devDependencies["electron-builder"], "electron-builder should be available for distribution builds");
+  assert.ok(pkg.dependencies.vue, "Vue should be available for the opt-in preview renderer");
+  assert.ok(pkg.devDependencies.vite, "Vite should be available for the opt-in preview renderer");
+  assert.match(main, /process\.env\.KAIROS_RENDERER === "vue"/);
+  assert.match(main, /app["', ]+vue-preview["', ]+index\.html/);
   assert.match(checklist, /pnpm audit:app-state[\s\S]*?退出码为 `0`[\s\S]*?退出码为 `2`[\s\S]*?退出码为 `1`/, "release checklist should document app-state audit usage and exit codes");
 });
 
@@ -850,7 +762,7 @@ test.skip("settings preferences persist through desktop app state", async () => 
   );
 });
 
-test.skip("settings music panel manages NetEase account and quality preferences", async () => {
+test("settings music panel manages NetEase account and quality preferences", async () => {
   const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
   const settingsCss = await fs.readFile(path.join(root, "app/features/settings/settings-feature.css"), "utf8");
   const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
@@ -868,16 +780,8 @@ test.skip("settings music panel manages NetEase account and quality preferences"
     /neteaseQuality: \[\['standard', 'Standard'\], \['higher', 'Higher'\], \['exhigh', 'Very high'\], \['lossless', 'Lossless'\]\]/,
     "settings should expose supported NetEase quality levels"
   );
-  assert.match(
-    settingsScript,
-    /data-netease-refresh[\s\S]*?Refresh account data[\s\S]*?data-netease-clear-cache[\s\S]*?Clear local cache[\s\S]*?data-netease-clear-session[\s\S]*?Clear session/,
-    "music settings should render account refresh cache clearing and clear-session actions"
-  );
-  assert.match(
-    settingsScript,
-    /personal learning and daily planning only[\s\S]*?does not redistribute music content[\s\S]*?commercial public playback/,
-    "music settings should explain the first-version NetEase personal-use scope"
-  );
+  assert.match(settingsScript, /data-netease-refresh[\s\S]*?Refresh account data[\s\S]*?data-netease-clear-cache[\s\S]*?Clear local cache/, "music settings should render account refresh and cache-clearing actions");
+  assert.doesNotMatch(settingsScript, /data-netease-clear-session/, "music settings should not render a duplicate logout action");
   assert.match(
     settingsScript,
     /Scan with your own Netease Music account[\s\S]*?personal learning use only[\s\S]*?does not redistribute music content/,
@@ -889,24 +793,14 @@ test.skip("settings music panel manages NetEase account and quality preferences"
     "music page login gate should not show the removed NetEase personal-use scope notice"
   );
   assert.match(
-    settingsCss,
-    /\.kairos-netease-scope\{[\s\S]*?background:#fff8f4[\s\S]*?font:700 12px\/1\.45/,
-    "settings scope notice should have dedicated readable styling"
-  );
-  assert.match(
     settingsScript,
     /data-netease-refresh[\s\S]*?window\.kairosDesktop\?\.netease\?\.getStatus\?\.\(\)[\s\S]*?Netease account refreshed/,
     "account refresh should reload NetEase status through the desktop bridge"
   );
   assert.match(
     settingsScript,
-    /data-netease-clear-session[\s\S]*?Clear Netease session\?[\s\S]*?window\.kairosDesktop\?\.netease\?\.logout\?\.\(\)[\s\S]*?Netease session cleared/,
-    "clear session should remove the saved NetEase login cookie without touching local music"
-  );
-  assert.match(
-    settingsScript,
-    /const clearNeteaseLocalCache = \(\) => \{[\s\S]*?localStorage\.removeItem\('kairos-netease-playback-state'\)[\s\S]*?kairos-music-last-source'[\s\S]*?kairos:netease-cache-cleared/,
-    "settings should clear NetEase local playback cache without logging out"
+    /const clearNeteaseLocalCache = \(\) => \{[\s\S]*?window\.kairosDesktop\?\.music\?\.updateRuntime\?\.\(\{ neteasePlayback: null, lastSource: 'empty' \}\)\.catch\(\(\) => \{\}\);[\s\S]*?kairos:netease-cache-cleared/,
+    "settings should clear the persisted NetEase playback snapshot without logging out"
   );
   assert.match(
     settingsScript,
@@ -955,40 +849,19 @@ test.skip("settings music panel manages NetEase account and quality preferences"
   );
 });
 
-test("settings data panel manages app-state backups", async () => {
+test("settings data panel supports app-state import and export", async () => {
   const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
   const settingsCss = await fs.readFile(path.join(root, "app/features/settings/settings-feature.css"), "utf8");
 
   assert.match(
     settingsScript,
-    /let appBackups = \[\];[\s\S]*?let backupPreview = null;[\s\S]*?let appAudit = null;/,
-    "settings should keep backup list preview and migration audit state"
+    /const dataMarkup = \(\) => \{[\s\S]*?card\(t\('settings\.appData', 'App Data'\)[\s\S]*?kairos-settings-group[\s\S]*?action\(t\('settings\.exportAppData', 'Export app data'\), 'ios_share', t\('settings\.export', 'export'\), 'data-export-app-state'[\s\S]*?action\(t\('settings\.importJson', 'Import JSON'\), 'file_open', t\('settings\.import', 'import'\), 'data-import-app-state'/,
+    "Data settings panel should reuse the Reminders card and row structure for export and import"
   );
-  assert.match(
-    settingsScript,
-    /const dataMarkup = \(\) => \{[\s\S]*?window\.kairosDesktop\?\.appState[\s\S]*?data-import-app-state[\s\S]*?data-export-app-state[\s\S]*?data-refresh-backups[\s\S]*?data-preview-backup[\s\S]*?data-restore-backup/,
-    "Data settings panel should render import export refresh preview and restore controls"
-  );
-  assert.match(
-    settingsScript,
-    /Migration Audit[\s\S]*?auditSummary\(appAudit\)[\s\S]*?data-run-app-audit[\s\S]*?auditIssueList\(appAudit\)/,
-    "Data settings panel should render migration audit controls and results"
-  );
-  assert.match(
-    settingsScript,
-    /window\.kairosDesktop\.appState\?\.listBackups \? window\.kairosDesktop\.appState\.listBackups\(\)\.catch\(\(\) => \[\]\)[\s\S]*?window\.kairosDesktop\.appState\?\.audit \? window\.kairosDesktop\.appState\.audit\(\)\.catch\(\(\) => null\)/,
-    "settings refresh should load managed backups and migration audit from the desktop bridge"
-  );
-  assert.match(
-    settingsScript,
-    /data-run-app-audit[\s\S]*?window\.kairosDesktop\?\.appState\?\.audit\?\.\(\)[\s\S]*?flashSaved\('App data audited'\)/,
-    "settings should let the user refresh the app-state migration audit"
-  );
-  assert.match(
-    settingsScript,
-    /data-restore-backup[\s\S]*?confirmAction\(\{ title: 'Restore app-state backup\?'[\s\S]*?window\.kairosDesktop\?\.appState\?\.restoreBackup\?\.\(button\.dataset\.restoreBackup\)/,
-    "restoring a backup should require confirmation and use the constrained appState bridge"
-  );
+  assert.doesNotMatch(settingsScript, /App State Backups|appBackups|backupPreview|backupSummary|formatBytes|data-refresh-backups|data-preview-backup|data-restore-backup/, "Data settings should not expose backup management");
+  assert.doesNotMatch(settingsScript, /Migration Audit|appAudit|data-run-app-audit|auditSummary|auditIssueList/, "Data settings should not expose migration-health audit controls");
+  assert.doesNotMatch(settingsScript, /kairos-data-transfer-list|kairos-data-transfer-row/, "Data settings should not retain a separate row layout from Reminders");
+  assert.match(settingsCss, /\.kairos-select-wrap \.kairos-data-action-button\{display:inline-flex;width:100%;height:42px[\s\S]*?border-radius:999px[\s\S]*?background:#fbf9f2/, "Data action buttons should match the Reminders control styling");
   assert.match(
     settingsScript,
     /data-export-app-state[\s\S]*?window\.kairosDesktop\?\.appState\?\.exportCurrent\?\.\(\)[\s\S]*?flashSaved\('App data exported'\)/,
@@ -998,11 +871,6 @@ test("settings data panel manages app-state backups", async () => {
     settingsScript,
     /data-import-app-state[\s\S]*?confirmAction\(\{ title: 'Import app data\?'[\s\S]*?window\.kairosDesktop\?\.appState\?\.importJson\?\.\(\)[\s\S]*?flashSaved\('App data imported'\)/,
     "importing app state should require confirmation and use the desktop open dialog bridge"
-  );
-  assert.match(
-    settingsCss,
-    /\.kairos-backup-list[\s\S]*?\.kairos-backup-row[\s\S]*?\.kairos-backup-preview[\s\S]*?\.kairos-audit-list[\s\S]*?\.kairos-audit-ok/,
-    "backup and audit management UI should have dedicated layout styles"
   );
 });
 
@@ -1058,7 +926,7 @@ test("desktop app state exposes constrained backup management", async () => {
   );
 });
 
-test.skip("NetEase playback stays isolated from local queue persistence", async () => {
+test("NetEase playback stays isolated from local queue persistence", async () => {
   const playerScript = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
   const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
 
@@ -1139,12 +1007,12 @@ test.skip("NetEase playback stays isolated from local queue persistence", async 
   );
   assert.match(
     playerScript,
-    /const NETEASE_PLAYBACK_KEY = 'kairos-netease-playback-state';[\s\S]*?const LAST_SOURCE_KEY = 'kairos-music-last-source';/,
-    "NetEase playback should keep its own persisted snapshot keys instead of using the local music state file"
+    /const runtime = \(\) => state\.runtime \|\|= \{ lastSource:'local', neteasePlayback:null, playCounts:\{\} \};[\s\S]*?const persistRuntime = patch => \{ state\.runtime = \{ \.\.\.runtime\(\), \.\.\.patch \}; desktop\(\)\?\.updateRuntime\?\.\(patch\)\.catch\(\(\) => \{\}\); \};/,
+    "NetEase playback should keep its own persisted runtime fields without replaying stale source-order state"
   );
   assert.match(
     playerScript,
-    /const saveNeteasePlayback = \(\) => \{[\s\S]*?if \(!hasNeteaseQueue\(\)\) return;[\s\S]*?localStorage\.setItem\(NETEASE_PLAYBACK_KEY, JSON\.stringify\(\{[\s\S]*?currentTrackId:[\s\S]*?mode:[\s\S]*?positions,[\s\S]*?updatedAt:[\s\S]*?\}\)\);[\s\S]*?localStorage\.setItem\(LAST_SOURCE_KEY, 'netease'\);[\s\S]*?\};/,
+    /const saveNeteasePlayback = \(\) => \{[\s\S]*?if \(!hasNeteaseQueue\(\)\) return;[\s\S]*?persistRuntime\(\{ neteasePlayback: \{[\s\S]*?currentTrackId:[\s\S]*?mode:[\s\S]*?positions,[\s\S]*?updatedAt:[\s\S]*?\}, lastSource: 'netease' \}\);[\s\S]*?\};/,
     "NetEase queues should persist a separate last-online snapshot for app restart recovery"
   );
   assert.match(
@@ -1172,6 +1040,19 @@ test.skip("NetEase playback stays isolated from local queue persistence", async 
 test("NetEase playable URLs are refreshed before expiry-sensitive playback", async () => {
   const playerScript = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
   const neteaseService = await fs.readFile(path.join(root, "electron/services/music/netease-api-service.js"), "utf8");
+  const vueIndex = await fs.readFile(path.join(root, "renderer/index.html"), "utf8");
+  const appShell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
+
+  assert.match(
+    vueIndex,
+    /media-src 'self' file: http: https: blob: kairos-media:/,
+    "the Vue shell CSP must permit NetEase's HTTP media URLs as well as HTTPS and local media"
+  );
+  assert.match(
+    appShell,
+    /const message = String\(detail\.message \|\| detail\.description \|\| detail\.title \|\| ""\)\.trim\(\);[\s\S]*?const tone = detail\.tone \|\| detail\.type \|\| "message";[\s\S]*?toasts\.show\(/,
+    "legacy player toast payloads should be translated for the Vue toast host"
+  );
 
   assert.match(
     neteaseService,
@@ -1190,8 +1071,18 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
   );
   assert.match(
     playerScript,
-    /async function playLoadedAudio\(\)\{[\s\S]*?if \(isNeteaseUrlStale\(track\)\) \{[\s\S]*?await refreshNeteaseTrackUrl\(track\);/,
+    /async function playLoadedAudio\(retryNetease=true\)\{[\s\S]*?if \(isNeteaseUrlStale\(track\)\) \{[\s\S]*?await refreshNeteaseTrackUrl\(track\);/,
     "all current-track play/resume paths should refresh stale NetEase URLs before audio.play"
+  );
+  assert.match(
+    playerScript,
+    /playbackAttemptDepth \+= 1;[\s\S]*?await waitForPlayable\(\);[\s\S]*?await els\.audio\.play\(\);[\s\S]*?if \(!retryNetease \|\| !isNeteaseId\(track\?\.id\)\) throw error;[\s\S]*?const refreshed = await refreshNeteaseTrackUrl\(track\);[\s\S]*?return playLoadedAudio\(false\);/,
+    "a failed first NetEase media load should refresh its signed URL and retry before surfacing a player error"
+  );
+  assert.match(
+    playerScript,
+    /const reportPlaybackFailure = error => \{[\s\S]*?mediaError: els\.audio\.error\?\.code \|\| 0,[\s\S]*?protocol: source\.protocol,[\s\S]*?host: source\.host/,
+    "playback diagnostics should retain native error state without logging a signed media URL"
   );
   assert.match(
     playerScript,
@@ -1210,7 +1101,7 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
   );
   assert.match(
     playerScript,
-    /if \(t\.playUrl\) \{[\s\S]*?els\.audio\.src=t\.playUrl;[\s\S]*?\} else if \(isNeteaseId\(t\.id\)\) \{[\s\S]*?els\.audio\.removeAttribute\('src'\);[\s\S]*?els\.audio\.load\(\);[\s\S]*?\}/,
+    /const sourceUrl = playableUrl\(t\);[\s\S]*?if \(sourceUrl\) \{[\s\S]*?els\.audio\.src=sourceUrl;[\s\S]*?\} else if \(isNeteaseId\(t\.id\)\) \{[\s\S]*?els\.audio\.removeAttribute\('src'\);[\s\S]*?els\.audio\.load\(\);[\s\S]*?\}/,
     "shared player should not write empty NetEase shell URLs into the audio element before refresh"
   );
   assert.match(
@@ -1220,7 +1111,7 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
   );
   assert.match(
     playerScript,
-    /const playbackErrorText = error => error\?\.message === 'Unable to refresh NetEase URL' \? 'Unable to refresh NetEase URL' : 'Unable to play this audio file';/,
+    /const playbackErrorText = error => \{[\s\S]*?reportPlaybackFailure\(error\);[\s\S]*?return error\?\.message === 'Unable to refresh NetEase URL' \? 'Unable to refresh NetEase URL' : 'Unable to play this audio file';[\s\S]*?\};/,
     "shared player should keep local audio failure messaging separate from NetEase URL refresh failures"
   );
   assert.match(
@@ -1250,8 +1141,8 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
   );
   assert.match(
     playerScript,
-    /els\.audio\.onerror=async\(\)=>\{ const t=currentTrack\(\); if\(!isNeteaseId\(t\?\.id\)\) return; const fail=message=>\{ state\.playing=false; els\.status\.textContent=message; toast\('error',message\); syncPlayButton\(\); updateQueuePlaybackState\(\); emitState\(\); \}; const refreshed=await refreshNeteaseTrackUrl\(t\); if\(!refreshed\)\{ fail\('Unable to refresh NetEase URL'\); return; \} if\(state\.playing===true\) playLoadedAudio\(\)\.catch\(error=>fail\(playbackErrorText\(error\)\)\); \};/,
-    "NetEase audio error recovery should roll back shared player controls when URL refresh or replay fails"
+    /els\.audio\.onerror=async\(\)=>\{ const t=currentTrack\(\); reportPlaybackFailure\(\); if\(!isNeteaseId\(t\?\.id\) \|\| playbackAttemptDepth>0 \|\| state\.playing!==true\) return;[\s\S]*?playLoadedAudio\(false\)\.catch\(error=>fail\(playbackErrorText\(error\)\)\); \};/,
+    "the global NetEase error handler should not race a first-attempt retry, while still recovering an interrupted active playback"
   );
 });
 

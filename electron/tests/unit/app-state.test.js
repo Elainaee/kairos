@@ -23,11 +23,12 @@ function runNode(args, options = {}) {
 }
 
 test("app state normalizes legacy documents into the current schema", () => {
-  const state = normalize({ version: 1, schedules: "bad", moods: [], theme: "dark", settings: { ai: { provider: "none" } } });
+  const state = normalize({ version: 1, schedules: "bad", moods: [], notes: [{ id: "legacy-note" }], theme: "dark", settings: { ai: { provider: "none" } } });
 
   assert.equal(state.version, APP_STATE_SCHEMA_VERSION);
   assert.deepEqual(state.schedules, []);
-  assert.deepEqual(state.moods, {});
+  assert.equal(state.moods, undefined);
+  assert.equal(state.notes, undefined);
   assert.equal(state.theme, "dark");
   assert.equal(state.settings.ai.provider, "none");
   assert.equal(state.migrations.some(item => item.id === "app-state-v2"), true);
@@ -44,8 +45,6 @@ test("app state audit reports migration-ready counts and data issues", () => {
       { id: "habit-1", name: "", dates: ["2026-07-15", "bad-date"] },
       { id: "habit-1", name: "Workout", dates: [] }
     ],
-    notes: [{ id: "note-1" }],
-    moods: { "2026-07-15": "calm" },
     settings: { appearance: { theme: "light" } }
   });
 
@@ -56,8 +55,6 @@ test("app state audit reports migration-ready counts and data issues", () => {
     tasks: 1,
     habits: 2,
     checkins: 0,
-    notes: 1,
-    moods: 1,
     migrations: 1,
     settings: 1
   });
@@ -71,8 +68,6 @@ test("app state audit passes normalized core data without mutating storage", () 
   const report = auditAppState({
     schedules: [{ id: "task-1", title: "Read", date: "2026-07-15", end_date: "2026-07-15", type: "task" }],
     habits: [{ id: "habit-1", name: "Read", dates: ["2026-07-15"] }],
-    notes: [],
-    moods: {}
   });
 
   assert.equal(report.ok, true);
@@ -198,7 +193,7 @@ test("app state can create a current backup before destructive imports", async (
   const backup = JSON.parse(await fs.readFile(backupPath, "utf8"));
   const state = await store.read();
 
-  assert.match(path.basename(backupPath), /^app-state-v3-.+-before-import\.json$/);
+  assert.match(path.basename(backupPath), /^app-state-v4-.+-before-import\.json$/);
   assert.equal(backups.some(item => item.path === backupPath), true);
   assert.equal(backup.schedules[0].id, "current");
   assert.equal(state.schedules[0].id, "imported");
@@ -304,10 +299,9 @@ test("schedule adapters reject a missing start date", async () => {
 test("app state repository owns collection CRUD behind adapters", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-repository-"));
   const store = new AppStateStore(path.join(dir, "app.json"));
-  await store.initialize({ schedules: [], notes: [] });
+  await store.initialize({ schedules: [] });
   let notified = 0;
   const tasks = new AppStateRepository(store, "tasks", () => { notified += 1; });
-  const notes = new AppStateRepository(store, "notes", () => { notified += 1; });
 
   const task = await tasks.create({ title: "Read", date: "2026-07-15" });
   assert.equal(task.type, "task");
@@ -315,14 +309,11 @@ test("app state repository owns collection CRUD behind adapters", async () => {
   await tasks.update({ id: task.id, title: "Read chapter 2", date: "2026-07-15", end_date: "2026-07-15", type: "task" });
   assert.equal((await tasks.query({ id: task.id }))[0].title, "Read chapter 2");
 
-  const note = await notes.create({ title: "Reflection", date: "2026-07-15" });
-  assert.equal((await notes.query({ id: note.id }))[0].title, "Reflection");
-  await notes.delete({ id: note.id });
   await tasks.delete_many({ ids: [task.id] });
   const state = await store.read();
   assert.equal(state.schedules.length, 0);
-  assert.equal(state.notes.length, 0);
-  assert.equal(notified, 5);
+  assert.equal(state.notes, undefined);
+  assert.equal(notified, 3);
   await fs.rm(dir, { recursive: true, force: true });
 });
 

@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   }),
   sendMessage: (payload) => ipcRenderer.invoke("ai:send", payload),
   memories: Object.freeze({ list:()=>ipcRenderer.invoke("ai:memories:list"), forget:(id)=>ipcRenderer.invoke("ai:memories:forget",id), clear:()=>ipcRenderer.invoke("ai:memories:clear") }),
+  memory: Object.freeze({ getProfile:()=>ipcRenderer.invoke("ai:memory:profile:get"), updateProfile:(field)=>ipcRenderer.invoke("ai:memory:profile:update",field), forgetProfileField:(key)=>ipcRenderer.invoke("ai:memory:profile:forget",key), timeline:(query)=>ipcRenderer.invoke("ai:memory:timeline",query), search:(query)=>ipcRenderer.invoke("ai:memory:search",query), stats:()=>ipcRenderer.invoke("ai:memory:stats") }),
   stopMessage: (requestId) => ipcRenderer.invoke("ai:stop", requestId),
   conversations: Object.freeze({ list:()=>ipcRenderer.invoke("ai:conversations:list"),create:(input)=>ipcRenderer.invoke("ai:conversations:create",input),get:(id)=>ipcRenderer.invoke("ai:conversations:get",id),update:(id,patch)=>ipcRenderer.invoke("ai:conversations:update",{id,patch}),delete:(id)=>ipcRenderer.invoke("ai:conversations:delete",id) }),
   getUsage: (filters={}) => ipcRenderer.invoke("ai:usage",filters),

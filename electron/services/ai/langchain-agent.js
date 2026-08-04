@@ -2,7 +2,7 @@ import { createAgent, tool } from "langchain";
 import * as z from "zod";
 import { createProviderChatModel, normalizeProviderError } from "./provider-registry.js";
 
-const domains = ["schedules", "tasks", "habits", "notes"];
+const domains = ["schedules", "tasks", "habits"];
 const weeklyRecurrenceSchema = z.object({ frequency: z.literal("weekly"), weekdays: z.array(z.number().int().min(0).max(6)).min(1), until: z.string().optional() });
 const operationSchema = z.object({
   title: z.string().min(1).max(120),
@@ -30,7 +30,16 @@ export const KAIROS_AGENT_PROMPT = `你是 Kairos，一个温和、诚实的个�
 
 所有 propose_* 工具仅创建“待确认提案”，绝不会直接写入数据。你可以补全合理的缺失信息：没有具体时间时使用全天；“今晚”可推测为 19:00-22:00；“暑假”可按当前年份 7 月 1 日至 8 月 31 日推测。所有推测须写入 notes，最终回复也要明确说明推测与待确认状态。绝不可假装已保存日程。
 
-联网后的二次决策：调用 web_search 后，优先阅读每项的 content（由 Firecrawl 提取的网页 Markdown 正文），而不是仅依赖搜索标题或 snippet。只有 contentSource 为 firecrawl_markdown 的内容可以确认具体事实；搜索摘要与网页正文冲突时，以可核验的正文和官方来源为准；若正文不可用，必须明确说明证据不足，不能补写事实。先审阅结果是否包含与用户有关、可靠且尚未过去的具体事件、截止日或时间范围。仅当用户的意图包括“提醒我、加到日程、不要错过、帮我安排”，或上下文明显表明这是需要跟进的未来事项时，才调用 propose_schedule 或 propose_task。若搜索结果是过去事件、无日期/时间、只是背景知识/新闻，或用户仅在提问而没有安排意图，则不要创建提案，要直接解释为何不建议写入日程。若从搜索结果创建提案，必须填写 source_url、source_title，并在 notes 中标明哪些日期或时间来自来源、哪些是你的推测。联网答案必须附上工具返回的来源 URL。`;
+联网后的二次决策：调用 web_search 后，优先阅读每项的 content（由 Firecrawl 提取的网页 Markdown 正文），而不是仅依赖搜索标题或 snippet。只有 contentSource 为 firecrawl_markdown 的内容可以确认具体事实；搜索摘要与网页正文冲突时，以可核验的正文和官方来源为准；若正文不可用，必须明确说明证据不足，不能补写事实。先审阅结果是否包含与用户有关、可靠且尚未过去的具体事件、截止日或时间范围。仅当用户的意图包括”提醒我、加到日程、不要错过、帮我安排”，或上下文明显表明这是需要跟进的未来事项时，才调用 propose_schedule 或 propose_task。若搜索结果是过去事件、无日期/时间、只是背景知识/新闻，或用户仅在提问而没有安排意图，则不要创建提案，要直接解释为何不建议写入日程。若从搜索结果创建提案，必须填写 source_url、source_title，并在 notes 中标明哪些日期或时间来自来源、哪些是你的推测。联网答案必须附上工具返回的来源 URL。
+
+分层记忆机制（当记忆工具可用时）：
+- 用户结构化属性必须走 update_user_profile（如姓名、职业、偏好、关系），尽量提供 validFrom 追溯事实生效时间（如”去年入职”→validFrom 填去年日期）。
+- 需要了解用户时优先用 get_user_profile 查当前画像，不要先搜 search_memories。
+- 用户询问”那年/之前/曾经”等历史状态时，用 query_memory_timeline 指定时间范围浏览。
+- 用户表达目标/愿望/待办时，用 track_goal 或 list_goals 管理，不要用普通记忆存储。
+- search_memories_semantic 用于全文探索型查询（不知道精确字段名或时间范围时）。
+- 普通对话中读到的分散事实（如”我喜欢吃辣””我养了一只猫”）才用 remember_memory。
+- 同一事实不要同时写入普通记忆和画像字段；画像字段优先。`;
 
 function contentOf(message) {
   if (typeof message?.content === "string") return message.content;
@@ -75,7 +84,7 @@ const scheduleUpdateSchema = z.object({
   recurrence: weeklyRecurrenceSchema.optional(),
 });
 
-export async function runKairosAgent({ provider = "openai", apiKey, model, chatModel, messages, conversationTitle = "新对话", store, toolRuntime, appAdapters, searchWeb, ensureExternalSearch, ensureDomainAccess, onToolEvent = () => {}, onSetTitle = async () => {}, replyStyle = "companion", memoryEnabled = true, signal, now = new Date() }) {
+export async function runKairosAgent({ provider = "openai", apiKey, model, chatModel, messages, conversationTitle = "新对话", store, toolRuntime, appAdapters, searchWeb, ensureExternalSearch, ensureDomainAccess, onToolEvent = () => {}, onSetTitle = async () => {}, replyStyle = "companion", memoryEnabled = true, memoryService = null, signal, now = new Date() }) {
   if (!apiKey && !chatModel) throw new Error("missing_key");
   const proposals = [];
   const allowDomainRead = ensureDomainAccess || (async domain => {
@@ -86,19 +95,91 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
     onToolEvent({ type: "permission_granted", domain: "schedules", level: "read" });
   });
   const readMemories = tool(async ({ query }) => {
+    if (memoryService?.isMigrated()) {
+      const results = memoryService.recall({ query, layers: [2, 3], limit: 30 });
+      const items = results.map(r => ({ id: r.sourceEventId || r.key, type: r.type || "fact", key: r.key || r.title, value: r.value || r.detail || r.content || "", confidence: r.confidence || 0.5, score: r.score }));
+      onToolEvent({ type: "tool_result", tool: "search_memories", count: items.length });
+      return JSON.stringify({ items });
+    }
     const rows = matchingMemories(await store.listMemories(), query).slice(0, 30);
     onToolEvent({ type: "tool_result", tool: "search_memories", count: rows.length });
     return JSON.stringify({ items: rows });
-  }, { name: "search_memories", description: "Search user-approved long-term memories before making a personal inference.", schema: z.object({ query: z.string().optional().describe("Memory keywords, or omit to list recent memories") }) });
-  const remember = tool(async ({ type, key, value, confidence }) => {
+  }, { name: "search_memories", description: "Search user-approved long-term memories before making a personal inference. Use this for broad recall; prefer get_user_profile for specific user attributes.", schema: z.object({ query: z.string().optional().describe("Memory keywords, or omit to list recent memories") }) });
+  const rememberMemory = tool(async ({ type, key, value, confidence }) => {
+    if (memoryService?.isMigrated()) {
+      const result = memoryService.rememberFact({ type, key, value, confidence, source: "agent" });
+      onToolEvent({ type: "memory_saved", item: { id: result.event_id, key: result.key, value: result.value } });
+      return { saved: true, id: result.event_id, key: result.key, value: result.value };
+    }
     const item = await store.remember({ type, key, value, confidence, source: "agent" });
     onToolEvent({ type: "memory_saved", item });
     return { saved: true, id: item.id, key: item.key, value: item.value };
-  }, { name: "remember_memory", description: "Save an explicit, durable user fact, preference, goal, or completed activity. Do not save guesses.", schema: z.object({ type: z.enum(["profile", "preference", "goal", "activity", "fact"]), key: z.string().min(1).max(80), value: z.string().min(1).max(500), confidence: z.number().min(0).max(1).default(0.8) }) });
-  const forget = tool(async ({ query }) => {
+  }, { name: "remember_memory", description: "Save an explicit, durable user fact, preference, goal, or completed activity. Do not save guesses. For structured user attributes (name, occupation, preferences), prefer update_user_profile instead.", schema: z.object({ type: z.enum(["profile", "preference", "goal", "activity", "fact"]), key: z.string().min(1).max(80), value: z.string().min(1).max(500), confidence: z.number().min(0).max(1).default(0.8) }) });
+  const forgetMemory = tool(async ({ query }) => {
+    if (memoryService?.isMigrated()) {
+      const results = memoryService.recall({ query, layers: [2, 3], limit: 100 });
+      let count = 0;
+      for (const r of results) { if (r.sourceEventId) { memoryService.forgetMemory(r.sourceEventId); count++; } }
+      onToolEvent({ type: "memory_forgotten", query, count }); return { forgotten: count };
+    }
     const rows = matchingMemories(await store.listMemories(), query); for (const row of rows) await store.forgetMemory(row.id);
     onToolEvent({ type: "memory_forgotten", query, count: rows.length }); return { forgotten: rows.length };
   }, { name: "forget_memory", description: "Forget memories only when the user asks to forget or delete a memory.", schema: z.object({ query: z.string().min(1).max(200) }) });
+
+  // ====== 新增分层记忆工具（仅在 memoryService 可用时注册） ======
+  const profileCategories = ["identity", "preference", "relationship", "work", "health", "knowledge", "other"];
+
+  const getUserProfile = tool(async ({ category, fieldKey }) => {
+    if (!memoryService) return JSON.stringify({ error: "memory_service_unavailable" });
+    const profile = memoryService.getProfile({ category: category || null });
+    if (fieldKey) {
+      const field = memoryService.getProfileField(fieldKey, { includeHistory: true });
+      return JSON.stringify(field ? { field, historyIncluded: true } : { error: "field_not_found" });
+    }
+    return JSON.stringify({ fields: profile, total: profile.length });
+  }, { name: "get_user_profile", description: "Get the user's structured profile fields (identity, preferences, occupation, etc.). Use this before asking about user attributes rather than relying on fuzzy memory search. Pass category to filter by type, or fieldKey for a specific field with history.", schema: z.object({ category: z.enum(profileCategories).optional().describe("Filter by category, or omit for all"), fieldKey: z.string().optional().describe("Specific field key like 'user.occupation' to get with bitemporal history") }) });
+
+  const updateUserProfile = tool(async ({ fieldKey, value, category, confidence, validFrom }) => {
+    if (!memoryService) return JSON.stringify({ error: "memory_service_unavailable" });
+    const result = memoryService.updateProfileField({ fieldKey, value, category: category || "other", confidence: confidence ?? 0.8, source: "agent", validTime: validFrom || undefined });
+    onToolEvent({ type: "profile_updated", fieldKey: result.field_key, value: result.value });
+    return JSON.stringify({ updated: true, fieldKey: result.field_key, value: result.value });
+  }, { name: "update_user_profile", description: "Update a user profile field with bitemporal versioning. Use this for durable user attributes (name, occupation, preferences, relationships, health). Old values are preserved as history. Provide validFrom if the fact became true at a past date (e.g., 'since last year').", schema: z.object({ fieldKey: z.string().min(1).max(80).describe("Dot-notation key like 'user.occupation', 'user.name', 'pref.theme'"), value: z.string().min(1).max(500), category: z.enum(profileCategories).default("other"), confidence: z.number().min(0).max(1).default(0.8), validFrom: z.string().optional().describe("When this fact became true in reality (ISO 8601), e.g. '2025-09-01' for 'started school then'") }) });
+
+  const queryTimeline = tool(async ({ dateFrom, dateTo, minImportance, eventType, limit }) => {
+    if (!memoryService) return JSON.stringify({ error: "memory_service_unavailable" });
+    const items = memoryService.getTimeline({ from: dateFrom || null, to: dateTo || null, minImportance: minImportance || 1, eventType: eventType || null, limit: limit || 20 });
+    return JSON.stringify({ items, count: items.length });
+  }, { name: "query_memory_timeline", description: "Query the memory timeline by date range, importance, or event type. Use this when the user asks about past events, facts over time, or wants to browse their history.", schema: z.object({ dateFrom: z.string().optional().describe("Start date (YYYY-MM-DD or ISO 8601)"), dateTo: z.string().optional().describe("End date"), minImportance: z.number().int().min(1).max(5).default(1), eventType: z.string().optional().describe("Event type filter, e.g. 'memory_write', 'profile_update'"), limit: z.number().int().min(1).max(100).default(20) }) });
+
+  const trackGoal = tool(async ({ goalId, text, status, priority }) => {
+    if (!memoryService) return JSON.stringify({ error: "memory_service_unavailable" });
+    const payload = { goalId: goalId || undefined, text, status: status || "open", priority: priority || "medium" };
+    const result = memoryService.recordEvent({
+      eventType: "goal_update",
+      source: "agent",
+      confidence: 0.9,
+      payload,
+    });
+    return JSON.stringify({ saved: true, event_id: result.event_id, goalId: goalId, text, status: status || "open" });
+  }, { name: "track_goal", description: "Track or update a user goal. Create new goals (omit goalId), update existing ones, or mark as completed/abandoned. Goals persist across conversations and can be listed later.", schema: z.object({ goalId: z.string().optional().describe("Omit to create new goal, or provide existing goal ID to update"), text: z.string().min(1).max(200).describe("Goal description"), status: z.enum(["open", "completed", "abandoned"]).default("open"), priority: z.enum(["low", "medium", "high"]).default("medium") }) });
+
+  const listGoals = tool(async ({ status, limit }) => {
+    if (!memoryService) return JSON.stringify({ error: "memory_service_unavailable" });
+    const goals = memoryService.getTimeline({ eventType: "goal_update", limit: limit || 50 });
+    const filtered = status ? goals.filter(g => {
+      const payload = g.payload || {}; return payload.status === status;
+    }) : goals;
+    return JSON.stringify({ goals: filtered, count: filtered.length });
+  }, { name: "list_goals", description: "List the user's tracked goals. Filter by status (open/completed/abandoned). Use this when the user wants to review their goals or progress.", schema: z.object({ status: z.enum(["open", "completed", "abandoned"]).optional().describe("Filter goals by status"), limit: z.number().int().min(1).max(100).default(20) }) });
+
+  const searchSemantic = tool(async ({ query, limit }) => {
+    if (!memoryService) return JSON.stringify({ error: "memory_service_unavailable" });
+    const results = memoryService.searchSemantic(query, { limit: limit || 20 });
+    onToolEvent({ type: "tool_result", tool: "search_memories_semantic", count: results.length });
+    return JSON.stringify({ results, count: results.length });
+  }, { name: "search_memories_semantic", description: "Full-text semantic search across all memories and profile fields using FTS5. Returns ranked results by relevance. Use this for broad exploratory queries when you don't know what exact profile field or time range to query.", schema: z.object({ query: z.string().min(1).max(200), limit: z.number().int().min(1).max(50).default(20) }) });
+
   const setConversationTitle = tool(async ({ title }) => {
     const saved = await onSetTitle(title.trim()); onToolEvent({ type: "conversation_title", title: saved?.title || title.trim() }); return { updated: true, title: saved?.title || title.trim() };
   }, { name: "set_conversation_title", description: "Set a concise, meaningful Chinese title for the current conversation after understanding its topic. Use this for a new or substantially changed conversation topic.", schema: z.object({ title: z.string().min(4).max(18) }) });
@@ -109,7 +190,7 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
   const queryData = tool(async ({ domain, dateFrom, dateTo, limit }) => {
     try { await allowDomainRead(domain); const result = await toolRuntime.query(domain, { dateFrom, dateTo, limit }, appAdapters); onToolEvent({ type: "tool_result", tool: "query_kairos_data", domain, count: result.length }); return JSON.stringify({ domain, items: result }); }
     catch (error) { return { error: error?.message || String(error || "local_data_unavailable"), domain }; }
-  }, { name: "query_kairos_data", description: "Read authorized local schedules, tasks, habits, notes, or study plans when needed for a personalized answer or conflict check.", schema: z.object({ domain: z.enum(domains), dateFrom: z.string().optional(), dateTo: z.string().optional(), limit: z.number().int().min(1).max(100).default(20) }) });
+  }, { name: "query_kairos_data", description: "Read authorized local schedules, tasks, habits, or study plans when needed for a personalized answer or conflict check.", schema: z.object({ domain: z.enum(domains), dateFrom: z.string().optional(), dateTo: z.string().optional(), limit: z.number().int().min(1).max(100).default(20) }) });
   const propose = (domain, name, description, schema = operationSchema, operation = "create") => tool(async input => {
     const candidate = Object.fromEntries(Object.entries(input).filter(([key]) => !["confidence", "inferred_fields"].includes(key)));
     if (domain === "schedules" && operation === "create") { candidate.end_date ||= candidate.recurrence?.until || candidate.date; candidate.type ||= "other"; }
@@ -137,8 +218,13 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
   const styles = { companion: "Reply with warm companionship: acknowledge feelings first when appropriate, then offer grounded help.", concise: "Reply concisely and action-first. Prefer clear conclusions, short steps, and no unnecessary preamble.", learning: "Reply as a focused learning partner: explain the reasoning clearly, structure the material, and encourage deliberate practice." };
   const chat = chatModel || createProviderChatModel(provider, { apiKey, model, temperature: 0.35 });
   const tools = [setConversationTitle, webSearch, queryData, proposeSchedule, proposeTask, proposeUpdateSchedule, proposeDeleteSchedules];
-  if (memoryEnabled) tools.unshift(readMemories, remember, forget);
-  const memoryInstruction = memoryEnabled ? "Long-term memory is enabled. Use memory tools only for explicit, durable user facts." : "Long-term memory is disabled. Do not imply that you remember or save anything beyond this conversation.";
+  if (memoryEnabled) {
+    tools.unshift(readMemories, rememberMemory, forgetMemory);
+    if (memoryService) tools.unshift(getUserProfile, updateUserProfile, queryTimeline, trackGoal, listGoals, searchSemantic);
+  }
+  const memoryInstruction = memoryEnabled
+    ? "Long-term memory is enabled with layered architecture. Stable user attributes → update_user_profile (with validFrom for past dates); broad recall → search_memories or search_memories_semantic; browsing history → query_memory_timeline; goals → track_goal / list_goals. Use remember_memory only for ad-hoc durable facts that do not fit a profile field."
+    : "Long-term memory is disabled. Do not imply that you remember or save anything beyond this conversation.";
   const agent = createAgent({ model: chat, tools, systemPrompt: `${KAIROS_AGENT_PROMPT.replace("{now}", now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }))}\n${styles[replyStyle] || styles.companion}\n${memoryInstruction}\nCurrent conversation title: ${conversationTitle}\nFor any request to change, move, rename, reschedule, or retype an existing calendar item, first call query_kairos_data for schedules, identify the exact ID, then call propose_update_schedule. For requests to cancel, remove, or delete schedules, first query schedules, identify all exact matching IDs, then call propose_delete_schedules once with those IDs. When the user provides attachment text containing dates, times, meetings, tasks, or schedules, extract every concrete item with model reasoning and create separate pending schedule/task proposals; use attachment provenance in notes. Never create a replacement schedule unless the user explicitly asks for a new one. A weekly recurrence must be encoded as recurrence.frequency='weekly' and recurrence.weekdays (Sunday=0 through Saturday=6), never only as prose in notes or cadence.` });
   let result = null;
   let streamedText = "";

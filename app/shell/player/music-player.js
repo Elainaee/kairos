@@ -32,11 +32,11 @@
     document.body.appendChild(els.playlistPanel);
 
     let state = { tracks: [], queueTrackIds: [], currentTrackId: null, mode: 'sequence', playing: false, volume: 70, muted: false, positions: {} };
-    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null, externalRefreshVersion = 0, lastAppliedRefreshAt = 0;
+    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null, externalRefreshVersion = 0, lastAppliedRefreshAt = 0, playbackAttemptDepth = 0;
     const durationCache = new Map();
     const desktop = () => window.kairosDesktop?.music || null;
     const runtime = () => state.runtime ||= { lastSource:'local', neteasePlayback:null, playCounts:{} };
-    const persistRuntime = patch => { state.runtime = { ...runtime(), ...patch }; desktop()?.updateRuntime?.(state.runtime).catch(() => {}); };
+    const persistRuntime = patch => { state.runtime = { ...runtime(), ...patch }; desktop()?.updateRuntime?.(patch).catch(() => {}); };
     const neteaseDesktop = () => {
       if (window.kairosDesktop?.netease) return window.kairosDesktop.netease;
       try { return window.parent?.kairosDesktop?.netease || null; } catch { return null; }
@@ -138,6 +138,13 @@
     const remainingSeconds = () => queueTracks().reduce((sum,t) => !Number.isFinite(t.duration)||t.duration<=0 ? sum : sum + (t.id===state.currentTrackId ? Math.max(0,t.duration-(els.audio.currentTime||0)) : t.duration), 0);
     const remainingText = s => { if (!Number.isFinite(s)||s<=0) return ''; const m=Math.round(s/60); return m<60 ? `${m} min remaining` : `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m remaining`; };
     const artistFallback = track => isNeteaseId(track?.id) ? 'NetEase Cloud' : 'Local music';
+    // The legacy window is file:-backed and keeps its original URL.  The Vue
+    // development shell is http:-backed, so route local audio through the
+    // Electron-owned protocol rather than creating a second audio element.
+    const playableUrl = track => {
+      if (location.protocol === 'http:' && String(track?.playUrl || '').startsWith('file:') && track?.id) return `kairos-media://track/${encodeURIComponent(track.id)}`;
+      return track?.playUrl || '';
+    };
     const setCover = t => { if (t?.coverUrl) { els.cover.src=t.coverUrl; els.cover.classList.remove('hidden'); els.coverIcon.style.opacity='0'; } else { els.cover.removeAttribute('src'); els.cover.classList.add('hidden'); els.coverIcon.style.opacity='1'; } };
     const syncLikeButton = () => {
       const t = currentTrack();
@@ -158,7 +165,7 @@
     const intendedPlaying = () => state.playing === true && els.audio.paused;
     const syncPlayButton = () => { const active = !els.audio.paused || intendedPlaying(); els.toggleIcon.textContent = active ? 'pause' : 'play_arrow'; els.toggle.classList.toggle('is-paused', active); };
     const emitState = () => {
-      const detail={...state,queueTrackIds:state.queueTrackIds||[],currentTrackId:state.currentTrackId||null,playing:state.playing===true,currentTime:els.audio.currentTime||0};
+      const detail={...state,queueTrackIds:state.queueTrackIds||[],currentTrackId:state.currentTrackId||null,playing:state.playing===true,currentTime:els.audio.currentTime||0,at:Date.now()};
       rememberPlaybackSource();
       window.dispatchEvent(new CustomEvent('kairos:music-state-changed',{detail}));
       try { if(window.parent&&window.parent!==window) window.parent.postMessage({type:'kairos:music-state-changed',detail},'*'); } catch {}
@@ -321,13 +328,14 @@
       const t=currentTrack();
       if (!t) { els.audio.removeAttribute('src'); els.title.textContent='Choose a song'; els.artist.textContent='Local ambience'; els.current.textContent=els.duration.textContent='0:00'; els.progress.value=0; els.progressRange.style.width='0%'; setCover(null); syncLikeButton(); syncPlayButton(); renderQueue(); return; }
       state.currentTrackId=t.id;
-      if (t.playUrl) {
-        if (els.audio.src!==t.playUrl) { els.audio.src=t.playUrl; els.audio.load(); }
+      const sourceUrl = playableUrl(t);
+      if (sourceUrl) {
+        if (els.audio.src!==sourceUrl) { els.audio.src=sourceUrl; els.audio.load(); }
       } else if (isNeteaseId(t.id)) {
         els.audio.removeAttribute('src');
         els.audio.load();
       }
-      const knownDuration = Number.isFinite(t.duration) && t.duration > 0 ? t.duration : durationCache.get(t.id) || (t.playUrl && els.audio.src === t.playUrl && Number.isFinite(els.audio.duration) ? els.audio.duration : 0);
+      const knownDuration = Number.isFinite(t.duration) && t.duration > 0 ? t.duration : durationCache.get(t.id) || (sourceUrl && els.audio.src === sourceUrl && Number.isFinite(els.audio.duration) ? els.audio.duration : 0);
       if (knownDuration) durationCache.set(t.id, knownDuration);
       els.title.textContent=clean(t.title)||clean(t.fileName)||'Untitled'; els.artist.textContent=clean(t.artist)||artistFallback(t); els.duration.textContent=knownDuration?fmt(knownDuration):'0:00'; setCover(t); syncLikeButton(); pendingSeek=restore?state.positions?.[t.id]||0:null; syncPlayButton(); renderQueue();
     }
@@ -344,17 +352,49 @@
         els.audio.addEventListener('error',onError,{once:true});
       });
     }
-    async function playLoadedAudio(){
+    const reportPlaybackFailure = error => {
+      // Keep runtime diagnostics useful without exposing signed media query data.
+      try {
+        const source = new URL(els.audio.currentSrc || els.audio.src || location.href);
+        console.warn('Kairos audio playback failed', {
+          name: error?.name || '',
+          message: error?.message || '',
+          mediaError: els.audio.error?.code || 0,
+          networkState: els.audio.networkState,
+          readyState: els.audio.readyState,
+          protocol: source.protocol,
+          host: source.host
+        });
+      } catch {}
+    };
+    async function playLoadedAudio(retryNetease=true){
       const track = currentTrack();
       if (isNeteaseUrlStale(track)) {
         const refreshed = await refreshNeteaseTrackUrl(track);
         if (!refreshed) throw new Error('Unable to refresh NetEase URL');
       }
-      await waitForPlayable();
-      await els.audio.play();
-      countCurrentPlay();
+      playbackAttemptDepth += 1;
+      try {
+        await waitForPlayable();
+        await els.audio.play();
+        countCurrentPlay();
+      } catch (error) {
+        reportPlaybackFailure(error);
+        // A signed NetEase URL may become invalid between state hydration and
+        // the first media request. Refresh it once in this same attempt; the
+        // old onerror path used to race the outer catch and never replay.
+        if (!retryNetease || !isNeteaseId(track?.id)) throw error;
+        const refreshed = await refreshNeteaseTrackUrl(track);
+        if (!refreshed) throw new Error('Unable to refresh NetEase URL');
+        return playLoadedAudio(false);
+      } finally {
+        playbackAttemptDepth = Math.max(0, playbackAttemptDepth - 1);
+      }
     }
-    const playbackErrorText = error => error?.message === 'Unable to refresh NetEase URL' ? 'Unable to refresh NetEase URL' : 'Unable to play this audio file';
+    const playbackErrorText = error => {
+      reportPlaybackFailure(error);
+      return error?.message === 'Unable to refresh NetEase URL' ? 'Unable to refresh NetEase URL' : 'Unable to play this audio file';
+    };
     async function continueQueuePlayback(shouldPlay){
       if(!shouldPlay){ if(!state.currentTrackId&&!els.audio.paused) els.audio.pause(); return; }
       try{
@@ -513,7 +553,7 @@
     els.audio.onloadedmetadata=()=>{ const t=currentTrack(); els.duration.textContent=fmt(els.audio.duration); if(t&&Number.isFinite(els.audio.duration)){ t.duration=els.audio.duration; durationCache.set(t.id, els.audio.duration); } if(pendingSeek) els.audio.currentTime=Math.min(pendingSeek,Math.max(0,els.audio.duration-2)); pendingSeek=null; };
     els.audio.ontimeupdate=()=>{ if(progressDragging) return; if(!els.audio.paused&&state.currentTrackId) countCurrentPlay(); const p=els.audio.duration?els.audio.currentTime/els.audio.duration*100:0; els.progress.value=p; els.progressRange.style.width=`${p}%`; els.current.textContent=fmt(els.audio.currentTime); const t=currentTrack(); if(t&&Math.floor(els.audio.currentTime)%5===0){ state.positions={...(state.positions||{}),[t.id]:els.audio.currentTime}; persist({position:{trackId:t.id,seconds:els.audio.currentTime}}); } if(!els.playlistPanel.hidden&&!queueDragging) updateQueueStatus(); };
     els.audio.onended=()=>{ playAdjacentTrack(1); };
-    els.audio.onerror=async()=>{ const t=currentTrack(); if(!isNeteaseId(t?.id)) return; const fail=message=>{ state.playing=false; els.status.textContent=message; toast('error',message); syncPlayButton(); updateQueuePlaybackState(); emitState(); }; const refreshed=await refreshNeteaseTrackUrl(t); if(!refreshed){ fail('Unable to refresh NetEase URL'); return; } if(state.playing===true) playLoadedAudio().catch(error=>fail(playbackErrorText(error))); };
+    els.audio.onerror=async()=>{ const t=currentTrack(); reportPlaybackFailure(); if(!isNeteaseId(t?.id) || playbackAttemptDepth>0 || state.playing!==true) return; const fail=message=>{ state.playing=false; els.status.textContent=message; toast('error',message); syncPlayButton(); updateQueuePlaybackState(); emitState(); }; const refreshed=await refreshNeteaseTrackUrl(t); if(!refreshed){ fail('Unable to refresh NetEase URL'); return; } playLoadedAudio(false).catch(error=>fail(playbackErrorText(error))); };
     els.playlist.addEventListener('dragstart',e=>{ const item=e.target.closest('li[data-id]'); if(!item||e.target.closest('button')){ e.preventDefault(); return; } draggedQueueId=item.dataset.id; queueDragging=true; item.classList.add('is-dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',draggedQueueId); queueDragCard?.remove(); queueDragCard=makeQueueDragCard(queueTracks().find(track=>track.id===draggedQueueId)); e.dataTransfer.setDragImage(queueDragCard,24,23); });
     els.playlist.addEventListener('dragover',e=>{ const item=e.target.closest('li[data-id]'); if(!item||!draggedQueueId||item.dataset.id===draggedQueueId) return; e.preventDefault(); const dragged=els.playlist.querySelector(`li[data-id="${CSS.escape(draggedQueueId)}"]`); if(!dragged) return; clearQueueDropHints(); const rect=item.getBoundingClientRect(); const after=e.clientY>rect.top+rect.height/2; item.classList.add(after?'drop-after':'drop-before'); els.playlist.insertBefore(dragged,after?item.nextSibling:item); });
     els.playlist.addEventListener('dragleave',e=>e.target.closest('li[data-id]')?.classList.remove('drop-before','drop-after'));
@@ -522,7 +562,7 @@
     document.addEventListener('keydown', e=>{ if(e.key==='Escape') els.playlistPanel.hidden=true; });
     window.addEventListener('resize', positionQueue);
     window.addEventListener('kairos:player-route-layout', applyRouteLayout);
-    if ('MutationObserver' in window) new MutationObserver(applyRouteLayout).observe(document.body, { attributes:true, attributeFilter:['class'] });
+    if ('MutationObserver' in window && document.body instanceof Node) new MutationObserver(applyRouteLayout).observe(document.body, { attributes:true, attributeFilter:['class'] });
     async function applyMusicRefresh(detail = {}) {
       const incomingAt = Number(detail?.at || 0);
       if (incomingAt > 0 && incomingAt < lastAppliedRefreshAt) return;

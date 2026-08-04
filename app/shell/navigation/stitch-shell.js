@@ -1,4 +1,19 @@
 (() => {
+  const ensureI18n = () => {
+    if (window.KairosI18n) return Promise.resolve();
+    const existing = document.querySelector('script[data-kairos-i18n]');
+    if (existing) return new Promise(resolve => existing.addEventListener('load', resolve, { once: true }));
+    return new Promise(resolve => {
+      const script = document.createElement('script');
+      script.dataset.kairosI18n = 'true';
+      script.src = '../../i18n/i18n-core.js';
+      script.addEventListener('load', resolve, { once: true });
+      script.addEventListener('error', resolve, { once: true });
+      document.head.append(script);
+    });
+  };
+  window.KairosEnsureI18n = ensureI18n;
+  const t = (key, fallback) => window.KairosI18n?.t?.(key) || fallback;
   const MOTION_CLASS = 'kairos-reduce-motion';
   const applyMotionPreference = reduce => document.documentElement.classList.toggle(MOTION_CLASS, reduce === true);
   const numberInRange = (value, fallback, min, max) => {
@@ -18,12 +33,56 @@
   };
   if (!document.getElementById('kairos-motion-preference-style')) document.head.insertAdjacentHTML('beforeend', '<style id="kairos-motion-preference-style">html.kairos-reduce-motion *,html.kairos-reduce-motion *::before,html.kairos-reduce-motion *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}</style>');
   applyCalendarBackground({});
-  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; applyMotionPreference(settings?.accessibility?.reduceMotion === true); applyCalendarBackground(settings); });
+  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat); applyMotionPreference(settings?.accessibility?.reduceMotion === true); applyCalendarBackground(settings); });
+  const page = document.body.dataset.page || 'calendar';
+  const ensureCalendarControllers = () => {
+    if (!['calendar', 'schedule'].includes(page)) return Promise.resolve();
+    if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=33">');
+    if (!document.querySelector('link[href^="../../features/calendar/date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/date-range-picker.css?v=3">');
+    if (window.KairosScheduleControllerReady) return window.KairosScheduleControllerReady;
+    window.KairosScheduleControllerReady = new Promise(resolve => {
+      const loadScheduleFeature = () => {
+        if (window.openScheduleFeature || window.renderSchedules) { resolve(); return; }
+        const existing = document.querySelector('script[src^="../../features/calendar/schedule-feature.js"]');
+        if (existing) { existing.addEventListener('load', resolve, { once:true }); existing.addEventListener('error', resolve, { once:true }); return; }
+        const script = document.createElement('script');
+        script.src = '../../features/calendar/schedule-feature.js?v=54';
+        script.addEventListener('load', resolve, { once:true });
+        script.addEventListener('error', resolve, { once:true });
+        document.body.appendChild(script);
+      };
+      if (window.KairosCalendarCore) { loadScheduleFeature(); return; }
+      const existing = document.querySelector('script[src^="../../features/calendar/calendar-core.cjs"]');
+      if (existing) { existing.addEventListener('load', loadScheduleFeature, { once:true }); existing.addEventListener('error', loadScheduleFeature, { once:true }); return; }
+      const script = document.createElement('script');
+      script.src = '../../features/calendar/calendar-core.cjs?v=1';
+      script.addEventListener('load', loadScheduleFeature, { once:true });
+      script.addEventListener('error', loadScheduleFeature, { once:true });
+      document.body.appendChild(script);
+    });
+    return window.KairosScheduleControllerReady;
+  };
   const embedded = new URLSearchParams(location.search).get('embed') === '1';
+  if (embedded && !window.KairosPendingState) {
+    try {
+      const raw = new URLSearchParams(location.search).get('scheduleState') || window.top.localStorage.getItem('kairos-mvp-state');
+      if (raw) window.KairosPendingState = JSON.parse(raw);
+    } catch {}
+  }
   if (embedded) {
+    window.KairosEmbeddedControllersReady = ensureCalendarControllers();
+    window.KairosEmbeddedControllersReady.finally(() => {
+      try { window.top.postMessage({ type:'kairos:embedded-ready', page }, '*'); } catch {}
+    });
     window.addEventListener('message', event => {
       const message = event.data;
       if (message?.type === 'kairos:motion-preference' && event.source === window.top) applyMotionPreference(message.reduce === true);
+      if (message?.type === 'kairos:state-sync' && event.source === window.top) {
+        const settings = message.state?.settings || {};
+        window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat);
+        applyMotionPreference(settings?.accessibility?.reduceMotion === true);
+        applyCalendarBackground(settings);
+      }
     });
     document.documentElement.classList.add('kairos-embedded-root');
     document.body.classList.add('kairos-embedded');
@@ -31,18 +90,23 @@
     [...document.body.children].forEach(node => {
       if (node !== embeddedMain && node.matches('header, nav, aside')) node.remove();
     });
+    if (document.body.dataset.page === 'calendar') {
+      document.body.classList.add('kairos-calendar-background-active');
+      embeddedMain?.querySelector(':scope > header')?.remove();
+      embeddedMain?.querySelector(':scope > div.flex.flex-1 > section')?.classList.add('kairos-calendar-glass');
+    }
     embeddedMain?.classList.add('kairos-page-main');
     return;
   }
-  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=31">');
+  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=33">');
   if (!document.querySelector('link[href^="../../features/calendar/date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/date-range-picker.css?v=3">');
   if (!document.querySelector('link[href^="../../features/reminders/reminder-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/reminders/reminder-feature.css?v=1">');
   if (!document.querySelector('link[href^="../../features/settings/settings-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/settings/settings-feature.css?v=1">');
-  const page = document.body.dataset.page || 'calendar';
+  ensureCalendarControllers();
   const spaShell = page === 'calendar';
   const labels = spaShell
-    ? [['calendar','#calendar','calendar_today','Calendar'],['habits','#habits','repeat','Habits'],['schedule','#schedule','checklist','Schedule'],['notes','#notes','edit_note','Notes'],['music','#music','queue_music','Music']]
-    : [['calendar','../calendar/index.html','calendar_today','Calendar'],['habits','../habits/index.html','repeat','Habits'],['schedule','../schedule/index.html','checklist','Schedule'],['notes','../notes/index.html','edit_note','Notes'],['music','../music/index.html','queue_music','Music']];
+    ? [['calendar','#calendar','calendar_today',t('nav.calendar','Calendar'),'nav.calendar'],['habits','#habits','repeat',t('nav.habits','Habits'),'nav.habits'],['schedule','#schedule','checklist',t('nav.schedule','Schedule'),'nav.schedule'],['music','#music','queue_music',t('nav.music','Music'),'nav.music']]
+    : [['calendar','../calendar/index.html','calendar_today',t('nav.calendar','Calendar'),'nav.calendar'],['habits','../habits/index.html','repeat',t('nav.habits','Habits'),'nav.habits'],['schedule','../schedule/index.html','checklist',t('nav.schedule','Schedule'),'nav.schedule'],['music','../music/index.html','queue_music',t('nav.music','Music'),'nav.music']];
   document.body.classList.add('kairos-shell-body');
   [...document.body.children].forEach(node => {
     const classes = node.classList;
@@ -54,7 +118,7 @@
   const oldHeader = document.querySelector('body > header.kairos-topbar') || main.querySelector(':scope > header') || document.querySelector('body > header.fixed') || [...document.querySelectorAll('body > nav.fixed')].find(node => node.classList.contains('right-0'));
   const header = document.createElement('header');
   header.className = 'kairos-topbar';
-  header.innerHTML = `<a class="kairos-brand kairos-brand-shiny" href="../calendar/index.html"><span class="kairos-brand-mark kairos-brand-mark-shiny material-symbols-outlined">auto_awesome</span><span class="kairos-brand-name-shiny">Kairos</span></a><nav class="kairos-nav kairos-gooey-nav" aria-label="Primary navigation"><span class="kairos-gooey-effect" aria-hidden="true"></span>${labels.map(([id,href,icon,label])=>`<a class="${page===id?'active':''}" href="${href}"><span class="material-symbols-outlined">${icon}</span><span>${label}</span></a>`).join('')}</nav><div class="kairos-actions"><button class="kairos-create"><span class="material-symbols-outlined">add</span>Create New</button><button class="kairos-icon-button kairos-reminder-button" aria-label="Reminders" aria-expanded="false" title="Reminders"><span class="material-symbols-outlined">notifications</span><i class="kairos-reminder-badge" hidden></i></button><button class="kairos-icon-button kairos-settings-button" aria-label="Settings" title="Settings" type="button"><span class="material-symbols-outlined">settings</span></button></div>`;
+  header.innerHTML = `<a class="kairos-brand kairos-brand-shiny" href="../calendar/index.html"><span class="kairos-brand-mark kairos-brand-mark-shiny material-symbols-outlined">auto_awesome</span><span class="kairos-brand-name-shiny">Kairos</span></a><nav class="kairos-nav kairos-gooey-nav" aria-label="Primary navigation"><span class="kairos-gooey-effect" aria-hidden="true"></span>${labels.map(([id,href,icon,label,key])=>`<a class="${page===id?'active':''}" href="${href}"><span class="material-symbols-outlined">${icon}</span><span data-i18n="${key}">${label}</span></a>`).join('')}</nav><div class="kairos-actions"><button class="kairos-create"><span class="material-symbols-outlined">add</span><span data-i18n="common.createNew">${t('common.createNew','Create New')}</span></button><button class="kairos-icon-button kairos-reminder-button" data-i18n-aria-label="common.reminders" data-i18n-title="common.reminders" aria-label="${t('common.reminders','Reminders')}" aria-expanded="false" title="${t('common.reminders','Reminders')}"><span class="material-symbols-outlined">notifications</span><i class="kairos-reminder-badge" hidden></i></button><button class="kairos-icon-button kairos-settings-button" data-i18n-aria-label="common.settings" data-i18n-title="common.settings" aria-label="${t('common.settings','Settings')}" title="${t('common.settings','Settings')}" type="button"><span class="material-symbols-outlined">settings</span></button></div>`;
   oldHeader?.remove();
   main.before(header);
 
@@ -101,7 +165,6 @@
   const spaPages = {
     habits: ['../habits/index.html?embed=1&v=41', 'Habits'],
     schedule: ['../schedule/index.html?embed=1&v=47', 'Schedule'],
-    notes: ['../notes/index.html?embed=1&v=1', 'Notes'],
     music: ['../music/index.html?embed=1&v=82', 'Music']
   };
   const syncScheduleState = frame => {
@@ -234,7 +297,7 @@
         else setTimeout(openSettings, 80);
         return;
       }
-      if (['calendar', 'schedule', 'habits', 'notes', 'music'].includes(type)) {
+      if (['calendar', 'schedule', 'habits', 'music'].includes(type)) {
         showSpaView(type, { history:true });
         if (type === 'schedule' && typeof command.scheduleId === 'string' && command.scheduleId) {
           const openSchedule = () => spaFrames.get('schedule')?.contentWindow?.postMessage({ type:'kairos:open-schedule', id:command.scheduleId }, '*');
@@ -248,6 +311,7 @@
     window.addEventListener('kairos:music-player-ready', () => showSpaView(getSpaView()));
     window.addEventListener('kairos:music-content-ready', () => showSpaView(getSpaView()));
     window.addEventListener('kairos:settings-changed', event => {
+      window.KairosI18n?.setTimeFormat?.(event.detail?.general?.timeFormat);
       applyMotionPreference(event.detail?.accessibility?.reduceMotion === true);
       applyCalendarBackground(event.detail);
       spaFrames.forEach(syncMotionPreference);
@@ -343,31 +407,7 @@
     playerResizeObserver.observe(calendar);
     if (rightRail) playerResizeObserver.observe(rightRail);
   }
-  if ('MutationObserver' in window && content) {
-    let alignmentFrame = 0;
-    const playerMutationObserver = new MutationObserver(() => {
-      cancelAnimationFrame(alignmentFrame);
-      alignmentFrame = requestAnimationFrame(alignPlayer);
-    });
-    playerMutationObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});
-  }
 })();
-
-{
-  if (!document.querySelector('link[href^="../../features/calendar/schedule-feature.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/schedule-feature.css?v=31">');
-  if (!document.querySelector('link[href^="../../features/calendar/date-range-picker.css"]')) document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="../../features/calendar/date-range-picker.css?v=3">');
-  const loadScheduleFeature=()=>{
-    if (document.querySelector('script[src^="../../features/calendar/schedule-feature.js"]')) return;
-    const scheduleFeatureScript=document.createElement('script');
-    scheduleFeatureScript.src='../../features/calendar/schedule-feature.js?v=45';
-    document.body.appendChild(scheduleFeatureScript);
-  };
-  const calendarCoreScript=document.createElement('script');
-  calendarCoreScript.src='../../features/calendar/calendar-core.cjs?v=1';
-  calendarCoreScript.onload=loadScheduleFeature;
-  calendarCoreScript.onerror=loadScheduleFeature;
-  document.body.appendChild(calendarCoreScript);
-}
 if (new URLSearchParams(location.search).get('embed') !== '1') {
   const loadReminderFeature=()=>{
     if (document.querySelector('script[src^="../../features/reminders/reminder-feature.js"]')) return;
@@ -380,8 +420,12 @@ if (new URLSearchParams(location.search).get('embed') !== '1') {
   reminderCoreScript.onload=loadReminderFeature;
   reminderCoreScript.onerror=loadReminderFeature;
   document.body.appendChild(reminderCoreScript);
-  const settingsFeatureScript=document.createElement('script');
-  settingsFeatureScript.src='../../features/settings/settings-feature.js?v=1';
-  document.body.appendChild(settingsFeatureScript);
+  const loadSettingsFeature = () => {
+    if (document.querySelector('script[src^="../../features/settings/settings-feature.js"]')) return;
+    const settingsFeatureScript=document.createElement('script');
+    settingsFeatureScript.src='../../features/settings/settings-feature.js?v=1';
+    document.body.appendChild(settingsFeatureScript);
+  };
+  window.KairosEnsureI18n?.().then(loadSettingsFeature, loadSettingsFeature);
 }
 document.documentElement.classList.remove('kairos-boot');

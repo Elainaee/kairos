@@ -19,8 +19,25 @@ import { NeteaseApiService } from "../services/music/netease-api-service.js";
 import { SettingsRepository } from "../data/settings/index.js";
 import { initializeAssistantProfile, normalizeAssistantProfile, updateAssistantProfile } from "../data/assistant-profile.js";
 import { CalendarBackgroundService } from "../services/calendar/calendar-backgrounds.js";
+import { MemoryLedger } from "../services/ai/memory/memory-ledger.js";
+import { MemoryViews } from "../services/ai/memory/memory-views.js";
+import { AgentMemoryService } from "../services/ai/memory/memory-service.js";
+
+// Vue's development renderer is served from http://127.0.0.1, which cannot
+// load a user's file: music URL directly.  The original file-based renderer
+// keeps using file: URLs; this private protocol is only selected by the
+// shared player when its parent window is the Vue dev server.
+protocol.registerSchemesAsPrivileged([{
+  scheme: "kairos-media",
+  // The Vue renderer is http:-backed.  Keep the local-audio endpoint
+  // explicitly CORS-capable so Chromium is allowed to consume it from the
+  // parent player without falling back to a blocked file: request.
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true }
+}]);
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const rendererMode = process.env.KAIROS_RENDERER === "vue" ? "vue" : "legacy";
+const vueDevServerUrl = process.env.KAIROS_VITE_DEV_SERVER_URL || "";
 dotenv.config({ path: path.join(root, ".env.local"), quiet: true });
 dotenv.config({ path: path.join(root, ".env.firecrawl.local"), quiet: true });
 const controllers = new Map();
@@ -33,7 +50,7 @@ let petMoveTimer = null;
 let petPendingDx = 0;
 let petPendingDy = 0;
 let petVisible = true;
-let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, aiSettingsRepository, calendarBackgrounds;
+let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, aiSettingsRepository, calendarBackgrounds, agentMemoryService;
 const pendingCalendarBackgroundImports = new Map();
 // Electron transparent windows must not be resized after construction. Reserve
 // the largest surface needed by the pet and its context menu up front; unused
@@ -137,6 +154,60 @@ async function registerCalendarBackgroundProtocol() {
     return new Response(payload, { headers: { "content-type": image.mimeType, "cache-control": "no-store" } });
   });
 }
+async function registerMusicMediaProtocol() {
+  protocol.handle("kairos-media", async request => {
+    try {
+      const url = new URL(request.url);
+      if (url.hostname !== "track") return new Response("Not found", { status: 404 });
+      const id = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      const state = await musicLibrary?.read();
+      const track = state?.tracks?.find(item => item?.id === id);
+      if (!track?.path) return new Response("Not found", { status: 404 });
+      const filePath = path.resolve(track.path);
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile()) return new Response("Not found", { status: 404 });
+      const mimeType = {
+        ".mp3": "audio/mpeg", ".flac": "audio/flac", ".wav": "audio/wav",
+        ".m4a": "audio/mp4", ".mp4": "audio/mp4", ".aac": "audio/aac"
+      }[path.extname(filePath).toLowerCase()];
+      if (!mimeType) return new Response("Unsupported media", { status: 415 });
+      // Chromium requests byte ranges for media.  Serve them directly from
+      // the Electron-owned protocol so the original single <audio> element
+      // can decode local files from the HTTP-backed Vue renderer.
+      const rangeHeader = request.headers.get("range");
+      const source = await fs.readFile(filePath);
+      const baseHeaders = {
+        "content-type": mimeType,
+        "accept-ranges": "bytes",
+        "access-control-allow-origin": "*"
+      };
+      if (!rangeHeader) {
+        return new Response(source, {
+          headers: { ...baseHeaders, "content-length": String(source.length) }
+        });
+      }
+      const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+      if (!match) return new Response("Range Not Satisfiable", { status: 416, headers: { "content-range": `bytes */${source.length}` } });
+      const requestedStart = match[1] ? Number(match[1]) : Math.max(0, source.length - Number(match[2] || 0));
+      const requestedEnd = match[2] && match[1] ? Number(match[2]) : source.length - 1;
+      if (!Number.isSafeInteger(requestedStart) || !Number.isSafeInteger(requestedEnd) || requestedStart < 0 || requestedStart >= source.length || requestedEnd < requestedStart) {
+        return new Response("Range Not Satisfiable", { status: 416, headers: { "content-range": `bytes */${source.length}` } });
+      }
+      const end = Math.min(requestedEnd, source.length - 1);
+      const payload = source.subarray(requestedStart, end + 1);
+      return new Response(payload, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          "content-length": String(payload.length),
+          "content-range": `bytes ${requestedStart}-${end}/${source.length}`
+        }
+      });
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+  });
+}
 function restoreWindowBounds(saved) {
   const fallback = { width: 1440, height: 900 };
   const savedX = Number(saved?.x);
@@ -182,7 +253,7 @@ function attachWindowStatePersistence(win) {
 }
 function sendPetVisibility() { mainWindow?.webContents.send("pet:visibility", petVisible); }
 const PET_ACTIONS = new Set(["idle", "talk", "happy", "sleepy", "reminder"]);
-const SHELL_VIEWS = new Set(["calendar", "schedule", "habits", "notes", "music", "settings"]);
+const SHELL_VIEWS = new Set(["calendar", "schedule", "habits", "music", "settings"]);
 function sendShellCommand(type, payload = {}) {
   if (!SHELL_VIEWS.has(type) || !mainWindow || mainWindow.isDestroyed()) return false;
   mainWindow.show();
@@ -222,8 +293,7 @@ function buildApplicationMenu() {
         { label: "日历", accelerator: "Alt+1", click: navigate("calendar") },
         { label: "日程", accelerator: "Alt+2", click: navigate("schedule") },
         { label: "习惯", accelerator: "Alt+3", click: navigate("habits") },
-        { label: "笔记", accelerator: "Alt+4", click: navigate("notes") },
-        { label: "音乐", accelerator: "Alt+5", click: navigate("music") },
+        { label: "音乐", accelerator: "Alt+4", click: navigate("music") },
         { type: "separator" },
         { label: "设置", accelerator: "CommandOrControl+,", click: navigate("settings") }
       ]
@@ -482,6 +552,78 @@ async function verifySmokeRenderer(win) {
     })
   `);
 }
+async function verifyVuePreviewRenderer(win) {
+  return win.webContents.executeJavaScript(`
+    new Promise(async (resolve, reject) => {
+      if (!document.querySelector('.vue-shell')) {
+        reject(new Error('missing Vue preview shell'));
+        return;
+      }
+      const waitFor = (condition, label, timeout = 7000) => new Promise((resolveWait, rejectWait) => {
+        const started = Date.now();
+        const tick = () => {
+          try {
+            if (condition()) return resolveWait();
+          } catch {}
+          if (Date.now() - started >= timeout) return rejectWait(new Error('Vue smoke timed out: ' + label));
+          setTimeout(tick, 60);
+        };
+        tick();
+      });
+      const changeRoute = async (page, ready) => {
+        window.location.hash = '#/' + page;
+        await waitFor(() => document.querySelector('main.vue-shell-content')?.dataset.view === page && ready(), page + ' route');
+      };
+      try {
+        await waitFor(() => Boolean(document.querySelector('.kairos-topbar')) && Boolean(document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.querySelector('main')) && Boolean(window.kairosDesktop?.appState?.get), 'initial Calendar shell');
+        const initialFrame = document.querySelector('iframe.vue-legacy-frame');
+        if (initialFrame?.contentDocument?.body?.dataset?.page !== 'calendar') throw new Error('Vue smoke did not begin on Calendar');
+
+        document.querySelector('.kairos-create')?.click();
+        await waitFor(() => Boolean(document.querySelector('iframe.vue-legacy-schedule-dialog-host')?.contentDocument?.querySelector('#scheduleFeatureDialog[open]')), 'Calendar Create New dialog');
+        const dialog = document.querySelector('iframe.vue-legacy-schedule-dialog-host')?.contentDocument?.querySelector('#scheduleFeatureDialog');
+        dialog?.close();
+        await waitFor(() => !document.querySelector('iframe.vue-legacy-schedule-dialog-host'), 'Calendar Create New dialog close');
+
+        await changeRoute('music', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'music');
+        const playerCount = document.querySelectorAll('#musicPlayer').length;
+        const player = document.querySelector('#musicPlayer');
+        if (playerCount !== 1 || player?.hidden || getComputedStyle(player).display === 'none') throw new Error('Music route did not retain exactly one visible shared player');
+
+        await changeRoute('schedule', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'schedule');
+        if (!document.querySelector('#musicPlayer')?.hidden) throw new Error('Schedule route left the Calendar/Music player visible');
+
+        await changeRoute('habits', () => Boolean(document.querySelector('.vue-habits-page')));
+        if (!document.querySelector('#musicPlayer')?.hidden) throw new Error('Habits route left the Calendar/Music player visible');
+
+        document.querySelector('.kairos-settings-button')?.click();
+        await waitFor(() => Boolean(document.querySelector('dialog.kairos-settings-dialog[open]')), 'settings dialog');
+        const settings = document.querySelector('dialog.kairos-settings-dialog');
+        if (settings?.querySelectorAll('.kairos-settings-panel').length !== 1 || settings?.querySelectorAll('[data-settings-tab]').length !== 7) throw new Error('Vue settings host did not retain the original settings dialog DOM');
+        settings?.querySelector('[data-settings-tab="appearance"]')?.click();
+        await waitFor(() => settings?.querySelector('[data-settings-tab="appearance"]')?.classList.contains('active') && settings?.querySelector('[data-settings-panel="appearance"]')?.hidden === false, 'original settings tab switch');
+        const reduceMotion = settings?.querySelector('[data-setting-path="accessibility.reduceMotion"]');
+        if (!(reduceMotion instanceof HTMLInputElement)) throw new Error('original settings reduce-motion control is missing');
+        reduceMotion.click();
+        await waitFor(() => document.documentElement.classList.contains('kairos-reduce-motion'), 'original settings reduce-motion write');
+        reduceMotion.click();
+        await waitFor(() => !document.documentElement.classList.contains('kairos-reduce-motion'), 'original settings reduce-motion restore');
+        settings?.querySelector('[data-settings-tab="music"]')?.click();
+        await waitFor(() => settings?.textContent?.includes('Netease Music') && Boolean(window.kairosDesktop?.netease?.getStatus), 'NetEase settings bridge');
+        const neteaseIcon = settings?.querySelector('.kairos-netease-brand img');
+        await waitFor(() => neteaseIcon instanceof HTMLImageElement && neteaseIcon.complete && neteaseIcon.naturalWidth > 0, 'NetEase settings icon');
+        settings?.querySelector('[data-settings-back]')?.click();
+        await waitFor(() => !document.querySelector('dialog.kairos-settings-dialog')?.open, 'original settings close');
+
+        await changeRoute('calendar', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'calendar');
+        const state = await window.kairosDesktop.appState.get();
+        resolve({ ok: true, title: document.title, bridge: 'Electron interface ready', checks: { calendar: true, createNew: true, musicSourceDocument: true, sharedPlayer: true, schedule: true, habits: true, settingsOriginalDom: true, settingsTabs: true, neteaseSettings: true, neteaseSettingsIcon: true, settingsClose: true }, schedules: (state.schedules || []).length, habits: (state.habits || []).length });
+      } catch (error) {
+        reject(error);
+      }
+    })
+  `);
+}
 async function writeSmokeResult(result) {
   if (!smokeResultPath) return;
   await fs.mkdir(path.dirname(smokeResultPath), { recursive: true });
@@ -721,17 +863,22 @@ async function createWindow() {
   mainWindow = new BrowserWindow({ ...savedBounds, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload", "index.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   protectAppNavigation(mainWindow);
   attachWindowStatePersistence(mainWindow);
-  mainWindow.webContents.once("did-fail-load", (_event, errorCode, errorDescription) => {
-    if (!smokeTest) return;
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+    // Vue route changes intentionally destroy legacy child iframes. Chromium
+    // reports their cancelled navigation as -3; only a main-frame failure can
+    // invalidate the Electron smoke result.
+    if (!smokeTest || !isMainFrame) return;
     console.error(`Kairos smoke test failed to load main window: ${errorCode} ${errorDescription}`);
     app.exit(1);
   });
   mainWindow.webContents.on("did-finish-load", async () => {
     if (smokeTest) {
       try {
-        const result = await verifySmokeRenderer(mainWindow);
+        const result = rendererMode === "vue"
+          ? await verifyVuePreviewRenderer(mainWindow)
+          : await verifySmokeRenderer(mainWindow);
         await writeSmokeResult(result);
-        console.log(`Kairos smoke test loaded main window. ${JSON.stringify(result.checks)}`);
+        console.log(`Kairos smoke test loaded ${rendererMode} renderer. ${JSON.stringify(result.checks || result.bridge)}`);
         app.exit(0);
       } catch (error) {
         console.error(`Kairos smoke test failed renderer checks: ${error?.message || error}`);
@@ -743,7 +890,12 @@ async function createWindow() {
     sendPetVisibility();
   });
   mainWindow.on("closed", () => { aiChatWindow?.close(); petWindow?.close(); aiChatWindow = null; petWindow = null; mainWindow = null; });
-  mainWindow.loadFile(path.join(root, "app", "pages", "calendar", "index.html"));
+  if (rendererMode === "vue") {
+    if (vueDevServerUrl) await mainWindow.loadURL(vueDevServerUrl);
+    else await mainWindow.loadFile(path.join(root, "app", "vue-preview", "index.html"));
+  } else {
+    await mainWindow.loadFile(path.join(root, "app", "pages", "calendar", "index.html"));
+  }
 }
 
 async function createPetWindow() {
@@ -876,7 +1028,7 @@ ipcMain.handle("ai:send", async (_event, payload) => {
   const requestId = crypto.randomUUID(); const settings = await readSettings(); const provider = payload.provider || settings.defaultProvider;
   if (!PROVIDERS[provider]) throw new ProviderError("unknown_provider", "未知模型提供商");
   const controller = new AbortController(); controllers.set(requestId, controller); const entry = settings.providers[provider] || {}; const selection = resolveSelectableModels(PROVIDERS[provider], entry); const requestedModel = String(payload.model || "").trim(); const model = selection.enabledModels.includes(requestedModel) ? requestedModel : selection.defaultModel; if (!model) { controllers.delete(requestId); throw new ProviderError("no_enabled_model", "请先在设置中勾选一个聊天模型"); } const conversationId=payload.conversationId; if(conversationId)await aiStore.updateConversation(conversationId,{provider,model}); const lastUser=[...(payload.messages||[])].reverse().find(x=>x.role==="user"); if(conversationId&&lastUser&&!payload.isRetry)await aiStore.addMessage({conversationId,role:"user",content:lastUser.content,provider,model,attachmentIds:payload.attachmentIds,attachmentNames:payload.attachmentNames});
-  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { if(!["openai","doubao"].includes(provider))throw new ProviderError("agent_model_unsupported","当前提供商尚未接入 LangChain 工具调用适配器。"); const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const result=await runKairosAgent({provider,apiKey:resolveProviderKey(settings,entry,provider),model,messages:requestMessages,conversationTitle:conversation?.title||"新对话",replyStyle:aiPreferences.replyStyle,memoryEnabled:aiPreferences.memoryEnabled!==false,signal:controller.signal,store:aiStore,toolRuntime,appAdapters,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:["允许联网搜索","取消"],defaultId:0,cancelId:1,title:"允许 Kairos 联网搜索？",message:"Kairos 想查询外部网页以回答当前问题。只会发送模型选择的搜索词。"});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;usage=result.usage;broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { if(controller.signal.aborted){status="stopped";broadcastAiStream({requestId,type:"stopped"});}else{status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue });} } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
+  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { if(!["openai","doubao"].includes(provider))throw new ProviderError("agent_model_unsupported","当前提供商尚未接入 LangChain 工具调用适配器。"); const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const result=await runKairosAgent({provider,apiKey:resolveProviderKey(settings,entry,provider),model,messages:requestMessages,conversationTitle:conversation?.title||"新对话",replyStyle:aiPreferences.replyStyle,memoryEnabled:aiPreferences.memoryEnabled!==false,signal:controller.signal,store:aiStore,memoryService:agentMemoryService,toolRuntime,appAdapters,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:["允许联网搜索","取消"],defaultId:0,cancelId:1,title:"允许 Kairos 联网搜索？",message:"Kairos 想查询外部网页以回答当前问题。只会发送模型选择的搜索词。"});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;usage=result.usage;broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { if(controller.signal.aborted){status="stopped";broadcastAiStream({requestId,type:"stopped"});}else{status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue });} } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
 });
 ipcMain.handle("ai:stop", (_event, requestId) => { controllers.get(requestId)?.abort(); return { ok: true }; });
 ipcMain.handle("ai:conversations:list",()=>aiStore.listConversations());
@@ -888,6 +1040,13 @@ ipcMain.handle("ai:usage",(_event,filters)=>aiStore.usageSummary(filters));
 ipcMain.handle("ai:memories:list",()=>aiStore.listMemories());
 ipcMain.handle("ai:memories:forget",(_event,id)=>aiStore.forgetMemory(id));
 ipcMain.handle("ai:memories:clear",()=>aiStore.clearMemories());
+ipcMain.handle("ai:memory:profile:get",()=>agentMemoryService.getProfile());
+ipcMain.handle("ai:memory:profile:update",(_event,input)=>agentMemoryService.updateProfileField(input));
+ipcMain.handle("ai:memory:profile:forget",(_event,key)=>agentMemoryService.forgetProfileField(key));
+ipcMain.handle("ai:memory:timeline",(_event,query)=>agentMemoryService.getTimeline(query));
+ipcMain.handle("ai:memory:search",(_event,query)=>agentMemoryService.recall(query||{}));
+ipcMain.handle("ai:memory:stats",()=>agentMemoryService.getStats());
+ipcMain.handle("ai:memory:rebuild",()=>{memoryViews.rebuildAll();return{ok:true};});
 ipcMain.handle("ai:attachments:save",(_event,input)=>attachments.save(input));
 ipcMain.handle("ai:attachments:remove",(_event,id)=>attachments.remove(id));
 ipcMain.handle("ai:attachments:prepare",(_event,{id,provider})=>attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]).then(result=>({...result,localPath:undefined})));
@@ -968,7 +1127,7 @@ ipcMain.handle("netease:get-history",(_event,input)=>neteaseService.getHistory(i
 
 if (hasSingleInstanceLock) {
   app.on("second-instance", () => { focusMainWindow(); });
-  app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase});await neteaseService.initialize();await neteaseService.save();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);Menu.setApplicationMenu(buildApplicationMenu());await createWindow();if(!smokeTest)await createPetWindow();});
+  app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase});await neteaseService.initialize();await neteaseService.save();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);Menu.setApplicationMenu(buildApplicationMenu());await createWindow();if(!smokeTest)await createPetWindow();});
   app.on("activate", () => { if (!focusMainWindow()) createWindow().catch(error => console.error("Failed to recreate main window:", error)); });
   app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
 }

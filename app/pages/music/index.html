@@ -6,6 +6,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>Kairos | Music</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="../../i18n/i18n-core.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=block" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script id="tailwind-config">
@@ -660,7 +661,6 @@ if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !
         <header class="music-view-header">
           <div>
             <h1 class="music-view-title">Local Playlist</h1>
-            <p class="music-view-subtitle">Import local playlist folders and display them as cards.</p>
           </div>
           <button class="music-import-button" id="importLocalPlaylist" type="button">
             <span class="material-symbols-outlined">library_add</span>
@@ -678,7 +678,6 @@ if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !
           <header class="music-view-header">
             <div>
               <h1 class="music-view-title">History</h1>
-              <p class="music-view-subtitle">Local songs sorted by play count.</p>
             </div>
           </header>
           <div class="history-list" id="historyList"></div>
@@ -835,6 +834,7 @@ let musicState = { tracks: [] };
 let currentPlaylistId = null;
 let musicSyncing = false;
 let musicStateSignature = "";
+let musicSourceOrderHydrated = false;
 let playbackState = { currentTrackId: null, playing: false };
 let syncVisiblePlaylistPlayback = () => {};
 let syncHistoryPlayback = () => {};
@@ -869,7 +869,7 @@ const getDesktopMusic = () => {
   }
 };
 const musicRuntime = () => musicState.runtime ||= { sourceOrder: [], playCounts: {}, playlistOrders: {}, playlistCovers: {}, likedCover: '', sidebarState: 'expanded' };
-const persistMusicRuntime = patch => { musicState.runtime = { ...musicRuntime(), ...patch }; getDesktopMusic()?.updateRuntime?.(musicState.runtime).catch(() => {}); };
+const persistMusicRuntime = patch => { musicState.runtime = { ...musicRuntime(), ...patch }; getDesktopMusic()?.updateRuntime?.(patch).catch(() => {}); };
 
 const getDesktopNetease = () => {
   if (window.kairosDesktop?.netease) return window.kairosDesktop.netease;
@@ -893,16 +893,21 @@ const writeMusicSourceOrder = () => {
   persistMusicRuntime({ sourceOrder: order });
 };
 
-const initMusicSourceSort = () => {
+const applyMusicSourceOrder = () => {
   if (!musicSourceList) return;
-  let draggedSource = null;
-  let suppressSourceClickUntil = 0;
-  const items = () => Array.from(musicSourceList.querySelectorAll('[data-source-group]'));
   const order = readMusicSourceOrder();
   order.forEach(id => {
     const item = musicSourceList.querySelector(`[data-source-group="${id}"]`);
     if (item) musicSourceList.append(item);
   });
+};
+
+const initMusicSourceSort = () => {
+  if (!musicSourceList) return;
+  let draggedSource = null;
+  let suppressSourceClickUntil = 0;
+  const items = () => Array.from(musicSourceList.querySelectorAll('[data-source-group]'));
+  applyMusicSourceOrder();
   musicSourceList.addEventListener('dragstart', event => {
     const item = event.target.closest('[data-source-group]');
     if (!item || !musicSourceList.contains(item)) return;
@@ -1855,7 +1860,7 @@ const loadNeteaseSearchHome = async ({ force = false } = {}) => {
     home.className = 'netease-search-home';
     const daily = document.createElement('section');
     daily.className = 'netease-home-section';
-    daily.innerHTML = '<div class="netease-home-section-head"><div><h2 class="netease-home-title">Daily Recommended Songs</h2><p class="netease-home-subtitle">Fresh picks from your NetEase Music taste.</p></div></div>';
+    daily.innerHTML = '<div class="netease-home-section-head"><div><h2 class="netease-home-title">Daily Recommended Songs</h2></div></div>';
     if (!dailySongs.length) {
       const empty = document.createElement('p');
       empty.className = 'netease-empty';
@@ -1866,7 +1871,7 @@ const loadNeteaseSearchHome = async ({ force = false } = {}) => {
     }
     const playlists = document.createElement('section');
     playlists.className = 'netease-home-section';
-    playlists.innerHTML = '<div class="netease-home-section-head"><div><h2 class="netease-home-title">Hot Playlists</h2><p class="netease-home-subtitle">Popular playlists to start with.</p></div></div>';
+    playlists.innerHTML = '<div class="netease-home-section-head"><div><h2 class="netease-home-title">Hot Playlists</h2></div></div>';
     const grid = document.createElement('div');
     grid.className = 'local-playlist-list';
     if (!hotPlaylists.length) {
@@ -3438,6 +3443,11 @@ const refreshMusicState = async ({ forceRender = true } = {}) => {
     musicState = applySavedPlaylistOrders(nextState);
     playbackState = { currentTrackId: musicState.currentTrackId || null, playing: musicState.playing === true };
     musicStateSignature = nextSignature;
+    if (!musicSourceOrderHydrated) {
+      applyMusicSourceOrder();
+      showInitialMusicSource();
+      musicSourceOrderHydrated = true;
+    }
     if (forceRender || changed) {
       if (currentPlaylistId && !document.querySelector('[data-music-view="playlist-detail"]')?.hidden) {
         renderPlaylistDetail(currentPlaylistId);

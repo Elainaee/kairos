@@ -25,6 +25,7 @@ dist/
 build/
 out/
 release/
+app/vue-preview/
 coverage/
 
 # Electron / app runtime data

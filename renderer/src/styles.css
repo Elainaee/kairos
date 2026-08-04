@@ -1,0 +1,75 @@
+@import "../../app/shared/styles/tweakcn-theme.css";
+@import "../../app/shared/styles/stitch-layout.css";
+@import "../../app/shell/navigation/stitch-shell.css";
+@import "../../app/features/settings/settings-feature.css";
+@import "../../app/features/reminders/reminder-feature.css";
+@import "../../app/features/habits/habits-feature.css";
+@import "../../app/shell/player/music-player.css";
+@import "./styles/schedule.css";
+
+:root { font-family: Outfit, system-ui, sans-serif; color: #1b1c18; background: #f9f7f0; }
+* { box-sizing: border-box; }
+html, body, #app { min-width: 900px; min-height: 100%; margin: 0; }
+html.kairos-calendar-background-enabled, html.kairos-calendar-background-enabled body, html.kairos-calendar-background-enabled #app { background: transparent; }
+body { background: #f9f7f0; color: #1b1c18; overflow-x: hidden; }
+button, input, select { font: inherit; }
+.material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: 400; font-style: normal; font-size: 24px; line-height: 1; display: inline-block; white-space: nowrap; -webkit-font-smoothing: antialiased; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; }
+.vue-shell { height: 100vh; min-height: 100vh; overflow: hidden; background: transparent; }
+.vue-shell-content { height: calc(100vh - 64px); min-height: 0; overflow: hidden; background: transparent; view-transition-name: kairos-content; }
+/* Match the original Music route: its iframe ends above the one shared shell
+   player, rather than shrinking an inner copy of the Music document. */
+.vue-shell-content.vue-shell-content--music { height: calc(100vh - 144px); }
+.vue-shell-content .kairos-page-main { view-transition-name: none; }
+.vue-shell .kairos-brand { color: #111!important; text-decoration: none!important; }
+.vue-shell .kairos-brand:hover, .vue-shell .kairos-brand:focus { text-decoration: none!important; }
+body.kairos-calendar-background-active .vue-shell .kairos-topbar { background: rgb(249 247 240 / .78)!important; border-color: rgb(255 255 255 / .52)!important; box-shadow: inset 0 -1px 0 rgb(61 59 46 / .06); backdrop-filter: blur(16px) saturate(1.08); -webkit-backdrop-filter: blur(16px) saturate(1.08); }
+.vue-preview-notice { display: grid; width: min(720px, calc(100% - 64px)); margin: 64px auto; gap: 12px; padding: 30px; border: 1px solid rgba(61,59,46,.1); border-radius: 18px; background: rgba(255,255,255,.62); }
+.vue-preview-notice h1 { margin: 0; color: #3d3b2e; font-size: 30px; }
+.vue-preview-notice p { margin: 0; color: #6f6a5f; line-height: 1.6; }
+.vue-preview-notice code { border-radius: 6px; background: #ebe6d6; padding: 2px 6px; }
+.vue-bridge-status { margin-top: 8px!important; color: #477054!important; font-weight: 700; }
+.vue-settings-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; background: rgba(48,49,44,.42); backdrop-filter: blur(5px); }
+.vue-settings-backdrop .kairos-settings-dialog { display: block; margin: 0; }
+.vue-settings-backdrop .kairos-settings-save-status.is-visible { opacity: 1; transform: none; }
+.kairos-settings-panel-view:not([hidden]) { display: grid; }
+.vue-shell-content:has(.vue-habits-page) { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+.vue-shell-content:has(.vue-habits-page)::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.vue-habits-page { min-height: 100%; padding: 0 32px 32px!important; }
+.vue-legacy-frame { display:block; width:100%; height:100%; border:0; background:transparent; }
+/* Modal dialogs are painted over the persistent calendar player. */
+body.vue-schedule-dialog-open .vue-shell { position:relative; z-index:1200; }
+body.vue-schedule-dialog-open .vue-shell-content { position:relative; z-index:1201; overflow:visible!important; }
+body.vue-schedule-dialog-open #musicPlayer { z-index:1!important; pointer-events:none!important; }
+.vue-legacy-frame.vue-legacy-dialog-open { position:fixed!important; z-index:1202!important; inset:64px 0 0!important; width:100vw!important; height:calc(100dvh - 64px)!important; }
+.vue-legacy-schedule-dialog-host { position:fixed!important; z-index:4200!important; inset:64px 0 0!important; width:100vw!important; height:calc(100dvh - 64px)!important; border:0; visibility:hidden!important; background:transparent!important; opacity:0!important; pointer-events:none!important; }
+.vue-legacy-schedule-dialog-host.is-ready { visibility:visible!important; opacity:1!important; pointer-events:auto!important; }
+.vue-calendar-frame-fullscreen { position:fixed!important; z-index:3000!important; inset:0!important; width:100vw!important; height:100dvh!important; background:transparent!important; }
+body.vue-calendar-fullscreen { overflow:hidden!important; }
+body.vue-calendar-fullscreen .vue-shell>.kairos-topbar,
+body.vue-calendar-fullscreen #musicPlayer { visibility:hidden!important; }
+body.vue-calendar-fullscreen .vue-calendar-frame-fullscreen { visibility:visible!important; }
+.vue-toast-stack { position: fixed; z-index: 4100; top: 78px; right: 24px; display: grid; width: min(390px, calc(100vw - 32px)); gap: 10px; pointer-events: none; }
+.vue-toast { display: grid; grid-template-columns: 28px minmax(0,1fr) 30px; align-items: start; gap: 10px; padding: 14px; border: 1px solid color-mix(in oklch,var(--border) 72%,transparent); border-radius: 16px; background: color-mix(in oklch,var(--popover) 92%,transparent); color: var(--popover-foreground); box-shadow: 0 18px 50px rgb(48 44 37 / .2), inset 0 1px 0 rgb(255 255 255 / .72); backdrop-filter: blur(18px) saturate(1.08); pointer-events: auto; }
+.vue-toast > .material-symbols-outlined { color: var(--primary); font-size: 23px; }
+.vue-toast[data-tone="success"] > .material-symbols-outlined { color: #3f704b; }
+.vue-toast[data-tone="warning"] > .material-symbols-outlined { color: #a36316; }
+.vue-toast[data-tone="error"] > .material-symbols-outlined { color: #b3261e; }
+.vue-toast strong { display: block; margin: 0 0 3px; font-size: 14px; }
+.vue-toast p { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.45; }
+.vue-toast footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.vue-toast footer button { min-height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px!important; background: var(--secondary); color: var(--secondary-foreground); font-size: 11px; font-weight: 700; }
+.vue-toast-close { display: grid; width: 30px; height: 30px; padding: 0; place-items: center; border: 0; border-radius: 9px!important; background: transparent; color: var(--muted-foreground); }
+.vue-toast-close .material-symbols-outlined { font-size: 18px; }
+.vue-toast-enter-active,.vue-toast-leave-active { transition: opacity .22s ease, transform .28s cubic-bezier(.2,.8,.2,1); }
+.vue-toast-enter-from,.vue-toast-leave-to { opacity: 0; transform: translateX(18px) scale(.97); }
+.vue-toast-move { transition: transform .24s ease; }
+html.kairos-reduce-motion .kairos-gooey-effect { transition: none!important; }
+html.kairos-reduce-motion .kairos-gooey-particle { display: none!important; }
+html.kairos-reduce-motion .habit-magic-card::after { display: none!important; }
+html.kairos-reduce-motion .habit-magic-card:hover { transform: none!important; }
+html.kairos-reduce-motion .vue-toast-enter-active,
+html.kairos-reduce-motion .vue-toast-leave-active,
+html.kairos-reduce-motion .vue-toast-move,
+html.kairos-reduce-motion::view-transition-old(kairos-content),
+html.kairos-reduce-motion::view-transition-new(kairos-content) { animation: none!important; transition: none!important; }
+@media (max-width:760px) { html,body,#app{min-width:0}.vue-preview-notice{width:calc(100% - 28px);margin:28px auto;padding:22px} }

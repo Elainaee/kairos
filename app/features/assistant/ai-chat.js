@@ -470,7 +470,7 @@
   });
   if (!windowMode) {
     panel.addEventListener('close', () => input.blur());
-    new MutationObserver(() => { if (panel.open) { renderMessages(); input.focus(); } }).observe(panel, { attributes: true, attributeFilter: ['open'] });
+    if (panel instanceof Node) new MutationObserver(() => { if (panel.open) { renderMessages(); input.focus(); } }).observe(panel, { attributes: true, attributeFilter: ['open'] });
   }
   initialize()
     .then(() => { if (windowMode) { renderMessages(); input.focus(); } })

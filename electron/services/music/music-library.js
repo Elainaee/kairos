@@ -196,6 +196,7 @@ export class MusicLibrary {
     this.databaseReady = null;
     this.databasePath = ":memory:";
     this.queue = Promise.resolve();
+    this.mutationQueue = Promise.resolve();
   }
 
   async ensureDatabase() {
@@ -241,6 +242,12 @@ export class MusicLibrary {
       return state;
     });
     return this.queue;
+  }
+
+  enqueueMutation(operation) {
+    const mutation = this.mutationQueue.catch(() => {}).then(operation);
+    this.mutationQueue = mutation.catch(() => {});
+    return mutation;
   }
 
   async publicState() {
@@ -451,26 +458,30 @@ export class MusicLibrary {
   }
 
   async updatePlayback(patch = {}) {
-    const state = await this.read();
-    if (Array.isArray(patch.queueTrackIds)) {
-      const validIds = new Set(state.tracks.map(track => track.id));
-      state.queueTrackIds = patch.queueTrackIds.filter(id => validIds.has(id));
-    }
-    if (patch.currentTrackId !== undefined) state.currentTrackId = patch.currentTrackId || null;
-    if (patch.mode && ["sequence", "loop", "shuffle", "single"].includes(patch.mode)) state.mode = patch.mode;
-    if (patch.playing !== undefined) state.playing = Boolean(patch.playing);
-    if (Number.isFinite(patch.volume)) state.volume = Math.min(100, Math.max(0, Math.round(patch.volume)));
-    if (patch.muted !== undefined) state.muted = Boolean(patch.muted);
-    if (patch.position?.trackId) state.positions[patch.position.trackId] = Math.max(0, Number(patch.position.seconds) || 0);
-    await this.write(state);
-    return this.publicState();
+    return this.enqueueMutation(async () => {
+      const state = await this.read();
+      if (Array.isArray(patch.queueTrackIds)) {
+        const validIds = new Set(state.tracks.map(track => track.id));
+        state.queueTrackIds = patch.queueTrackIds.filter(id => validIds.has(id));
+      }
+      if (patch.currentTrackId !== undefined) state.currentTrackId = patch.currentTrackId || null;
+      if (patch.mode && ["sequence", "loop", "shuffle", "single"].includes(patch.mode)) state.mode = patch.mode;
+      if (patch.playing !== undefined) state.playing = Boolean(patch.playing);
+      if (Number.isFinite(patch.volume)) state.volume = Math.min(100, Math.max(0, Math.round(patch.volume)));
+      if (patch.muted !== undefined) state.muted = Boolean(patch.muted);
+      if (patch.position?.trackId) state.positions[patch.position.trackId] = Math.max(0, Number(patch.position.seconds) || 0);
+      await this.write(state);
+      return this.publicState();
+    });
   }
 
   async updateRuntime(patch = {}) {
-    const state = await this.read();
-    state.runtime = { ...(state.runtime || {}), ...patch };
-    await this.write(state);
-    return state.runtime;
+    return this.enqueueMutation(async () => {
+      const state = await this.read();
+      state.runtime = { ...(state.runtime || {}), ...patch };
+      await this.write(state);
+      return state.runtime;
+    });
   }
 
   async updateTrack(input = {}) {

@@ -11,8 +11,6 @@
   const from=key=>core?.fromDateKey?core.fromDateKey(key):(()=>{const [y,m,d]=key.split('-').map(Number);return new Date(y,m-1,d)})();
   const shift=(key,days)=>core?.shiftDateKey?core.shiftDateKey(key,days):(()=>{const d=from(key);d.setDate(d.getDate()+days);return dateKey(d)})();
   const clean=habit=>({...habit,icon:LEGACY_ICONS[habit.icon]||habit.icon||'📚',dates:core?.normalizeDates?core.normalizeDates(habit.dates):[...new Set(habit.dates||[])].sort(),allowBackfill:!!habit.allowBackfill});
-  const readSettings=()=>{try{return window.KairosSettingsFeature?.read?.()||window.top?.KairosSettingsFeature?.read?.()||{}}catch{return {}}};
-  const backfillDefault=()=>!!readSettings()?.habits?.allowBackfillDefault;
   const reactPet=(action,payload={})=>{if(window.kairosDesktop?.pet?.react)return window.kairosDesktop.pet.react(action,payload).catch(()=>{});if(window.top!==window)window.top.postMessage({type:'kairos:pet-react',action,payload},'*')};
   const escape=value=>String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
@@ -97,7 +95,7 @@
     const habit=state.habits.find(item=>item.id===id);let dialog=document.getElementById('realHabitEditor');
     if(!dialog){dialog=document.createElement('dialog');dialog.id='realHabitEditor';dialog.className='habit-editor';document.body.append(dialog)}
     const selectedIcon=habit?.icon||ICONS[0][0],iconGrid=ICONS.map(([emoji])=>`<button type="button" class="habit-emoji-option ${selectedIcon===emoji?'selected':''}" data-emoji="${emoji}" aria-label="Select ${emoji}" aria-pressed="${selectedIcon===emoji}">${emoji}</button>`).join('');
-    const allowBackfill=habit?!!habit.allowBackfill:backfillDefault();
+    const allowBackfill=!!habit?.allowBackfill;
     dialog.innerHTML=`<form><header><div><small>ROUTINE</small><h2>${habit?'Edit Habit':'Add Habit'}</h2></div><button type="button" data-cancel aria-label="Close">×</button></header><label>Name<input name="name" maxlength="24" required value="${escape(habit?.name)}"></label><label>Short Description<input name="description" maxlength="40" value="${escape(habit?.description)}"></label><label>Icon<div class="habit-icon-picker"><input name="icon" type="hidden" value="${selectedIcon}"><button class="habit-icon-trigger" type="button" aria-expanded="false"><span>${selectedIcon}</span><span class="material-symbols-outlined">expand_more</span></button><div class="habit-emoji-grid" hidden>${iconGrid}</div></div></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px" class="schedule-all-day"><input name="backfill" type="checkbox" ${allowBackfill?'checked':''}>Allow check-ins for past dates</label><section class="editor-history${allowBackfill?'':' collapsed'}">${habit?history(habit):history({dates:[]})}</section><footer>${habit?'<button type="button" class="habit-danger" data-delete>Delete Habit</button>':'<span></span>'}<button type="button" data-cancel>Cancel</button><button type="submit" class="habit-primary">Save</button></footer></form>`;
     dialog.showModal();
     const iconTrigger=dialog.querySelector('.habit-icon-trigger'),iconGridElement=dialog.querySelector('.habit-emoji-grid'),iconInput=dialog.querySelector('[name=icon]');
