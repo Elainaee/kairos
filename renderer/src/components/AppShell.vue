@@ -19,6 +19,7 @@ const toasts = useToastsStore();
 const settingsOpen = ref(false);
 const settingsOpener = ref<HTMLElement>();
 const remindersOpen = ref(false);
+const petHidden = ref(false);
 const nav = ref<HTMLElement>();
 const indicatorStyle = ref<Record<string, string>>({});
 let navObserver: ResizeObserver | undefined;
@@ -28,6 +29,7 @@ let calendarMutationObserver: MutationObserver | undefined;
 let playerAlignmentFrame = 0;
 let playerAlignmentTimers: number[] = [];
 let stopStateChanges: (() => void) | undefined;
+let stopPetVisibilityChanges: (() => void) | undefined;
 let appearanceSignature = "";
 const links = computed(() => [
   ["calendar", "calendar_today", t("nav.calendar")], ["habits", "repeat", t("nav.habits")],
@@ -85,6 +87,19 @@ async function loadAppearance() {
 
 function handleSettingsChanged(event: Event) {
   applyAppearance((event as CustomEvent).detail || {});
+}
+
+function syncPetVisibility(visible: boolean) {
+  petHidden.value = visible === false;
+}
+
+async function restorePet() {
+  try {
+    const restored = await window.kairosDesktop?.pet?.show?.();
+    if (restored !== false) petHidden.value = false;
+  } catch {
+    petHidden.value = true;
+  }
 }
 
 function resetPlayerLayout() {
@@ -301,6 +316,8 @@ onMounted(() => {
   window.addEventListener("kairos:toast", handleToast);
   window.addEventListener("kairos:music-state-changed", handleMusicStateChanged);
   window.addEventListener("kairos:music-command", handleMusicCommand);
+  stopPetVisibilityChanges = window.kairosDesktop?.pet?.onVisibilityChanged?.(syncPetVisibility);
+  window.kairosDesktop?.pet?.getVisibility?.().then(syncPetVisibility).catch(() => {});
   stopStateChanges = (window.kairosDesktop?.appState as any)?.onChanged?.((state: any) => { appState.sync(state); applyAppearance(state?.settings || {}); });
 });
 onBeforeUnmount(() => {
@@ -312,6 +329,7 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(playerAlignmentFrame);
   playerAlignmentTimers.forEach(timer => window.clearTimeout(timer));
   stopStateChanges?.();
+  stopPetVisibilityChanges?.();
   window.removeEventListener("resize", placeIndicator);
   window.removeEventListener("resize", settlePlayerAlignment);
   window.removeEventListener("kairos:settings-changed", handleSettingsChanged);
@@ -407,5 +425,8 @@ function ensureMusicPlayer() {
     <ReminderRuntime />
     <ToastHost />
     <LegacyScheduleDialogHost :page="activePage" />
+    <button v-if="petHidden" class="vue-pet-restore" type="button" aria-label="Restore desktop pet" title="Restore desktop pet" @click="restorePet">
+      <span class="material-symbols-outlined" aria-hidden="true">pets</span>
+    </button>
   </div>
 </template>

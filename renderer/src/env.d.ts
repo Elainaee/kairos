@@ -13,6 +13,8 @@ interface Window {
       react?(action: "idle" | "talk" | "happy" | "sleepy" | "reminder", payload?: { title?: string }): Promise<unknown>;
       isReady?(): Promise<boolean>;
       getVisibility?(): Promise<boolean>;
+      show?(): Promise<boolean>;
+      onVisibilityChanged?(handler: (visible: boolean) => void): () => void;
     };
     reminders?: {
       notify?(input: { scheduleId: string; title?: string; note?: string; missed?: boolean }): Promise<unknown>;

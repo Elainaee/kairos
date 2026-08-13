@@ -519,6 +519,19 @@ test("settings do not expose a global habit backfill default", async () => {
   assert.doesNotMatch(settingsScript, /allowBackfillDefault|\['habits', 'potted_plant', 'Habits'\]|const habitsMarkup/, "settings should not expose a global habit backfill default");
 });
 
+test("Vue shell keeps a persistent restore control when the desktop pet is hidden", async () => {
+  const shell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
+  const styles = await fs.readFile(path.join(root, "renderer/src/styles.css"), "utf8");
+  const types = await fs.readFile(path.join(root, "renderer/src/env.d.ts"), "utf8");
+
+  assert.match(shell, /getVisibility\?\.\(\)\.then\(syncPetVisibility\)/, "the Vue shell should recover the persisted visibility state after it mounts");
+  assert.match(shell, /onVisibilityChanged\?\.\(syncPetVisibility\)/, "the Vue shell should react to hide and show events from Electron");
+  assert.match(shell, /v-if="petHidden" class="vue-pet-restore"/, "the restore control should live in the persistent Vue shell instead of the calendar iframe");
+  assert.match(shell, /await window\.kairosDesktop\?\.pet\?\.show\?\.\(\)/, "the restore control should call the desktop pet show bridge");
+  assert.match(styles, /\.vue-pet-restore\s*\{[^}]*position:fixed;[^}]*z-index:4000;/, "the restore control should remain visible above page content and the player");
+  assert.match(types, /onVisibilityChanged\?\(handler: \(visible: boolean\) => void\): \(\) => void;/, "the renderer bridge typing should expose the disposable visibility listener");
+});
+
 test("time format preference is applied in the shell and refreshed in legacy calendar views", async () => {
   const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
   const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");

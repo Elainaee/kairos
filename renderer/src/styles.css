@@ -106,6 +106,10 @@ body.vue-calendar-fullscreen .vue-calendar-frame-fullscreen { visibility:visible
 .vue-toast-enter-active,.vue-toast-leave-active { transition: opacity .22s ease, transform .28s cubic-bezier(.2,.8,.2,1); }
 .vue-toast-enter-from,.vue-toast-leave-to { opacity: 0; transform: translateX(18px) scale(.97); }
 .vue-toast-move { transition: transform .24s ease; }
+.vue-pet-restore { position:fixed; z-index:4000; right:20px; bottom:112px; display:grid; width:42px; height:42px; padding:0; place-items:center; border:1px solid var(--border); border-radius:50%!important; background:color-mix(in oklch,var(--popover) 92%,transparent); color:var(--primary); box-shadow:0 2px 8px rgb(0 0 0 / .1); backdrop-filter:blur(12px); cursor:pointer; }
+.vue-pet-restore:hover { background:var(--popover); color:var(--primary); box-shadow:0 4px 14px rgb(0 0 0 / .14); transform:translateY(-1px); }
+.vue-pet-restore:focus-visible { outline:2px solid var(--ring); outline-offset:3px; }
+.vue-pet-restore .material-symbols-outlined { font-size:21px; }
 html.kairos-reduce-motion .kairos-gooey-effect { transition: none!important; }
 html.kairos-reduce-motion .kairos-gooey-particle { display: none!important; }
 html.kairos-reduce-motion .habit-magic-card::after { display: none!important; }
