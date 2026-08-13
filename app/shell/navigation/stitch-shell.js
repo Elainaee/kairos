@@ -12,9 +12,24 @@
       document.head.append(script);
     });
   };
+  const ensureThemes = () => {
+    if (window.KairosThemes) return Promise.resolve();
+    const existing = document.querySelector('script[data-kairos-themes]');
+    if (existing) return new Promise(resolve => existing.addEventListener('load', resolve, { once: true }));
+    return new Promise(resolve => {
+      const script = document.createElement('script');
+      script.dataset.kairosThemes = 'true';
+      script.src = '../../themes/theme-core.js';
+      script.addEventListener('load', resolve, { once: true });
+      script.addEventListener('error', resolve, { once: true });
+      document.head.append(script);
+    });
+  };
   window.KairosEnsureI18n = ensureI18n;
+  window.KairosEnsureThemes = ensureThemes;
   const t = (key, fallback) => window.KairosI18n?.t?.(key) || fallback;
   const MOTION_CLASS = 'kairos-reduce-motion';
+  const embedded = new URLSearchParams(location.search).get('embed') === '1';
   const applyMotionPreference = reduce => document.documentElement.classList.toggle(MOTION_CLASS, reduce === true);
   const numberInRange = (value, fallback, min, max) => {
     const number = Number(value);
@@ -32,8 +47,9 @@
     document.documentElement.style.setProperty('--kairos-calendar-background-brightness', `${brightness}%`);
   };
   if (!document.getElementById('kairos-motion-preference-style')) document.head.insertAdjacentHTML('beforeend', '<style id="kairos-motion-preference-style">html.kairos-reduce-motion *,html.kairos-reduce-motion *::before,html.kairos-reduce-motion *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}</style>');
-  applyCalendarBackground({});
-  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat); applyMotionPreference(settings?.accessibility?.reduceMotion === true); applyCalendarBackground(settings); });
+  if (!embedded) applyCalendarBackground({});
+  ensureThemes();
+  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; window.KairosThemes?.applyTheme?.(settings?.appearance?.theme); window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat); applyMotionPreference(settings?.accessibility?.reduceMotion === true); if (!embedded) applyCalendarBackground(settings); });
   const page = document.body.dataset.page || 'calendar';
   const ensureCalendarControllers = () => {
     if (!['calendar', 'schedule'].includes(page)) return Promise.resolve();
@@ -62,7 +78,6 @@
     });
     return window.KairosScheduleControllerReady;
   };
-  const embedded = new URLSearchParams(location.search).get('embed') === '1';
   if (embedded && !window.KairosPendingState) {
     try {
       const raw = new URLSearchParams(location.search).get('scheduleState') || window.top.localStorage.getItem('kairos-mvp-state');
@@ -79,9 +94,9 @@
       if (message?.type === 'kairos:motion-preference' && event.source === window.top) applyMotionPreference(message.reduce === true);
       if (message?.type === 'kairos:state-sync' && event.source === window.top) {
         const settings = message.state?.settings || {};
+        window.KairosThemes?.applyTheme?.(settings?.appearance?.theme);
         window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat);
         applyMotionPreference(settings?.accessibility?.reduceMotion === true);
-        applyCalendarBackground(settings);
       }
     });
     document.documentElement.classList.add('kairos-embedded-root');
@@ -91,7 +106,6 @@
       if (node !== embeddedMain && node.matches('header, nav, aside')) node.remove();
     });
     if (document.body.dataset.page === 'calendar') {
-      document.body.classList.add('kairos-calendar-background-active');
       embeddedMain?.querySelector(':scope > header')?.remove();
       embeddedMain?.querySelector(':scope > div.flex.flex-1 > section')?.classList.add('kairos-calendar-glass');
     }
@@ -311,6 +325,7 @@
     window.addEventListener('kairos:music-player-ready', () => showSpaView(getSpaView()));
     window.addEventListener('kairos:music-content-ready', () => showSpaView(getSpaView()));
     window.addEventListener('kairos:settings-changed', event => {
+      window.KairosThemes?.applyTheme?.(event.detail?.appearance?.theme);
       window.KairosI18n?.setTimeFormat?.(event.detail?.general?.timeFormat);
       applyMotionPreference(event.detail?.accessibility?.reduceMotion === true);
       applyCalendarBackground(event.detail);

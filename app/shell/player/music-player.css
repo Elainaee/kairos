@@ -534,7 +534,8 @@
 }
 
 .music-playlist-panel li:not(.current):hover {
-    background: #ECE7D9
+    background: transparent;
+    box-shadow: none
 }
 
 .music-playlist-panel li.is-dragging {
@@ -571,15 +572,17 @@
     padding: 0 !important;
     border: 0 !important;
     border-radius: inherit !important;
-    background: rgba(27,28,24,.18) !important;
+    background: transparent !important;
     color: #fff !important;
     opacity: 0;
     cursor: pointer;
-    transition: opacity .14s, background .14s, filter .14s
+    box-shadow: none !important;
+    filter: none !important;
+    z-index: 1;
+    transition: opacity .14s
 }
 
-.music-playlist-panel li:hover .music-queue-cover .music-queue-play-button,
-.music-playlist-panel li.current .music-queue-play-button,
+.music-queue-cover:hover .music-queue-play-button,
 .music-queue-play-button:focus-visible {
     opacity: 1
 }
@@ -618,6 +621,10 @@
 }
 
 .music-queue-cover img {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover
@@ -743,17 +750,27 @@
     color: #C95F3D !important
 }
 
-#musicPlayer .music-playlist-panel header button:hover,
-#musicPlayer .music-playlist-panel header button:focus-visible,
-#musicPlayer .music-queue-play-button:hover,
-#musicPlayer .music-queue-play-button:focus-visible,
-#musicPlayer .music-track-remove:hover,
-#musicPlayer .music-track-remove:focus-visible {
+body > .music-playlist-panel .music-track-main:hover,
+body > .music-playlist-panel .music-track-main:focus-visible,
+body > .music-playlist-panel .music-queue-clear:hover,
+body > .music-playlist-panel .music-queue-clear:focus-visible,
+body > .music-playlist-panel .music-queue-close:hover,
+body > .music-playlist-panel .music-queue-close:focus-visible,
+body > .music-playlist-panel .music-queue-play-button:hover,
+body > .music-playlist-panel .music-queue-play-button:focus-visible,
+body > .music-playlist-panel .music-track-remove:hover,
+body > .music-playlist-panel .music-track-remove:focus-visible {
     background: transparent !important;
     background-color: transparent !important;
+    background-image: none !important;
     box-shadow: none !important;
     filter: none !important;
     transform: none !important
+}
+
+body > .music-playlist-panel .music-queue-cover:hover > .music-queue-play-button,
+body > .music-playlist-panel .music-queue-play-button:focus-visible {
+    opacity: 1 !important
 }
 
 .music-playlist-empty {

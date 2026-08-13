@@ -3,7 +3,7 @@
 .kairos-page-main{margin-left:0!important;padding-top:0!important;width:100vw!important;min-height:0!important;overflow:auto!important}
 .kairos-page-main[hidden],.kairos-spa-view[hidden]{display:none!important}
 .kairos-spa-view{position:fixed;inset:64px 0 0;width:100vw;height:calc(100vh - 64px);border:0;background:var(--background,#f9f7f0);z-index:20}
-.kairos-secondary-view:not(.kairos-music-view)>#musicPlayer{display:none!important}
+.kairos-secondary-view:not(.kairos-music-view):not([data-kairos-vue-page="calendar"])>#musicPlayer{display:none!important}
 .kairos-secondary-view.kairos-music-view>.kairos-spa-view{bottom:80px;height:calc(100vh - 144px)}
 .kairos-embedded-root,.kairos-embedded{height:100%!important;min-height:100%!important;overflow:hidden!important}
 .kairos-embedded{display:block!important;background:var(--background,#f9f7f0)!important}
@@ -138,6 +138,23 @@ body[data-page="calendar"]:not(.kairos-secondary-view)>.kairos-page-main>div.fle
 #musicPlayer>div,#musicPlayer>audio{position:relative;z-index:1}
 body[data-page="calendar"]{padding-bottom:80px!important}
 #musicPlayer>div{grid-template-columns:minmax(180px,260px) minmax(260px,1fr) minmax(190px,260px)!important;gap:clamp(10px,1.4vw,22px)!important;padding-left:clamp(12px,1.5vw,24px)!important;padding-right:clamp(12px,1.5vw,24px)!important}
+
+/* The Vue shell owns the wallpaper.  Embedded legacy documents must remain
+   ordinary transparent content layers: a second filtered wallpaper inside an
+   iframe causes Chromium to continuously recomposite the two surfaces. */
+html.kairos-embedded-root,
+html.kairos-embedded-root body.kairos-embedded { background:transparent!important; }
+body.kairos-embedded { background:transparent!important; }
+body.kairos-embedded::before { content:none!important; display:none!important; }
+body.kairos-embedded[data-page="calendar"]>.kairos-page-main { background:transparent!important; }
+body.kairos-embedded[data-page="calendar"] .kairos-calendar-glass::before { content:none!important; display:none!important; }
+body.kairos-embedded[data-page="calendar"]>.kairos-page-main>div.flex.flex-1>section:nth-of-type(2)>div,
+body.kairos-embedded[data-page="calendar"] .kairos-calendar-glass>.calendar-grid>div:not(.day-cell),
+body.kairos-embedded[data-page="calendar"] .kairos-calendar-glass .day-cell,
+.calendar-fullscreen-fallback>.kairos-calendar-glass.calendar-is-fullscreen,
+#musicPlayer { backdrop-filter:none!important; -webkit-backdrop-filter:none!important; }
+.kairos-calendar-glass { view-transition-name:none!important; }
+.calendar-fullscreen-fallback>.kairos-calendar-glass.calendar-is-fullscreen::before { content:none!important; display:none!important; }
 #musicCoverButton{width:52px!important;height:52px!important;border-radius:11px!important}.music-transport-controls{height:40px;align-items:center!important;transform:translateY(4px)}.music-transport-controls>button{display:grid!important;width:40px!important;height:40px!important;min-width:40px!important;padding:0!important;place-items:center!important;line-height:1!important}.music-transport-controls>button .material-symbols-outlined{display:block;line-height:1!important}#musicToggle{width:40px!important;height:40px!important;background:transparent!important;box-shadow:none!important;color:var(--primary)!important}#musicToggle:hover{background:color-mix(in oklch,var(--muted) 55%,transparent)!important}#musicPlayer .elastic-volume{width:min(170px,calc(100% - 48px));min-width:96px}.music-player-right{min-width:0;width:100%;gap:clamp(4px,.7vw,12px)!important}.music-playlist-button{flex:0 0 40px;margin-left:0!important}#chibiPet{bottom:84px!important}
 #musicPlayer .music-transport-controls{position:relative!important;display:grid!important;grid-template-columns:42px 42px 42px 42px!important;justify-content:center!important;justify-items:center!important;column-gap:14px!important;width:100%!important;height:46px!important;transform:translateY(2px)!important}#musicPlayer #musicPrevious,#musicPlayer #musicNext{width:42px!important;height:42px!important;background:transparent!important;color:#4f5b70!important;border-radius:0!important;box-shadow:none!important}#musicPlayer #musicToggle{width:42px!important;height:42px!important;border-radius:999px!important;background:var(--primary)!important;color:var(--primary-foreground)!important;box-shadow:0 9px 18px color-mix(in srgb,var(--primary) 25%,transparent)!important}#musicPlayer #musicToggle:hover{background:var(--primary)!important;color:var(--primary-foreground)!important;box-shadow:0 11px 22px color-mix(in srgb,var(--primary) 32%,transparent)!important}#musicPlayer #musicToggleIcon{font-size:0!important;width:28px!important;height:28px!important}#musicPlayer #musicMode{position:static!important}
 .music-shuffle[aria-pressed="true"]{color:var(--primary)!important;background:color-mix(in oklch,var(--primary) 11%,transparent)!important;border-radius:10px}.music-shuffle[aria-pressed="true"] .material-symbols-outlined{font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}

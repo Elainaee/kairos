@@ -12,7 +12,7 @@
   const STORAGE_KEY = 'kairos-settings';
   const defaults = {
     general: { language: 'system', timeFormat: 'system' },
-    appearance: { theme: 'system', calendarBackground: { source: 'builtin', id: 'default.jpg', blur: 6, brightness: 95 } },
+    appearance: { theme: 'claude-plus', calendarBackground: { source: 'builtin', id: 'default.jpg', blur: 6, brightness: 95 } },
     accessibility: { reduceMotion: false },
     ai: { replyStyle: 'companion', memoryEnabled: true, webSearchMode: 'ask' },
     music: { neteaseQuality: 'standard' },
@@ -31,7 +31,7 @@
   const buildChoices = () => ({
     language: [['system', t('settings.systemDefault', 'System default')], ['en', t('settings.english', 'English')], ['zh-CN', t('settings.simplifiedChinese', 'Simplified Chinese')]],
     timeFormat: [['system', t('settings.systemDefault', 'System default')], ['12h', t('settings.12hour', '12-hour')], ['24h', t('settings.24hour', '24-hour')]],
-    theme: [['system', t('settings.systemDefault', 'System default')], ['light', t('settings.light', 'Light')], ['dark', t('settings.dark', 'Dark')]],
+    theme: [['claude-plus', 'Claude +']],
     replyStyle: [['companion', 'Warm companion'], ['concise', 'Concise execution'], ['learning', 'Focused learning']],
     webSearchMode: [['ask', 'Ask every time'], ['off', 'Off']],
     neteaseQuality: [['standard', 'Standard'], ['higher', 'Higher'], ['exhigh', 'Very high'], ['lossless', 'Lossless']],
@@ -39,14 +39,20 @@
     snoozeMinutes: [['5', t('time.minutes', '5 minutes', { count: 5 })], ['10', t('time.minutes', '10 minutes', { count: 10 })], ['15', t('time.minutes', '15 minutes', { count: 15 })], ['30', t('time.minutes', '30 minutes', { count: 30 })]]
   });
   let choices = buildChoices();
-  const merge = input => ({
-    general: { ...defaults.general, ...(input?.general || {}) },
-    appearance: { ...defaults.appearance, ...(input?.appearance || {}), calendarBackground: { ...defaults.appearance.calendarBackground, ...(input?.appearance?.calendarBackground || {}) } },
-    accessibility: { ...defaults.accessibility, ...(input?.accessibility || {}) },
-    ai: { ...defaults.ai, ...(input?.ai || {}) },
-    music: { ...defaults.music, ...(input?.music || {}) },
-    reminders: { ...defaults.reminders, ...(input?.reminders || {}) }
-  });
+  const normalizeTheme = value => window.KairosThemes?.normalizeTheme?.(value) || 'claude-plus';
+  const merge = input => {
+    // Discard the retired colour-mode preference from older app-state files.
+    // The palette remains a named theme, but it no longer has dark/light state.
+    const { colorMode: _retiredColorMode, ...appearance } = input?.appearance || {};
+    return {
+      general: { ...defaults.general, ...(input?.general || {}) },
+      appearance: { ...defaults.appearance, ...appearance, theme: normalizeTheme(appearance.theme), calendarBackground: { ...defaults.appearance.calendarBackground, ...(appearance.calendarBackground || {}) } },
+      accessibility: { ...defaults.accessibility, ...(input?.accessibility || {}) },
+      ai: { ...defaults.ai, ...(input?.ai || {}) },
+      music: { ...defaults.music, ...(input?.music || {}) },
+      reminders: { ...defaults.reminders, ...(input?.reminders || {}) }
+    };
+  };
   const readLocal = () => { try { return merge(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')); } catch { return merge({}); } };
   const readDesktopSettings = async () => {
     const api = window.kairosDesktop?.appState;
@@ -79,6 +85,7 @@
   const persist = patch => {
     state = merge({ ...state, ...patch, ai: { ...state.ai, ...(patch.ai || {}) } });
     applyMotionPreference();
+    window.KairosThemes?.applyTheme?.(state.appearance.theme);
     window.KairosI18n?.setLocale?.(state.general.language);
     window.KairosI18n?.setTimeFormat?.(state.general.timeFormat);
     writeDesktopSettings(state).catch(error => console.warn('Unable to save Kairos settings:', error));
@@ -246,7 +253,7 @@
         <aside class="kairos-settings-sidebar"><button class="kairos-settings-back" type="button" data-settings-back aria-label="Back" title="Back"><span class="material-symbols-outlined">arrow_back</span></button><span class="kairos-settings-kicker">${t('settings.preferences', 'Preferences')}</span><h2 id="kairosSettingsTitle">${t('settings.title', 'Settings')}</h2><nav class="kairos-settings-nav" aria-label="Settings categories">${sections.map(([id, icon, label]) => `<button class="${id === activeSection ? 'active' : ''}" data-settings-tab="${id}" type="button"><span class="material-symbols-outlined">${icon}</span><span>${label}</span></button>`).join('')}</nav></aside>
         <div class="kairos-settings-content">
           ${sectionView('general', t('settings.general', 'General'), `<div class="kairos-settings-group">${select('kairosLanguage', t('settings.language', 'Language'), state.general.language, choices.language, 'general.language')}${select('kairosTimeFormat', t('settings.timeFormat', 'Time format'), state.general.timeFormat, choices.timeFormat, 'general.timeFormat')}</div>`)}
-          ${sectionView('appearance', t('settings.appearance', 'Appearance'), `<div class="kairos-settings-group">${select('kairosTheme', t('settings.themeMode', 'Theme mode'), state.appearance.theme, choices.theme, 'appearance.theme')}${toggle('kairosReduceMotion', t('settings.reduceMotion', 'Reduce motion'), state.accessibility.reduceMotion, 'accessibility.reduceMotion')}</div>${calendarBackgroundMarkup()}`)}
+          ${sectionView('appearance', t('settings.appearance', 'Appearance'), `<div class="kairos-settings-group">${select('kairosTheme', t('settings.theme', 'Theme'), state.appearance.theme, choices.theme, 'appearance.theme')}${toggle('kairosReduceMotion', t('settings.reduceMotion', 'Reduce motion'), state.accessibility.reduceMotion, 'accessibility.reduceMotion')}</div>${calendarBackgroundMarkup()}`)}
           ${remindersMarkup()}
           ${agentMarkup()}
           ${musicMarkup()}
@@ -662,6 +669,7 @@
     if (dialog?.open) render();
   });
   bind();
+  window.KairosThemes?.applyTheme?.(state.appearance.theme);
   window.KairosI18n?.setLocale?.(state.general.language);
   window.KairosI18n?.setTimeFormat?.(state.general.timeFormat);
   window.dispatchEvent(new CustomEvent('kairos:settings-changed', { detail: state }));
@@ -670,6 +678,7 @@
     else writeDesktopSettings(state).catch(error => console.warn('Unable to migrate Kairos settings:', error));
     localStorage.removeItem(STORAGE_KEY);
     applyMotionPreference();
+    window.KairosThemes?.applyTheme?.(state.appearance.theme);
     window.KairosI18n?.setLocale?.(state.general.language);
     window.KairosI18n?.setTimeFormat?.(state.general.timeFormat);
     window.dispatchEvent(new CustomEvent('kairos:settings-changed', { detail: state }));

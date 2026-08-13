@@ -11,6 +11,11 @@ const PAGE_SIZE = 200;
 const MAX_ACCOUNT_SONGS = 5000;
 const MAX_ACCOUNT_PLAYLISTS = 500;
 
+function normalizeImageUrl(value) {
+  const url = String(value || "");
+  return /^http:\/\/p\d+\.music\.126\.net\//i.test(url) ? url.replace(/^http:/i, "https:") : url;
+}
+
 function artistsText(song) {
   const artists = song?.ar || song?.artists || [];
   return Array.isArray(artists) ? artists.map(item => item?.name).filter(Boolean).join(" / ") : "";
@@ -24,7 +29,7 @@ function normalizeSong(song = {}) {
     title: song.name || "NetEase song",
     artist: artistsText(song) || "NetEase Cloud",
     album: album.name || "",
-    coverUrl: album.picUrl || album.coverImgUrl || "",
+    coverUrl: normalizeImageUrl(album.picUrl || album.coverImgUrl),
     duration: Number(song.dt || song.duration || 0) / 1000 || 0,
     source: "netease"
   };
@@ -35,7 +40,7 @@ function normalizePlaylist(playlist = {}, patch = {}) {
     id: `netease-playlist:${playlist.id}`,
     neteaseId: playlist.id,
     name: playlist.name || "NetEase playlist",
-    coverUrl: playlist.coverImgUrl || playlist.picUrl || "",
+    coverUrl: normalizeImageUrl(playlist.coverImgUrl || playlist.picUrl),
     trackCount: playlist.trackCount || 0,
     playCount: playlist.playCount || 0,
     creator: playlist.creator?.nickname || "",

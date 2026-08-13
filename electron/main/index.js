@@ -158,11 +158,49 @@ async function registerMusicMediaProtocol() {
   protocol.handle("kairos-media", async request => {
     try {
       const url = new URL(request.url);
-      if (url.hostname !== "track") return new Response("Not found", { status: 404 });
       const id = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      if (url.hostname === "cover") {
+        // Local covers are canonical SQLite assets. Resolve them directly so
+        // artwork remains available while the public music snapshot is being
+        // refreshed or transferred to the Vue renderer.
+        const directAsset = musicLibrary?.database?.readBinaryAsset?.(`music-cover:${id}`);
+        if (directAsset?.payload?.length) {
+          return new Response(directAsset.payload, {
+            headers: {
+              "content-type": directAsset.mimeType || "image/jpeg",
+              "access-control-allow-origin": "*",
+              "cache-control": "no-store"
+            }
+          });
+        }
+      }
       const state = await musicLibrary?.read();
       const track = state?.tracks?.find(item => item?.id === id);
-      if (!track?.path) return new Response("Not found", { status: 404 });
+      if (!track) return new Response("Not found", { status: 404 });
+      if (url.hostname === "cover") {
+        // MusicLibrary migrates local artwork into SQLite and deliberately
+        // removes coverPath.  Serve that canonical asset first; coverPath is
+        // only retained for a legacy record that has not migrated yet.
+        const asset = track.coverAssetId ? musicLibrary?.database?.readBinaryAsset?.(track.coverAssetId) : null;
+        if (asset?.payload?.length) {
+          return new Response(asset.payload, {
+            headers: { "content-type": asset.mimeType || "image/jpeg", "access-control-allow-origin": "*" }
+          });
+        }
+        const coverPath = track.coverPath;
+        if (!coverPath) return new Response("Not found", { status: 404 });
+        const filePath = path.resolve(coverPath);
+        const stat = await fs.stat(filePath);
+        if (!stat.isFile()) return new Response("Not found", { status: 404 });
+        const mimeType = {
+          ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
+          ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".avif": "image/avif"
+        }[path.extname(filePath).toLowerCase()] || "image/jpeg";
+        return new Response(await fs.readFile(filePath), {
+          headers: { "content-type": mimeType, "access-control-allow-origin": "*" }
+        });
+      }
+      if (url.hostname !== "track" || !track.path) return new Response("Not found", { status: 404 });
       const filePath = path.resolve(track.path);
       const stat = await fs.stat(filePath);
       if (!stat.isFile()) return new Response("Not found", { status: 404 });
@@ -578,6 +616,14 @@ async function verifyVuePreviewRenderer(win) {
         await waitFor(() => Boolean(document.querySelector('.kairos-topbar')) && Boolean(document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.querySelector('main')) && Boolean(window.kairosDesktop?.appState?.get), 'initial Calendar shell');
         const initialFrame = document.querySelector('iframe.vue-legacy-frame');
         if (initialFrame?.contentDocument?.body?.dataset?.page !== 'calendar') throw new Error('Vue smoke did not begin on Calendar');
+        await waitFor(() => Boolean(document.querySelector('#musicPlaylistToggle')) && Boolean(document.querySelector('#musicPlaylistPanel')), 'shared player queue controls');
+        document.querySelector('#musicPlaylistToggle')?.click();
+        await waitFor(() => {
+          const queuePanel = document.querySelector('#musicPlaylistPanel');
+          return queuePanel instanceof HTMLElement && !queuePanel.hidden && getComputedStyle(queuePanel).display !== 'none';
+        }, 'Calendar player queue open');
+        document.querySelector('#musicPlaylistClose')?.click();
+        await waitFor(() => document.querySelector('#musicPlaylistPanel')?.hidden === true, 'Calendar player queue close');
 
         document.querySelector('.kairos-create')?.click();
         await waitFor(() => Boolean(document.querySelector('iframe.vue-legacy-schedule-dialog-host')?.contentDocument?.querySelector('#scheduleFeatureDialog[open]')), 'Calendar Create New dialog');
@@ -617,7 +663,7 @@ async function verifyVuePreviewRenderer(win) {
 
         await changeRoute('calendar', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'calendar');
         const state = await window.kairosDesktop.appState.get();
-        resolve({ ok: true, title: document.title, bridge: 'Electron interface ready', checks: { calendar: true, createNew: true, musicSourceDocument: true, sharedPlayer: true, schedule: true, habits: true, settingsOriginalDom: true, settingsTabs: true, neteaseSettings: true, neteaseSettingsIcon: true, settingsClose: true }, schedules: (state.schedules || []).length, habits: (state.habits || []).length });
+        resolve({ ok: true, title: document.title, bridge: 'Electron interface ready', checks: { calendar: true, calendarQueue: true, createNew: true, musicSourceDocument: true, sharedPlayer: true, schedule: true, habits: true, settingsOriginalDom: true, settingsTabs: true, neteaseSettings: true, neteaseSettingsIcon: true, settingsClose: true }, schedules: (state.schedules || []).length, habits: (state.habits || []).length });
       } catch (error) {
         reject(error);
       }
@@ -782,7 +828,15 @@ function updateAiChatFollowTarget() {
     const nextX = Math.round(current.x + (aiChatTargetBounds.x - current.x) * 0.32);
     const nextY = Math.round(current.y + (aiChatTargetBounds.y - current.y) * 0.32);
     const closeEnough = Math.abs(nextX - aiChatTargetBounds.x) <= 1 && Math.abs(nextY - aiChatTargetBounds.y) <= 1;
-    aiChatWindow.setPosition(closeEnough ? aiChatTargetBounds.x : nextX, closeEnough ? aiChatTargetBounds.y : nextY);
+    // Reassert the immutable overlay size while following the pet. On Windows
+    // a transparent BrowserWindow can otherwise drift in content size while
+    // moving between regions with different display scale factors.
+    aiChatWindow.setBounds({
+      x: closeEnough ? aiChatTargetBounds.x : nextX,
+      y: closeEnough ? aiChatTargetBounds.y : nextY,
+      width: AI_CHAT_PANEL_SIZE.width + AI_CHAT_TRANSPARENT_GUTTER * 2,
+      height: AI_CHAT_PANEL_SIZE.height + AI_CHAT_TRANSPARENT_GUTTER * 2
+    }, false);
     if (closeEnough) stopAiChatFollow();
   }, 16);
 }
@@ -820,10 +874,14 @@ function queuePetMove(dx, dy) {
 }
 function createAiChatWindow() {
   if (aiChatWindow && !aiChatWindow.isDestroyed()) return aiChatWindow;
+  const fixedWidth = AI_CHAT_PANEL_SIZE.width + AI_CHAT_TRANSPARENT_GUTTER * 2;
+  const fixedHeight = AI_CHAT_PANEL_SIZE.height + AI_CHAT_TRANSPARENT_GUTTER * 2;
   aiChatWindow = new BrowserWindow({
     ...getAiChatBounds(),
-    minWidth: 360,
-    minHeight: 480,
+    minWidth: fixedWidth,
+    maxWidth: fixedWidth,
+    minHeight: fixedHeight,
+    maxHeight: fixedHeight,
     ...OVERLAY_WINDOW_OPTIONS,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -881,6 +939,7 @@ async function createWindow() {
         console.log(`Kairos smoke test loaded ${rendererMode} renderer. ${JSON.stringify(result.checks || result.bridge)}`);
         app.exit(0);
       } catch (error) {
+        await writeSmokeResult({ ok: false, error: error?.message || String(error) });
         console.error(`Kairos smoke test failed renderer checks: ${error?.message || error}`);
         app.exit(1);
       }
@@ -936,6 +995,11 @@ async function createPetWindow() {
     });
     petWindow.on("blur", () => petWindow?.webContents.send("pet:blur"));
     await petWindow.loadFile(path.join(root, "app", "pages", "pet", "index.html"));
+    // The pet is a transparent standalone document, so it does not share the
+    // shell's theme runtime. Apply the same named theme after its document is
+    // ready while preserving the transparent window around the illustration.
+    await petWindow.webContents.executeJavaScript("document.documentElement.dataset.kairosTheme = 'claude-plus';", true);
+    await petWindow.webContents.insertCSS(await fs.readFile(path.join(root, "app", "themes", "claude-plus.css"), "utf8"));
     return petWindow;
   } catch (error) {
     if (candidate && !candidate.isDestroyed()) candidate.destroy();

@@ -11,6 +11,10 @@ declare global {
       formatDate: (value: number | Date, options?: Intl.DateTimeFormatOptions) => string;
       formatTime: (value: string, options?: Intl.DateTimeFormatOptions) => string;
     };
+    KairosThemes?: {
+      applyTheme: (theme?: string) => string;
+      getTheme: () => string;
+    };
   }
 }
 
@@ -30,6 +34,10 @@ export function applyLocale(preference?: string) {
 
 export function applyTimeFormat(preference?: string) {
   return window.KairosI18n?.setTimeFormat(preference) || "system";
+}
+
+export function applyTheme(theme?: string) {
+  return window.KairosThemes?.applyTheme(theme) || "claude-plus";
 }
 
 export function formatDate(value: number | Date, options: Intl.DateTimeFormatOptions = {}) {

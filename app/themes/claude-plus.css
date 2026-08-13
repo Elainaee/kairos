@@ -1,0 +1,249 @@
+/*
+ * Claude + is Kairos's initial named theme. Its tokens preserve the existing
+ * palette, based on https://tweakcn.com/themes/cmdght103000n04lh3e2ae93r.
+ * New themes should override this same semantic token set.
+ */
+:root[data-kairos-theme="claude-plus"] {
+  --background: oklch(.9818 .0054 95.0986);
+  --foreground: oklch(.3438 .0269 95.7226);
+  --card: oklch(.9665 .0067 97.3521);
+  --card-foreground: oklch(.1908 .002 106.5859);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(.2671 .0196 98.939);
+  --primary: oklch(.6171 .1375 39.0427);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(.9245 .0138 92.9892);
+  --secondary-foreground: oklch(.4334 .0177 98.6048);
+  --muted: oklch(.9341 .0153 90.239);
+  --muted-foreground: #676556;
+  --accent: oklch(.9245 .0138 92.9892);
+  --accent-foreground: oklch(.2671 .0196 98.939);
+  --destructive: oklch(.1908 .002 106.5859);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(.8847 .0069 97.3627);
+  --input: oklch(.7621 .0156 98.3528);
+  --ring: oklch(.6171 .1375 39.0427);
+  --chart-1: oklch(.5583 .1276 42.9956);
+  --chart-2: oklch(.6898 .1581 290.4107);
+  --chart-3: oklch(.8816 .0276 93.128);
+  --chart-4: oklch(.8822 .0403 298.1792);
+  --chart-5: oklch(.5608 .1348 42.0584);
+  --font-sans: Outfit, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --radius: 1rem;
+  --shadow-sm: 0 1px 3px 0 hsl(0 0% 0%/.1), 0 1px 2px -1px hsl(0 0% 0%/.1);
+  --shadow-md: 0 1px 3px 0 hsl(0 0% 0%/.1), 0 2px 4px -1px hsl(0 0% 0%/.1);
+  --shadow-lg: 0 1px 3px 0 hsl(0 0% 0%/.1), 0 4px 6px -1px hsl(0 0% 0%/.1);
+  --habit-paper: var(--popover);
+  --habit-canvas: var(--background);
+  --habit-wash: var(--secondary);
+  --habit-ink: var(--foreground);
+  --habit-muted: var(--muted-foreground);
+  --habit-line: var(--border);
+  --habit-accent: var(--primary);
+  --habit-deep: var(--primary);
+  --habit-teal: var(--chart-2);
+  --surface: var(--background);
+  --surface-raised: var(--popover);
+  --surface-subtle: var(--card);
+  --surface-hover: var(--accent);
+  --text-strong: var(--popover-foreground);
+  --text-muted: var(--muted-foreground);
+  --status-success: oklch(.51 .10 145);
+  --status-warning: oklch(.66 .13 70);
+  --status-danger: oklch(.56 .16 28);
+  --status-info: oklch(.56 .12 245);
+}
+
+/*
+ * Component coverage layer
+ * ------------------------
+ * Legacy screens still contain original palette literals.  This stylesheet is
+ * loaded after feature CSS (and injected last in legacy documents), so every
+ * shared surface resolves through semantic theme tokens.  A future named
+ * theme only needs to replace these tokens and retain this component map.
+ */
+:root[data-kairos-theme="claude-plus"],
+:root[data-kairos-theme="claude-plus"] body {
+  background: var(--surface) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] body.kairos-calendar-background-active::before {
+  filter: brightness(var(--kairos-calendar-background-brightness, 100%)) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(input, select, textarea) {
+  background: var(--surface-raised) !important;
+  border-color: var(--input) !important;
+  color: var(--text-strong) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(input, select, textarea):focus {
+  border-color: var(--ring) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 16%, transparent) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-topbar, #musicPlayer) {
+  background: color-mix(in oklch, var(--surface) 92%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-brand, .kairos-nav a, .kairos-icon-button, .music-player-title, .music-player-artist) {
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-nav a.active, .kairos-nav a:hover, .kairos-brand-mark, .kairos-create, .primary-btn, .schedule-primary, .habit-primary, .composer .send) {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+/* Calendar, its embedded rail, and fullscreen surface. */
+:root[data-kairos-theme="claude-plus"] :is(.kairos-calendar-glass, .calendar-fullscreen-fallback>.kairos-calendar-glass.calendar-is-fullscreen) {
+  background: color-mix(in oklch, var(--surface) 40%, transparent) !important;
+  border-color: color-mix(in oklch, var(--border) 76%, transparent) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+:root[data-kairos-theme="claude-plus"] .kairos-calendar-glass::after,
+:root[data-kairos-theme="claude-plus"] .calendar-fullscreen-fallback>.kairos-calendar-glass.calendar-is-fullscreen::after {
+  background: linear-gradient(135deg, color-mix(in oklch, var(--surface) 44%, transparent), color-mix(in oklch, var(--card) 32%, transparent)) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-calendar-glass>.calendar-grid, .kairos-calendar-glass>.calendar-grid>div:not(.day-cell), .kairos-calendar-glass .day-cell:not(.calendar-day-selected)) {
+  background: color-mix(in oklch, var(--surface-raised) 72%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-calendar-glass .day-cell:hover, .calendar-grid .day-cell.calendar-drop-target) {
+  background: var(--surface-hover) !important;
+}
+:root[data-kairos-theme="claude-plus"] .kairos-calendar-glass .day-cell.calendar-day-selected,
+:root[data-kairos-theme="claude-plus"] .kairos-calendar-glass .day-cell.calendar-day-selected:hover {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] .kairos-calendar-glass .day-cell.calendar-day-selected :is(.font-label-sm, .font-label-sm strong, .font-label-sm em, .calendar-holiday) {
+  color: var(--primary-foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.habit-payments-card, .habit-table-frame, .habit-list-heading, .habit-animated-list, .habit-animated-item, .calendar-day-agenda) {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.habit-payments-header p, .habit-payments-table small, .habit-payments-footer, .habit-animated-copy small, .calendar-schedule-chip) { color: var(--text-muted) !important; }
+
+/* Settings: dialog, all sections, data rows, cards, controls, and overlays. */
+:root[data-kairos-theme="claude-plus"] :is(.kairos-settings-dialog, .kairos-settings-sidebar, .kairos-settings-content, .kairos-settings-panel, .kairos-settings-group, .kairos-ai-card, .kairos-settings-confirm>div, .kairos-permission-card, .kairos-stop-preview) {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-settings-confirm, .vue-settings-backdrop) { background: color-mix(in oklch, var(--foreground) 28%, transparent) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-settings-panel h2, .kairos-settings-panel h3, .kairos-settings-panel strong, .kairos-setting-label, .kairos-credential-mask, .kairos-data-summary strong) { color: var(--text-strong) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-settings-note, .kairos-setting-copy small, .kairos-settings-section-header p, .kairos-netease-account-copy span, .kairos-key-utility output, .kairos-credential-row time) { color: var(--text-muted) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-select-wrap, .kairos-data-action-button, .kairos-netease-account button, .kairos-netease-tools button, .kairos-data-summary button, .kairos-calendar-background-actions button, .kairos-background-import-card, .kairos-background-card-name-input) {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.kairos-select-wrap:hover, .kairos-data-action-button:hover, .kairos-netease-account button:hover, .kairos-netease-tools button:hover, .kairos-data-summary button:hover, .kairos-calendar-background-actions button:hover, .kairos-background-import-card:hover) { background: var(--surface-hover) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-switch i, .kairos-elastic-range-track, .kairos-background-card-name:hover) { background: var(--muted) !important; border-color: var(--border) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-switch input:checked+i, .kairos-elastic-range-track i, .kairos-elastic-range-track::after) { background: var(--primary) !important; border-color: var(--primary) !important; }
+:root[data-kairos-theme="claude-plus"] .kairos-background-card.is-selected .kairos-background-card-image { border-color: var(--primary) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-danger-row, .kairos-settings-confirm footer [data-confirm-action].is-danger) { background: color-mix(in oklch, var(--status-danger) 10%, var(--surface-raised)) !important; border-color: color-mix(in oklch, var(--status-danger) 35%, var(--border)) !important; }
+
+/* Habits. */
+:root[data-kairos-theme="claude-plus"] :is(.real-habit-card, .habit-momentum, .habit-heatmaps article, .habit-editor, .habit-momentum dl div, .habit-empty) {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.habit-card-copy p, .habit-momentum dt, .habit-momentum small, .habit-heatmaps article header small, .habit-empty) { color: var(--text-muted) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.habit-card-icon, .habit-heatmaps article header>.material-symbols-outlined, .habit-momentum>span) { background: var(--secondary) !important; color: var(--primary) !important; }
+:root[data-kairos-theme="claude-plus"] .heat-cell:not(.done) { background: color-mix(in oklch, var(--muted) 82%, transparent) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.habit-check-button.done, .heat-cell.done) { background: var(--primary) !important; border-color: var(--primary) !important; color: var(--primary-foreground) !important; }
+
+/* Schedule overview, native dialog, and legacy schedule form. */
+:root[data-kairos-theme="claude-plus"] :is(.schedule-view, .schedule-native-dialog, .schedule-dialog) {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text-strong) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.schedule-card, .schedule-workspace, .schedule-range-popover, .schedule-filter-menu, .schedule-stack-surface, .schedule-magic-bento) {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  color: var(--text-strong) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.schedule-toolbar, .schedule-tabs, .schedule-workspace th, .schedule-workspace tbody tr:hover, .schedule-range-popover header button, .schedule-range-days button:hover, .schedule-range-days button.in-range, .schedule-field.time input:disabled) { background: var(--muted) !important; color: var(--foreground) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.schedule-card-label, .schedule-card-detail small, .schedule-head p, .schedule-tabs button:not(.active), .schedule-tabs small, .schedule-workspace th, .schedule-title small, .schedule-more, .schedule-field, .schedule-footer, .schedule-empty, .schedule-range-week, .schedule-meta) {
+  color: var(--text-muted) !important;
+  opacity: 1 !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(.schedule-tabs button.active, .schedule-tools input, .schedule-tools select, .schedule-filter-button, .schedule-pager button, .schedule-form-head button, .schedule-field input, .schedule-field select, .schedule-field textarea, .schedule-range-trigger) { background: var(--surface-raised) !important; border-color: var(--input) !important; color: var(--text-strong) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.schedule-status-overdue, .schedule-danger) { color: var(--status-danger) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.schedule-status-done, .schedule-status-done .task-status-label) { color: var(--status-success) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.schedule-head h1, .schedule-card strong, .schedule-card-detail, .schedule-title strong, .schedule-workspace td) { color: var(--text-strong) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.schedule-card-trend, .schedule-tabs button.active, .schedule-filter-button.active, .schedule-filter-menu button:hover, .schedule-filter-menu button[aria-checked="true"]) { color: var(--primary) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.schedule-status, .schedule-type, .schedule-card-trend) { background: var(--surface-subtle) !important; border-color: var(--border) !important; }
+
+/* The original embedded Schedule page used --muted for copy. In the named
+ * theme token set --muted is a surface colour, so map the original text nodes
+ * to the semantic text token without changing the source page's DOM. */
+:root[data-kairos-theme="claude-plus"] body[data-page="schedule"] :is(.headline p, .card .label, .card-footer span, .tab:not(.active), th, .task small, .more, .table-footer) {
+  color: var(--text-muted) !important;
+  opacity: 1 !important;
+}
+:root[data-kairos-theme="claude-plus"] body[data-page="schedule"] .card-footer {
+  color: var(--text-strong) !important;
+}
+
+/* Reminders, assistant, player, queues, and all transient panels. */
+:root[data-kairos-theme="claude-plus"] :is(.kairos-reminder-panel, .kairos-reminder-item, .kairos-reminder-toast, .ai-attachment-chip, .ai-schedule-card, .ai-schedule-warning, .music-playlist-panel, .music-queue-drag-card, .music-playlist-empty, .music-queue-section) {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] :is(#aiPanel, .ai-chat-header, .ai-chat-composer, .ai-attachment-tray) {
+  background: color-mix(in oklch, var(--surface-subtle) 94%, var(--surface)) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+:root[data-kairos-theme="claude-plus"] #aiMessages { background: var(--surface-subtle) !important; }
+:root[data-kairos-theme="claude-plus"] .ai-message-received .ai-message-bubble { background: var(--secondary) !important; color: var(--secondary-foreground) !important; }
+:root[data-kairos-theme="claude-plus"] .ai-message-received .ai-message-bubble::before { background: var(--secondary) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-reminder-head, .kairos-reminder-empty, .ai-message-meta, .ai-message-status, .ai-chat-date, .ai-thinking-label, .music-track-subtitle, .music-player-artist, .music-queue-drag-artist, .music-queue-state) { color: var(--text-muted) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.ai-message-sent .ai-message-bubble, .ai-chat-composer .send, #musicToggle) { background: var(--primary) !important; color: var(--primary-foreground) !important; border-color: var(--primary) !important; }
+:root[data-kairos-theme="claude-plus"] .music-queue-play-button { color: var(--primary-foreground) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.music-like-button, .music-track-remove, .music-queue-close, #musicPrevious, #musicNext, #musicMode) { color: var(--foreground) !important; }
+
+/* Embedded static documents contain Tailwind utility colours.  Normalize the
+   recurrent paper, text, and border utilities without overriding semantic
+   status and schedule chips. */
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded :is(.bg-white, .bg-stone-50, .bg-stone-100, .bg-\[\#f9f7f0\], .bg-\[\#fbf9f2\]) { background: var(--surface-raised) !important; }
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded :is(.text-stone-900, .text-stone-800, .text-\[\#3d3b2e\], .text-\[\#1b1c18\]) { color: var(--foreground) !important; }
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded :is(.text-stone-500, .text-stone-600, .text-\[\#676556\], .text-\[\#6f6a5f\]) { color: var(--text-muted) !important; }
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded :is(.border-stone-100, .border-stone-200, .border-\[\#ded8cf\]) { border-color: var(--border) !important; }
+
+/* The desktop pet keeps a transparent window, while its speech and menu
+   surfaces still follow the selected application theme. */
+:root[data-kairos-theme="claude-plus"] body.chibi-theme :is(#bubble, #ctx-menu) {
+  background: color-mix(in oklch, var(--surface-raised) 96%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+:root[data-kairos-theme="claude-plus"] body.chibi-theme #bubble::after { border-top-color: var(--border) !important; }
+:root[data-kairos-theme="claude-plus"] body.chibi-theme #ctx-menu div:hover { background: var(--surface-hover) !important; color: var(--foreground) !important; }
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded,
+:root[data-kairos-theme="claude-plus"].kairos-embedded-root { background: transparent !important; }
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded[data-page="calendar"] .kairos-calendar-glass::before,
+:root[data-kairos-theme="claude-plus"] body.kairos-embedded[data-page="calendar"]::before { content: none !important; display: none !important; }
+/* The pet window itself must remain click-through transparent. */
+:root[data-kairos-theme="claude-plus"].pet-window-mode,
+:root[data-kairos-theme="claude-plus"].pet-window-mode body.chibi-theme {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+:root[data-kairos-theme="claude-plus"].ai-window-mode,
+:root[data-kairos-theme="claude-plus"].ai-window-mode body {
+  background: transparent !important;
+  background-color: transparent !important;
+}

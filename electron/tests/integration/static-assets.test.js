@@ -81,6 +81,7 @@ test("embedded music pages rely on the shell player instance", async () => {
   );
   assert.match(appShell, /document\.body\.classList\.toggle\("kairos-secondary-view", view !== "calendar"\)/, "Vue should mirror the original secondary-route body class");
   assert.match(appShell, /document\.body\.classList\.toggle\("kairos-music-view", view === "music"\)/, "Vue should mirror the original Music-route body class");
+  assert.match(appShell, /document\.body\.dataset\.kairosVuePage = view/, "Vue should expose one authoritative current page for the shared player");
   assert.match(appShell, /new CustomEvent\("kairos:player-route-layout", \{ detail: \{ view \} \}\)/, "Vue should notify the original player about route layout changes");
   assert.match(appShell, /window\.addEventListener\("kairos:music-command", handleMusicCommand\)/, "Vue should forward explicit Music commands through the shared original controller");
   assert.match(musicStore, /async function apply\(command: unknown\)[\s\S]*?KairosMusicPlayer[\s\S]*?applyRefresh/, "the Vue store should send commands back to the original player without owning audio");
@@ -457,6 +458,8 @@ test("companion overlays do not retain an exposed transparent canvas", async () 
   assert.doesNotMatch(main, /\.setShape\(|function roundedWindowShape\(/, "overlay UI should never be approximated with a jagged native window region");
   assert.doesNotMatch(main, /setBackgroundMaterial|setAccentColor|setBackgroundColor/, "overlay windows should not mix DWM material APIs into Electron's layered transparency path");
   assert.match(main, /ipcMain\.on\("ai-window:set-mouse-passthrough"[\s\S]*?aiChatWindow\.setIgnoreMouseEvents/, "transparent chat corners should use hit testing instead of native clipping");
+  assert.match(main, /minWidth: fixedWidth,[\s\S]*?maxWidth: fixedWidth,[\s\S]*?minHeight: fixedHeight,[\s\S]*?maxHeight: fixedHeight/, "the companion chat should keep one immutable native size");
+  assert.match(main, /updateAiChatFollowTarget\(\)[\s\S]*?aiChatWindow\.setBounds\(\{[\s\S]*?width: AI_CHAT_PANEL_SIZE\.width \+ AI_CHAT_TRANSPARENT_GUTTER \* 2,[\s\S]*?height: AI_CHAT_PANEL_SIZE\.height \+ AI_CHAT_TRANSPARENT_GUTTER \* 2/, "following the pet should move the chat without accumulating width or height drift");
   assert.match(main, /petWindow\.once\("ready-to-show", \(\) => \{[\s\S]*?if \(petVisible && \(!overlayVisualTest \|\| overlayVisualTarget !== "chat"\)\) showPetWindow\(\)/, "the pet should only be revealed after its renderer has painted");
   assert.match(main, /if \(candidate && !candidate\.isDestroyed\(\)\) candidate\.destroy\(\)/, "failed pet construction should not leave an orphaned hidden native window");
   assert.match(main, /ipcMain\.handle\("pet:click", \(\) => \{ resizePetWindow\(\);/, "opening the chat should restore the pet's normal bounds");
@@ -519,12 +522,50 @@ test("settings do not expose a global habit backfill default", async () => {
 test("time format preference is applied in the shell and refreshed in legacy calendar views", async () => {
   const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
   const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main/index.js"), "utf8");
   const scheduleScript = await fs.readFile(path.join(root, "app/features/calendar/schedule-feature.js"), "utf8");
 
   assert.match(settingsScript, /setTimeFormat\?\.\(state\.general\.timeFormat\)/, "saving or loading settings should apply the persisted time format");
   assert.match(shell, /message\.state\?\.settings[\s\S]*?setTimeFormat\?\.\(settings\?\.general\?\.timeFormat\)/, "embedded pages should receive the time format through state synchronization");
   assert.match(scheduleScript, /displayTimeForDate=[\s\S]*?formatClock/, "the calendar agenda should format clock labels without changing schedule values");
   assert.match(scheduleScript, /kairos:time-format-changed[\s\S]*?renderToday\(\)/, "the visible calendar agenda should refresh when the preference changes");
+});
+
+test("the current Claude + palette is a named, persisted theme", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
+  const themeCore = await fs.readFile(path.join(root, "app/themes/theme-core.js"), "utf8");
+  const themeCss = await fs.readFile(path.join(root, "app/themes/claude-plus.css"), "utf8");
+  const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
+  const viteConfig = await fs.readFile(path.join(root, "renderer/vite.config.ts"), "utf8");
+  const aiChatPage = await fs.readFile(path.join(root, "app/pages/ai-chat/index.html"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main/index.js"), "utf8");
+
+  assert.match(settingsScript, /appearance: \{ theme: 'claude-plus'/, "new settings should default to the named current theme");
+  assert.match(settingsScript, /theme: \[\['claude-plus', 'Claude \+'\]\]/, "settings should expose the current palette as Claude +");
+  assert.match(settingsScript, /KairosThemes\?\.applyTheme\?\.\(state\.appearance\.theme\)/, "persisted settings should apply the selected theme");
+  assert.match(settingsScript, /colorMode: _retiredColorMode/, "legacy colour-mode state should be discarded during settings migration");
+  assert.match(themeCore, /const DEFAULT_THEME = 'claude-plus'/, "theme core should provide a stable default");
+  assert.match(themeCore, /dataset\.kairosThemeStylesheet/, "theme core should load the selected theme stylesheet for legacy pages");
+  assert.match(themeCss, /data-kairos-theme="claude-plus"[\s\S]*?--primary: oklch\(.6171 .1375 39.0427\)/, "Claude + should own the existing semantic palette tokens");
+  assert.match(themeCss, /Component coverage layer/, "Claude + should include a component-level coverage layer");
+  for (const selector of ["kairos-settings-dialog", "kairos-calendar-glass", "real-habit-card", "schedule-view", "kairos-reminder-panel", "ai-chat-header", "music-playlist-panel", "body.chibi-theme"]) {
+    assert.match(themeCss, new RegExp(selector), `Claude + should map ${selector} through theme tokens`);
+  }
+  assert.match(themeCss, /pet-window-mode[\s\S]*?background: transparent/, "the pet window root should remain transparent");
+  assert.match(themeCss, /ai-window-mode[\s\S]*?background: transparent/, "the standalone AI window root should not paint a white outer strip");
+  assert.match(themeCss, /:is\(#aiPanel, \.ai-chat-header, \.ai-chat-composer, \.ai-attachment-tray\)[\s\S]*?surface-subtle/, "the assistant chrome should retain the warm themed surface instead of becoming plain white");
+  assert.match(themeCss, /\.ai-message-received \.ai-message-bubble \{ background: var\(--secondary\)/, "received assistant messages should retain their distinct themed bubble");
+  assert.match(themeCss, /body\.kairos-calendar-background-active::before[\s\S]*?filter: brightness/, "calendar backgrounds should avoid the unstable live blur filter");
+  assert.doesNotMatch(themeCss, /kairos-background-card\.is-selected \.kairos-background-card-image\) \{ background:/, "selecting a background card must not replace its preview image with a solid theme colour");
+  assert.match(themeCss, /\.heat-cell:not\(\.done\)[\s\S]*?\.heat-cell\.done/, "habit heatmaps should keep distinct incomplete and completed colours");
+  assert.match(themeCss, /day-cell\.calendar-day-selected[\s\S]*?background: var\(--primary\)[\s\S]*?color: var\(--primary-foreground\)/, "calendar selected dates should use a coordinated background and foreground pair");
+  assert.match(themeCss, /body\[data-page="schedule"\][\s\S]*?color: var\(--text-muted\)/, "the embedded Schedule page should map its legacy muted copy to the theme text token instead of the theme surface token");
+  assert.doesNotMatch(themeCss, /data-kairos-color-mode="dark"/, "Claude + should not contain dark-mode overrides");
+  assert.match(shell, /KairosThemes\?\.applyTheme\?\.\(settings\?\.appearance\?\.theme\)/, "legacy shell pages should apply synchronized theme settings");
+  assert.match(viteConfig, /server\.middlewares\.use\("\/themes"/, "the Vue development server should serve theme runtime assets");
+  assert.match(viteConfig, /server\.middlewares\.use\("\/legacy\/themes"/, "embedded legacy pages should resolve the theme runtime in development");
+  assert.match(aiChatPage, /\.\.\/\.\.\/themes\/theme-core\.js/, "the standalone AI window should load the current theme");
+  assert.match(main, /petWindow\.webContents\.insertCSS[\s\S]*?claude-plus\.css/, "the standalone desktop pet should receive the current theme");
 });
 
 test("settings can reduce motion across shell and embedded pages", async () => {
@@ -1047,6 +1088,16 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
     vueIndex,
     /media-src 'self' file: http: https: blob: kairos-media:/,
     "the Vue shell CSP must permit NetEase's HTTP media URLs as well as HTTPS and local media"
+  );
+  assert.match(
+    vueIndex,
+    /img-src 'self' data: https: kairos-background: kairos-media:/,
+    "the Vue shell CSP must permit Electron-owned local music cover URLs"
+  );
+  assert.match(
+    playerScript,
+    /coverUrlCandidates = track =>[\s\S]*?track\.coverAssetId[\s\S]*?kairos-media:\/\/cover\//,
+    "Vue local cover art should use the Electron-owned media protocol"
   );
   assert.match(
     appShell,
@@ -1691,6 +1742,8 @@ test("NetEase history row menu follows history layout", async () => {
 test("music controls suppress global hover backgrounds", async () => {
   const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
   const playerCss = await fs.readFile(path.join(root, "app/shell/player/music-player.css"), "utf8");
+  const playerScript = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
+  const themeCss = await fs.readFile(path.join(root, "app/shared/styles/tweakcn-theme.css"), "utf8");
 
   assert.match(
     musicHtml,
@@ -1719,8 +1772,43 @@ test("music controls suppress global hover backgrounds", async () => {
   );
   assert.match(
     playerCss,
-    /#musicPlayer \.music-playlist-panel header button:hover,[\s\S]*?#musicPlayer \.music-track-remove:focus-visible \{[\s\S]*?background-color: transparent !important;[\s\S]*?box-shadow: none !important/,
-    "queue clear and remove buttons should suppress hover background and shadow"
+    /body > \.music-playlist-panel \.music-track-main:hover,[\s\S]*?body > \.music-playlist-panel \.music-track-remove:focus-visible \{[\s\S]*?background-color: transparent !important;[\s\S]*?background-image: none !important;[\s\S]*?box-shadow: none !important/,
+    "body-mounted queue controls should suppress hover background and shadow"
+  );
+  assert.match(
+    playerScript,
+    /class="music-queue-clear" type="button" id="musicClearButton">Clear All<\/button>/,
+    "queue Clear All control should be explicitly excluded from global button hover styling"
+  );
+  assert.match(
+    themeCss,
+    /button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\):not\(\.music-track-main\):not\(\.music-queue-play-button\):not\(\.music-track-remove\):not\(\.music-queue-close\):not\(\.music-queue-clear\)/,
+    "global button hover styling should not paint queue controls"
+  );
+  assert.match(
+    playerCss,
+    /\.music-queue-play-button \{[\s\S]*?background: transparent !important;[\s\S]*?box-shadow: none !important;/,
+    "queue artwork hover should reveal only the play control without tinting or shadowing the cover"
+  );
+  assert.match(
+    playerCss,
+    /\.music-playlist-panel li:not\(\.current\):hover \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none/,
+    "hovering a queued track should not paint a background behind the whole row"
+  );
+  assert.match(
+    playerCss,
+    /body > \.music-playlist-panel \.music-queue-cover:hover > \.music-queue-play-button,[\s\S]*?opacity: 1 !important/,
+    "the queue play control should be revealed by hovering the cover itself"
+  );
+  assert.doesNotMatch(
+    playerCss,
+    /li:hover \.music-queue-cover \.music-queue-play-button/,
+    "hovering queue copy must not trigger the artwork play control"
+  );
+  assert.match(
+    playerScript,
+    /neteaseThumbnailUrl[\s\S]*?param=160y160[\s\S]*?neteaseThumbnailUrl\(secureCoverUrl\)/,
+    "queue artwork should request bounded NetEase thumbnails instead of multi-megabyte originals"
   );
 });
 

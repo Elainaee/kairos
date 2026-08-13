@@ -9,7 +9,7 @@ import ReminderPanel from "./ReminderPanel.vue";
 import ReminderRuntime from "./ReminderRuntime.vue";
 import ToastHost from "./ToastHost.vue";
 import LegacyScheduleDialogHost from "./LegacyScheduleDialogHost.vue";
-import { applyLocale, applyTimeFormat, t } from "../i18n";
+import { applyLocale, applyTheme, applyTimeFormat, t } from "../i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +28,7 @@ let calendarMutationObserver: MutationObserver | undefined;
 let playerAlignmentFrame = 0;
 let playerAlignmentTimers: number[] = [];
 let stopStateChanges: (() => void) | undefined;
+let appearanceSignature = "";
 const links = computed(() => [
   ["calendar", "calendar_today", t("nav.calendar")], ["habits", "repeat", t("nav.habits")],
   ["schedule", "checklist", t("nav.schedule")], ["music", "queue_music", t("nav.music")]
@@ -40,8 +41,6 @@ function numberInRange(value: unknown, fallback: number, minimum: number, maximu
 }
 
 function applyAppearance(settings: any = {}) {
-  applyLocale(settings?.general?.language);
-  applyTimeFormat(settings?.general?.timeFormat);
   const raw = settings?.appearance?.calendarBackground || {};
   const source = raw.source === "custom" ? "custom" : "builtin";
   const candidate = String(raw.id || "default.jpg").normalize("NFC");
@@ -50,12 +49,32 @@ function applyAppearance(settings: any = {}) {
     : "default.jpg";
   const blur = numberInRange(raw.blur, 6, 0, 32);
   const brightness = numberInRange(raw.brightness, 95, 55, 140);
+  const signature = JSON.stringify({
+    theme: settings?.appearance?.theme || "",
+    language: settings?.general?.language || "",
+    timeFormat: settings?.general?.timeFormat || "",
+    reduceMotion: settings?.accessibility?.reduceMotion === true,
+    source, id, blur, brightness
+  });
+  if (signature === appearanceSignature) return;
+  appearanceSignature = signature;
+  applyTheme(settings?.appearance?.theme);
+  applyLocale(settings?.general?.language);
+  applyTimeFormat(settings?.general?.timeFormat);
   const root = document.documentElement;
+  const overlayRgb = brightness < 100 ? "0 0 0" : "255 255 255";
+  const overlayOpacity = Math.abs(brightness - 100) / 100;
   root.classList.add("kairos-calendar-background-enabled");
   root.classList.toggle("kairos-reduce-motion", settings?.accessibility?.reduceMotion === true);
   root.style.setProperty("--kairos-calendar-background-image", `url("kairos-background://${source}/${encodeURIComponent(id)}")`);
   root.style.setProperty("--kairos-calendar-background-blur", `${blur}px`);
   root.style.setProperty("--kairos-calendar-background-brightness", `${brightness}%`);
+  root.style.setProperty("--kairos-calendar-background-overlay-rgb", overlayRgb);
+  root.style.setProperty("--kairos-calendar-background-overlay-opacity", `${overlayOpacity}`);
+  syncWallpaperVisibility();
+}
+
+function syncWallpaperVisibility() {
   document.body.classList.toggle("kairos-calendar-background-active", activePage.value === "calendar");
 }
 
@@ -250,6 +269,7 @@ function handleMusicCommand(event: Event) {
 
 function syncLegacyPlayerRoute() {
   const view = activePage.value;
+  document.body.dataset.kairosVuePage = view;
   document.body.classList.toggle("kairos-secondary-view", view !== "calendar");
   document.body.classList.toggle("kairos-music-view", view === "music");
   window.dispatchEvent(new CustomEvent("kairos:player-route-layout", { detail: { view } }));
@@ -264,6 +284,7 @@ function syncDocumentTitle() {
 }
 
 onMounted(() => {
+  document.body.classList.add("kairos-vue-shell");
   syncDocumentTitle();
   placeIndicator();
   document.fonts?.ready.then(placeIndicator);
@@ -299,10 +320,11 @@ onBeforeUnmount(() => {
   window.removeEventListener("kairos:toast", handleToast);
   window.removeEventListener("kairos:music-state-changed", handleMusicStateChanged);
   window.removeEventListener("kairos:music-command", handleMusicCommand);
-  document.body.classList.remove("kairos-secondary-view", "kairos-music-view");
+  document.body.classList.remove("kairos-secondary-view", "kairos-music-view", "kairos-vue-shell", "kairos-calendar-background-active");
+  delete document.body.dataset.kairosVuePage;
 });
 watch(activePage, () => {
-  document.body.classList.toggle("kairos-calendar-background-active", activePage.value === "calendar");
+  syncWallpaperVisibility();
   syncDocumentTitle();
   placeIndicator();
   syncLegacyPlayerRoute();
@@ -361,6 +383,7 @@ function ensureMusicPlayer() {
 
 <template>
   <div class="vue-shell">
+    <div class="kairos-wallpaper" aria-hidden="true" />
     <header class="kairos-topbar">
       <RouterLink class="kairos-brand kairos-brand-shiny" to="/calendar">
         <span class="kairos-brand-mark kairos-brand-mark-shiny material-symbols-outlined">auto_awesome</span>

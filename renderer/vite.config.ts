@@ -34,7 +34,14 @@ export default defineConfig({
         fs.createReadStream(target).pipe(response);
       };
       server.middlewares.use("/legacy", (request, response, next) => serveAppFile("", request, response, next));
+      // Legacy documents resolve `../../themes` and `../../i18n` relative to
+      // `/legacy/pages/<page>/`.  Expose those paths too; without these
+      // aliases the embedded desktop pages silently miss the theme runtime
+      // and remain light while the Vue shell switches to dark.
+      server.middlewares.use("/legacy/themes", (request, response, next) => serveAppFile("themes", request, response, next));
+      server.middlewares.use("/legacy/i18n", (request, response, next) => serveAppFile("i18n", request, response, next));
       server.middlewares.use("/i18n", (request, response, next) => serveAppFile("i18n", request, response, next));
+      server.middlewares.use("/themes", (request, response, next) => serveAppFile("themes", request, response, next));
     }
   }],
   server: {

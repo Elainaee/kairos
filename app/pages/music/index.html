@@ -7,6 +7,7 @@
 <title>Kairos | Music</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="../../i18n/i18n-core.js"></script>
+<script src="../../themes/theme-core.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=block" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script id="tailwind-config">
@@ -92,7 +93,9 @@ body[data-embedded="true"] .music-root { height: 100vh; }
 .music-sidebar-content {
   flex: 1; display: flex; flex-direction: column; gap: 2px;
   min-height: 0; padding: 8px; overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.music-sidebar-content::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .music-group-label {
   padding: 8px 10px 4px;
   font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -248,7 +251,9 @@ body[data-page="music"] button.music-sidebar-account[aria-expanded="true"]:not(.
   flex: 1; display: block;
   padding: 28px 36px 128px; color: var(--sidebar-muted);
   overflow: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.music-main-body::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .music-placeholder { text-align: center; margin-top: min(22vh, 180px); }
 .music-placeholder h2 { font-size: 20px; font-weight: 650; color: var(--sidebar-fg); margin: 0 0 6px; }
 .music-placeholder p { font-size: 13px; margin: 0; }
