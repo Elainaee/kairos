@@ -4,6 +4,15 @@
 interface Window {
   kairosDesktop?: {
     isDesktop?: boolean;
+    windowControls?: {
+      minimize?(): Promise<boolean>;
+      toggleMaximize?(): Promise<boolean>;
+      isMaximized?(): Promise<boolean>;
+      onMaximizedChanged?(handler: (maximized: boolean) => void): () => void;
+      close?(): Promise<boolean>;
+      closeAction?(action: "tray" | "exit" | "cancel"): Promise<boolean>;
+      onCloseRequested?(handler: () => void): () => void;
+    };
     appState?: {
       get(): Promise<Record<string, unknown>>;
       save(state: Record<string, unknown>): Promise<Record<string, unknown>>;

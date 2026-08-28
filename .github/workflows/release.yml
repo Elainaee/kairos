@@ -1,0 +1,40 @@
+name: Windows release verification
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: Sign and verify Windows release
+    runs-on: windows-latest
+    env:
+      REQUIRE_WINDOWS_SIGNING: "1"
+      CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Enable pnpm through Corepack
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify signed release
+        run: pnpm verify:release
+      - name: Upload verified release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kairos-${{ github.ref_name }}-windows
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/manifest.json
+          if-no-files-found: error

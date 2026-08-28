@@ -26,7 +26,7 @@ export const KAIROS_AGENT_PROMPT = `你是 Kairos，一个温和、诚实的个�
 
 你必须自己判断是否、何时调用工具；不要把工具调用交给用户，也不要根据关键词或固定规则猜测。普通倾诉时优先共情、鼓励与倾听，不调用创建日程工具。需要外部最新信息时调用 web_search；需要了解用户时先调用 search_memories 或 query_kairos_data；用户表达计划、约会、会议、提醒、待办或长期学习意图时，一律创建日程或任务：有日期/时间范围、固定星期或长期学习安排时调用 propose_schedule，只有明确的作业/截止/待办才调用 propose_task。绝不创建学习计划数据。
 
-会话命名：当本会话仍是“新对话”或主题发生明显变化时，调用 set_conversation_title，生成 4～18 个字的简洁中文标题。标题应总结对话主题，不要使用“新对话”“聊天”“求助”等空泛词，也不要逐字复制用户输入。
+{conversationTitleInstruction}
 
 所有 propose_* 工具仅创建“待确认提案”，绝不会直接写入数据。你可以补全合理的缺失信息：没有具体时间时使用全天；“今晚”可推测为 19:00-22:00；“暑假”可按当前年份 7 月 1 日至 8 月 31 日推测。所有推测须写入 notes，最终回复也要明确说明推测与待确认状态。绝不可假装已保存日程。
 
@@ -40,6 +40,25 @@ export const KAIROS_AGENT_PROMPT = `你是 Kairos，一个温和、诚实的个�
 - search_memories_semantic 用于全文探索型查询（不知道精确字段名或时间范围时）。
 - 普通对话中读到的分散事实（如”我喜欢吃辣””我养了一只猫”）才用 remember_memory。
 - 同一事实不要同时写入普通记忆和画像字段；画像字段优先。`;
+
+export const KAIROS_AGENT_PROMPT_EN = `You are Kairos, a gentle, honest personal companion and productivity assistant. The current time is {now}, in the Asia/Shanghai time zone.
+
+Decide yourself whether and when to call tools. Do not delegate tool use to the user, and do not infer it from keywords or fixed rules. For ordinary emotional sharing, lead with empathy, encouragement, and listening; do not create schedules. Use web_search for current external information. To understand the user, first use search_memories or query_kairos_data. When the user expresses an intent to plan, meet, schedule, be reminded, complete a task, or study long term, always create a pending schedule or task: use propose_schedule for a date/time range, a fixed weekday, or a long-term study arrangement; use propose_task only for an explicit assignment, deadline, or to-do. Never create study-plan data.
+
+{conversationTitleInstruction}
+
+Every propose_* tool creates a pending proposal only and never writes data directly. You may fill reasonable missing information: use all-day when no specific time is given; infer “tonight” as 19:00–22:00; infer “summer vacation” as July 1 through August 31 of the current year. Record every inference in notes, and clearly state both the inference and pending-confirmation status in the final reply. Never claim a schedule has already been saved.
+
+Second-stage decisions after browsing: after web_search, read each result's content (the Firecrawl-extracted Markdown body) instead of relying only on the title or snippet. Only content whose contentSource is firecrawl_markdown can establish a specific fact. When summaries conflict with page content, prefer verifiable body text and official sources. If page content is unavailable, state that the evidence is insufficient and do not invent facts. Review whether results contain reliable, future, user-relevant events, deadlines, or time ranges. Call propose_schedule or propose_task only when the user's intent includes “remind me”, “add it to my calendar”, “don't let me miss it”, “help me arrange it”, or the context clearly shows a future item needing follow-up. Do not create a proposal for past events, results without a date/time, background knowledge/news, or questions without planning intent; explain directly why it should not be added. A proposal created from search results must include source_url and source_title, and notes must distinguish source-derived dates/times from your inferences. Browsing answers must include the source URLs returned by the tool.
+
+Layered memory, when memory tools are available:
+- Send structured user attributes through update_user_profile (such as name, occupation, preferences, or relationships). Supply validFrom whenever it can trace when a fact became true (for example, “started last year” → last year's date).
+- To understand the user, prefer get_user_profile for the current profile rather than beginning with search_memories.
+- When the user asks about a historical state such as “that year”, “before”, or “used to”, use query_memory_timeline with a time range.
+- When the user expresses a goal, wish, or to-do, manage it with track_goal or list_goals rather than ordinary memory.
+- Use search_memories_semantic for exploratory full-text queries when the exact field name or time range is unknown.
+- Use remember_memory only for separate facts learned in ordinary conversation (for example, “I like spicy food” or “I have a cat”).
+- Do not store the same fact in both ordinary memory and a profile field; profile fields take precedence.`;
 
 function contentOf(message) {
   if (typeof message?.content === "string") return message.content;
@@ -67,6 +86,16 @@ function matchingMemories(rows, query) {
   const needle = String(query || "").trim().toLowerCase();
   return !needle ? rows : rows.filter(row => `${row.key} ${row.value}`.toLowerCase().includes(needle));
 }
+function agentLanguageInstruction(locale) {
+  return locale === "zh-CN"
+    ? "使用简体中文回复，除非用户明确要求其他语言。"
+    : "Reply in English unless the user explicitly asks for another language.";
+}
+function conversationTitleInstruction(locale) {
+  return locale === "zh-CN"
+    ? "会话命名：当本会话仍是“新对话”或主题发生明显变化时，调用 set_conversation_title，生成 4～18 个字的简洁中文标题。标题应总结对话主题，不要使用“新对话”“聊天”“求助”等空泛词，也不要逐字复制用户输入。"
+    : "Conversation naming: when this conversation is still named ‘New conversation’ or its topic changes materially, call set_conversation_title and create a concise 4–18 word English title. Summarize the topic; do not use vague names such as ‘New conversation’, ‘Chat’, or ‘Help’, and do not copy the user’s wording verbatim.";
+}
 
 const scheduleUpdateSchema = z.object({
   id: z.string().min(1),
@@ -84,7 +113,7 @@ const scheduleUpdateSchema = z.object({
   recurrence: weeklyRecurrenceSchema.optional(),
 });
 
-export async function runKairosAgent({ provider = "openai", apiKey, model, chatModel, messages, conversationTitle = "新对话", store, toolRuntime, appAdapters, searchWeb, ensureExternalSearch, ensureDomainAccess, onToolEvent = () => {}, onSetTitle = async () => {}, replyStyle = "companion", memoryEnabled = true, memoryService = null, signal, now = new Date() }) {
+export async function runKairosAgent({ provider = "openai", apiKey, model, chatModel, messages, conversationTitle = "", store, toolRuntime, appAdapters, searchWeb, ensureExternalSearch, ensureDomainAccess, onToolEvent = () => {}, onSetTitle = async () => {}, replyStyle = "companion", memoryEnabled = true, memoryService = null, signal, now = new Date(), locale = "zh-CN", hour12 = false, t }) {
   if (!apiKey && !chatModel) throw new Error("missing_key");
   const proposals = [];
   const allowDomainRead = ensureDomainAccess || (async domain => {
@@ -182,7 +211,7 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
 
   const setConversationTitle = tool(async ({ title }) => {
     const saved = await onSetTitle(title.trim()); onToolEvent({ type: "conversation_title", title: saved?.title || title.trim() }); return { updated: true, title: saved?.title || title.trim() };
-  }, { name: "set_conversation_title", description: "Set a concise, meaningful Chinese title for the current conversation after understanding its topic. Use this for a new or substantially changed conversation topic.", schema: z.object({ title: z.string().min(4).max(18) }) });
+  }, { name: "set_conversation_title", description: locale === "zh-CN" ? "在理解当前主题后，为本次对话设置简洁且有意义的中文标题。用于新会话或主题发生明显变化时。" : "Set a concise, meaningful English title for the current conversation after understanding its topic. Use this for a new or substantially changed conversation topic.", schema: z.object({ title: z.string().min(4).max(locale === "zh-CN" ? 18 : 120) }) });
   const webSearch = tool(async ({ query, limit }) => {
     try { await ensureExternalSearch(); const result = await searchWeb({ query, limit }); onToolEvent({ type: "search_results", result }); return result; }
     catch (error) { return { error: error?.message || String(error || "web_search_unavailable") }; }
@@ -216,7 +245,7 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
     return { proposed: true, count: items.length, requires_user_confirmation: true };
   }, { name: "propose_delete_schedules", description: "Create one pending confirmation to delete or cancel one or more existing schedules. First query schedules, identify every exact ID matching the user's request, then pass those IDs here. Never delete without confirmation.", schema: z.object({ ids: z.array(z.string().min(1)).min(1).max(100), reason: z.string().max(300).optional() }) });
   const styles = { companion: "Reply with warm companionship: acknowledge feelings first when appropriate, then offer grounded help.", concise: "Reply concisely and action-first. Prefer clear conclusions, short steps, and no unnecessary preamble.", learning: "Reply as a focused learning partner: explain the reasoning clearly, structure the material, and encourage deliberate practice." };
-  const chat = chatModel || createProviderChatModel(provider, { apiKey, model, temperature: 0.35 });
+  const chat = chatModel || createProviderChatModel(provider, { apiKey, model, temperature: 0.35, t });
   const tools = [setConversationTitle, webSearch, queryData, proposeSchedule, proposeTask, proposeUpdateSchedule, proposeDeleteSchedules];
   if (memoryEnabled) {
     tools.unshift(readMemories, rememberMemory, forgetMemory);
@@ -225,7 +254,9 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
   const memoryInstruction = memoryEnabled
     ? "Long-term memory is enabled with layered architecture. Stable user attributes → update_user_profile (with validFrom for past dates); broad recall → search_memories or search_memories_semantic; browsing history → query_memory_timeline; goals → track_goal / list_goals. Use remember_memory only for ad-hoc durable facts that do not fit a profile field."
     : "Long-term memory is disabled. Do not imply that you remember or save anything beyond this conversation.";
-  const agent = createAgent({ model: chat, tools, systemPrompt: `${KAIROS_AGENT_PROMPT.replace("{now}", now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }))}\n${styles[replyStyle] || styles.companion}\n${memoryInstruction}\nCurrent conversation title: ${conversationTitle}\nFor any request to change, move, rename, reschedule, or retype an existing calendar item, first call query_kairos_data for schedules, identify the exact ID, then call propose_update_schedule. For requests to cancel, remove, or delete schedules, first query schedules, identify all exact matching IDs, then call propose_delete_schedules once with those IDs. When the user provides attachment text containing dates, times, meetings, tasks, or schedules, extract every concrete item with model reasoning and create separate pending schedule/task proposals; use attachment provenance in notes. Never create a replacement schedule unless the user explicitly asks for a new one. A weekly recurrence must be encoded as recurrence.frequency='weekly' and recurrence.weekdays (Sunday=0 through Saturday=6), never only as prose in notes or cadence.` });
+  const agentNow = new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", { timeZone: "Asia/Shanghai", dateStyle: "medium", timeStyle: "short", hour12 }).format(now);
+  const basePrompt = locale === "zh-CN" ? KAIROS_AGENT_PROMPT : KAIROS_AGENT_PROMPT_EN;
+  const agent = createAgent({ model: chat, tools, systemPrompt: `${basePrompt.replace("{now}", agentNow).replace("{conversationTitleInstruction}", conversationTitleInstruction(locale))}\n${agentLanguageInstruction(locale)}\n${styles[replyStyle] || styles.companion}\n${memoryInstruction}\n${locale === "zh-CN" ? `当前会话标题：${conversationTitle}` : `Current conversation title: ${conversationTitle}`}\nFor any request to change, move, rename, reschedule, or retype an existing calendar item, first call query_kairos_data for schedules, identify the exact ID, then call propose_update_schedule. For requests to cancel, remove, or delete schedules, first query schedules, identify all exact matching IDs, then call propose_delete_schedules once with those IDs. When the user provides attachment text containing dates, times, meetings, tasks, or schedules, extract every concrete item with model reasoning and create separate pending schedule/task proposals; use attachment provenance in notes. Never create a replacement schedule unless the user explicitly asks for a new one. A weekly recurrence must be encoded as recurrence.frequency='weekly' and recurrence.weekdays (Sunday=0 through Saturday=6), never only as prose in notes or cadence.` });
   let result = null;
   let streamedText = "";
   let usage = null;
@@ -245,7 +276,7 @@ export async function runKairosAgent({ provider = "openai", apiKey, model, chatM
         onToolEvent({ type, tool: payload.name, toolCallId: payload.toolCallId, ...(payload.input !== undefined ? { input: payload.input } : {}), ...(payload.output !== undefined ? { output: payload.output } : {}), ...(payload.error !== undefined ? { error: String(payload.error) } : {}) });
       } else if (mode === "values") result = payload;
     }
-  } catch (error) { throw normalizeProviderError(provider, error); }
+  } catch (error) { throw normalizeProviderError(provider, error, t); }
   const final = [...(result?.messages || [])].reverse().find(isFinalAiMessage);
   const text = contentOf(final).trim() || streamedText.trim();
   return { text, proposals, usage: usage || usageOf(final) };

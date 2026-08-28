@@ -1,92 +1,59 @@
-# Kairos File Structure
+# Kairos 工作区文件结构
 
-Updated: 2026-07-19
+> 盘点时间：2026-08-27。下列内容基于 Git 已跟踪的 151 个文件与当前工作区可见源码；依赖、构建产物和运行时数据按 `.gitignore` 排除。
 
-This document describes source code and project assets. It intentionally does not expand `node_modules/`, `.git/`, or `release/win-unpacked/`.
+```text
+Kairos/
+├── app/                         # 遗留前端与静态资源
+│   ├── assets/                  # 图标、字体、日历背景、桌宠图片、Tailwind 样式
+│   ├── features/                # assistant、calendar、habits、reminders、settings
+│   ├── i18n/                    # 中英文语言包与国际化核心
+│   ├── pages/                   # 日程、日历、习惯、音乐、AI、桌宠页面
+│   ├── shell/                   # 导航壳与音乐播放器
+│   └── shared/styles/           # 共用主题和布局
+├── renderer/                    # Vue 3 + Vite 渲染端
+│   ├── src/
+│   │   ├── components/          # 应用壳、设置、提醒、Toast、对话框
+│   │   ├── music/               # 音乐来源适配
+│   │   ├── router/              # Vue Router 路由
+│   │   ├── stores/              # Pinia 状态库
+│   │   ├── views/               # Shell、日程、习惯、音乐等视图
+│   │   └── styles/              # 全局与日程样式
+│   ├── index.html
+│   ├── tsconfig.json
+│   └── vite.config.ts
+├── electron/                    # Electron 主进程与本地服务
+│   ├── data/
+│   │   ├── app-state/           # 应用状态仓储
+│   │   ├── settings/            # 设置仓储
+│   │   ├── sqlite/              # SQLite 建库、迁移、审计
+│   │   └── assistant-profile.js
+│   ├── main/index.js            # 主进程入口和 IPC 编排
+│   ├── preload/index.cjs        # contextBridge 白名单 API
+│   ├── services/
+│   │   ├── ai/                  # Agent、Provider、上下文、记忆与工具
+│   │   ├── calendar/            # 日历背景服务
+│   │   ├── documents/           # 附件与 PDF/DOCX 解析
+│   │   ├── music/               # 本地曲库与网易云服务
+│   │   └── web/                 # 网页搜索
+│   ├── scripts/                 # 数据审计与发布辅助脚本
+│   └── tests/                   # unit、integration、distribution 测试
+├── scripts/                     # 开发、构建、签名、版本和 i18n 脚本
+├── docs/                        # 文档
+├── references/                  # 参考资料和遗留原型（不参与产品打包）
+├── .github/                     # CI / GitHub 配置（若有）
+├── .env.example                 # 环境变量示例，不含密钥
+├── package.json                 # npm 脚本、依赖、electron-builder 配置
+├── pnpm-lock.yaml               # 锁定依赖版本
+├── pnpm-workspace.yaml          # pnpm 工作区配置
+├── tailwind.config.cjs          # Tailwind 配置
+├── start-kairos.cmd             # Windows 启动入口
+└── start-*.ps1                  # PowerShell 启动入口
+```
 
-## Technology Stack
+## 边界说明
 
-| Area | Technology |
-| --- | --- |
-| Desktop runtime | Electron 36, main process, preload bridge, renderer process |
-| Renderer | Native HTML, CSS, DOM JavaScript, Tailwind CSS build output |
-| Desktop security | `contextIsolation`, sandboxed renderer, narrow preload APIs |
-| Data | JSON primary files, optional `node:sqlite` mirror, migrations and backups |
-| AI | OpenAI SDK, Volcengine Ark Runtime, LangChain, LangGraph, Zod |
-| Music and network | NeteaseCloudMusicApi, Firecrawl, local music metadata parsing |
-| Attachments | `pdfjs-dist`, Mammoth, JSZip |
-| Testing | Node built-in `node:test` |
-| Build and release | pnpm, Electron Builder, asar, Windows NSIS and portable artifacts |
-
-## Root
-
-| Path | Purpose |
-| --- | --- |
-| `app/` | Renderer pages, features, shared UI, and runtime visual assets. |
-| `electron/` | Main-process code, preload API, services, data access, migrations, and tests. |
-| `scripts/` | Local development launcher and environment diagnostics. |
-| `docs/` | Current product, design, release, task, and structure documentation. |
-| `references/` | Historical design/reference material; not packaged into the application. |
-| `release/` | Generated Windows release artifacts and `win-unpacked` verification build. |
-| `package.json` | Scripts, dependencies, Electron entry point, and packaging configuration. |
-| `start-kairos.cmd` / `start-kairos.ps1` | Windows development launchers. |
-
-## Renderer: `app/`
-
-| Path | Purpose |
-| --- | --- |
-| `pages/calendar/index.html` | Main calendar view and desktop shell entry page. |
-| `pages/schedule/index.html` | Standalone schedule page. |
-| `pages/habits/index.html` | Habit check-in page. |
-| `pages/notes/index.html` | Notes and mood page. |
-| `pages/music/index.html` | Local music and NetEase Cloud Music page. |
-| `pages/ai-chat/index.html` | Separate AI chat window. |
-| `pages/pet/index.html` | Separate desktop companion window. |
-| `features/calendar/` | Calendar date core, schedule interactions, date-range styling. |
-| `features/habits/` | Habit data core and habit page interactions. |
-| `features/notes/` | Dated note/mood core and note page interactions. |
-| `features/reminders/` | Reminder rules, reminder behavior, and reminder styling. |
-| `features/settings/` | Settings dialog behavior and styling. |
-| `features/assistant/` | AI chat window behavior and styling. |
-| `shell/navigation/` | Shared navigation shell and embedded-page routing. |
-| `shell/player/` | Shared bottom music player and player styling. |
-| `shared/styles/` | Global theme variables and main calendar layout styles. |
-| `assets/calendar-backgrounds/` | Calendar background images. Add selectable backgrounds here. |
-| `assets/pets/desk-pet.png` | Runtime desktop companion image. |
-| `assets/icons/netease-format.ico` | Windows and NetEase Cloud Music icon. |
-| `assets/fonts/` | Bundled font files and font declarations. |
-| `assets/styles/` | Tailwind input and generated CSS. |
-
-## Desktop Process: `electron/`
-
-| Path | Purpose |
-| --- | --- |
-| `main/index.js` | Electron startup, windows, menus, lifecycle, and IPC registration. |
-| `preload/index.cjs` | Safe `window.kairosDesktop` API exposed to renderer pages. |
-| `services/ai/` | Providers, agent runtime, conversation store, context manager, and tools. |
-| `services/music/` | Local library and NetEase Cloud Music service. |
-| `services/documents/` | Attachment persistence and document parsing. |
-| `services/web/` | External web search service. |
-| `data/app-state/` | App-state schema, repositories, backups, and adapters. |
-| `data/sqlite/` | Optional SQLite mirror and query/index layer. |
-| `data/settings/` | Atomic settings repository with SQLite recovery. |
-| `migrations/` | One-time JSON-to-SQLite migration logic. |
-| `scripts/audit/` | App-state and desktop user-data health audit CLIs. |
-| `scripts/release/` | Release manifest and installer smoke-test scripts. |
-| `tests/unit/` | Core data, date, habit, note, reminder, and settings tests. |
-| `tests/integration/` | AI, services, static renderer contract, and web-search tests. |
-| `tests/distribution/` | Packaged artifact and startup smoke tests. |
-
-## Runtime Data
-
-User data remains outside the repository at `C:\Users\lenovo\AppData\Roaming\Kairos` by default. It contains `app-state.json`, `ai-data.json`, music and settings state, attachments, backups, and the optional `kairos.sqlite` mirror. Refactoring source folders must not change these paths or data formats.
-
-## Commands
-
-| Command | Purpose |
-| --- | --- |
-| `corepack pnpm dev` | Start Kairos from source. |
-| `corepack pnpm check` | Syntax checks and all tests. |
-| `corepack pnpm pack` | Rebuild `release/win-unpacked`. |
-| `corepack pnpm release:manifest` | Refresh release artifact hashes and sizes. |
-| `corepack pnpm verify:dist` | Verify packaged artifacts and startup smoke tests. |
+- `app/` 与 `renderer/` 并存：前者包含逐步迁移中的原生页面，后者是新的 Vue UI。
+- 业务服务与持久化在 `electron/`；渲染进程通过 `electron/preload/index.cjs` 暴露的受限 API 访问。
+- `node_modules/`、`dist/`、`release/`、`userData/`、`.env` 和本地 JSON/SQLite 数据均不应纳入版本控制。
+- 当前工作区存在用户尚未提交的修改与删除项；本文件只说明结构，不将这些状态视为发布基线。

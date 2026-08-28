@@ -247,13 +247,13 @@ test("schedule form warns before saving overlapping timed schedules", async () =
   );
   assert.match(
     scheduleScript,
-    /const conflicts=conflictingSchedules\(data\);if\(conflicts\.length\)\{const ok=await kairosConfirmAlert\(\{title:'Schedule time conflict\?'[\s\S]*?action:'Save Anyway'[\s\S]*?cancel:'Review'[\s\S]*?if\(!ok\)return\}state\.schedules=editing\?state\.schedules\.map/,
-    "saving an overlapping schedule should require explicit confirmation before mutating state"
+    /const conflicts=conflictingSchedules\(data\);if\(conflicts\.length\)\{const ok=await kairosConfirmAlert\(\{title:tr\('schedule\.conflictTitle'[\s\S]*?description:trPlural\('schedule\.conflictDescription'[\s\S]*?action:tr\('schedule\.saveAnyway'[\s\S]*?cancel:tr\('schedule\.reviewConflicts'[\s\S]*?if\(!ok\)return\}state\.schedules=editing\?state\.schedules\.map/,
+    "saving an overlapping schedule should require explicit localized confirmation before mutating state"
   );
   assert.match(
     scheduleScript,
-    /const renderConflictPreview=\(\)=>\{const draft=Object\.fromEntries\(new FormData\(f\)\);draft\.id=editing\|\|'';draft\.all_day=f\.all_day\.checked;const conflicts=conflictingSchedules\(draft\);[\s\S]*?Overlaps with/,
-    "schedule editor should preview overlapping schedules before submit"
+    /const renderConflictPreview=\(\)=>\{const draft=Object\.fromEntries\(new FormData\(f\)\);draft\.id=editing\|\|'';draft\.all_day=f\.all_day\.checked;const conflicts=conflictingSchedules\(draft\);[\s\S]*?tr\('schedule\.conflictPreview'/,
+    "schedule editor should preview overlapping schedules through the shared translation runtime before submit"
   );
   assert.match(scheduleScript, /f\.addEventListener\('input',renderConflictPreview\);f\.addEventListener\('change',renderConflictPreview\)/, "conflict preview should refresh while editing schedule fields");
 });
@@ -283,6 +283,11 @@ test("main window restores and persists desktop bounds", async () => {
   );
   assert.match(
     main,
+    /new BrowserWindow\(\{ \.\.\.savedBounds, minWidth: 900, minHeight: 650, frame: false/,
+    "main BrowserWindow should use the app shell instead of Windows' title bar"
+  );
+  assert.match(
+    main,
     /if \(process\.env\.KAIROS_USER_DATA_DIR\) app\.setPath\("userData", process\.env\.KAIROS_USER_DATA_DIR\);/,
     "packaged smoke tests should be able to verify startup with an isolated userData directory"
   );
@@ -309,12 +314,63 @@ test("main window restores and persists desktop bounds", async () => {
   assert.match(
     main,
     /rendererMode === "vue"[\s\S]*?verifyVuePreviewRenderer\(mainWindow\)[\s\S]*?verifySmokeRenderer\(mainWindow\)[\s\S]*?Kairos smoke test loaded \$\{rendererMode\} renderer/,
-    "smoke mode should verify both the opt-in Vue preview and the default legacy renderer"
+    "smoke mode should verify both the released Vue renderer and the explicit legacy diagnostic renderer"
+  );
+  assert.match(
+    main,
+    /function ensureTray\(\) \{[\s\S]*?new Tray\(appIconPath\)[\s\S]*?tray\.on\("click", \(\) => focusMainWindow\(\)\)[\s\S]*?function minimizeToTray\(\) \{[\s\S]*?mainWindow\.hide\(\)[\s\S]*?function sendToWindowSafely\([\s\S]*?Object has been destroyed[\s\S]*?function requestMainWindowClose\(\) \{[\s\S]*?window:close-requested/,
+    "closing the main window should offer tray minimization while preserving a route to restore or fully exit Kairos"
+  );
+  assert.match(
+    main,
+    /mainWindow\.on\("close", event => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?requestMainWindowClose\(\)/,
+    "both native and custom window close actions should use the close-choice flow"
+  );
+  const closeChoiceDialog = await fs.readFile(path.join(root, "renderer/src/components/CloseChoiceDialog.vue"), "utf8");
+  assert.match(
+    closeChoiceDialog,
+    /vue-close-choice-dialog[\s\S]*?common\.cancel[\s\S]*?tray\.minimizeToTray[\s\S]*?tray\.exitKairos/,
+    "the close decision should be rendered in the Kairos dialog surface instead of a native system prompt"
   );
   assert.match(
     main,
     /async function verifyVuePreviewRenderer\(win\) \{[\s\S]*?document\.querySelector\('\.vue-shell'\)/,
     "Vue smoke verification must check the real Vue shell rather than a stale preview title"
+  );
+  assert.match(
+    main,
+    /async function verifyVuePreviewRenderer\(win\) \{[\s\S]*?electronSystemLocale[\s\S]*?system locale follows Electron[\s\S]*?await saveLanguage\('en'\)[\s\S]*?await saveLanguage\('zh-CN'\)[\s\S]*?Locale smoke draft[\s\S]*?systemLocale: true[\s\S]*?playerSurvivedLocaleChange/,
+    "Vue smoke should prove system locale alignment plus both locales updating an open legacy dialog without resetting its draft or shared player"
+  );
+  assert.match(
+    main,
+    /assertNoHorizontalOverflow[\s\S]*?English Calendar[\s\S]*?Chinese Schedule dialog[\s\S]*?Chinese Music[\s\S]*?Chinese Settings[\s\S]*?localeLayout: true[\s\S]*?settingsLocaleLayout: true/,
+    "Vue smoke should reject horizontal overflow across English and Chinese legacy frames, dialogs, and settings"
+  );
+  assert.match(
+    main,
+    /window\.kairosDesktop\.pet\.hide\(\)[\s\S]*?Calendar desktop pet restore control[\s\S]*?restoreStyle\.position !== 'fixed'[\s\S]*?assertNoHorizontalOverflow\(document, 'Calendar pet restore control'\)[\s\S]*?window\.kairosDesktop\.pet\.show\(\)[\s\S]*?calendarPetRestoreLayout: true/,
+    "Vue smoke should verify that hiding the Calendar desktop pet keeps its restore control fixed and does not add page overflow"
+  );
+  assert.match(
+    main,
+    /const languageControl[\s\S]*?settings English language change[\s\S]*?settings Chinese language change[\s\S]*?settingsLanguageControl: true/,
+    "Vue smoke should exercise the original Settings language selector in both directions"
+  );
+  assert.match(
+    main,
+    /Chinese Calendar player queue localization[\s\S]*?Chinese reminder panel localization[\s\S]*?reminderPanel: true/,
+    "Vue smoke should keep the shared queue and Vue reminder overlay localized after the live locale change"
+  );
+  assert.match(
+    main,
+    /KAIROS_SMOKE_EXPECT_LANGUAGE[\s\S]*?KAIROS_SMOKE_PERSIST_LANGUAGE[\s\S]*?did not restore persisted language preference/,
+    "Vue smoke should support a second isolated launch that verifies the saved language preference"
+  );
+  assert.match(
+    main,
+    /KAIROS_SMOKE_CAPTURE_VISUALS[\s\S]*?async function captureSmokeRenderer[\s\S]*?win\.showInactive\(\)[\s\S]*?async function captureVueRouteVisuals[\s\S]*?calendar[\s\S]*?habits[\s\S]*?schedule[\s\S]*?music[\s\S]*?rendererMode === "vue" && smokeCaptureVisuals/,
+    "Vue smoke should capture every main route only when opt-in visual verification is enabled"
   );
   assert.match(
     main,
@@ -436,6 +492,8 @@ test("desktop pet keeps the restored original illustration and menu copy", async
   assert.match(petPage, /src="\.\.\/\.\.\/assets\/pets\/desk-pet\.png"/, "the companion should keep using the restored original illustration file");
   assert.match(petPage, /😳 与Ta对话/, "the restored context menu should retain its original chat copy");
   assert.match(petPage, /🌸 隐藏桌宠/, "the restored context menu should retain its original hide copy");
+  assert.doesNotMatch(petPage, /(?:KairosI18n|data-i18n)/, "the desktop pet copy must stay Chinese and independent from application locale changes");
+  assert.match(petPage, /我还在呢，放心吧。/, "the desktop pet bubble should retain its Chinese companion copy");
   assert.match(petPage, /#pet-img\.idle\s*\{\s*animation:\s*float/, "the original idle animation should remain available");
 });
 
@@ -473,13 +531,22 @@ test("desktop application menu routes only approved workspace commands", async (
 
   assert.match(main, /import \{[\s\S]*?Menu[\s\S]*?\} from "electron"/, "main process should use Electron's native application menu");
   assert.match(main, /const SHELL_VIEWS = new Set\(\["calendar", "schedule", "habits", "music", "settings"\]\);/, "desktop menu commands should be limited to known workspace views");
-  assert.match(main, /label: "日历", accelerator: "Alt\+1"/, "application menu should expose a calendar shortcut");
-  assert.match(main, /label: "音乐", accelerator: "Alt\+4"/, "application menu should expose a music shortcut");
-  assert.match(main, /label: "设置", accelerator: "CommandOrControl\+,"/, "application menu should expose a settings shortcut");
-  assert.match(main, /label: "打开 AI 对话", accelerator: "CommandOrControl\+Shift\+A"/, "application menu should expose an AI shortcut");
-  assert.match(main, /Menu\.setApplicationMenu\(buildApplicationMenu\(\)\)/, "native menu should be installed when Electron is ready");
+  assert.match(main, /label: nativeT\("nav\.calendar", \{\}, "Calendar"\), accelerator: "Alt\+1"/, "application menu should expose a localized calendar shortcut");
+  assert.match(main, /label: nativeT\("nav\.music", \{\}, "Music"\), accelerator: "Alt\+4"/, "application menu should expose a localized music shortcut");
+  assert.match(main, /label: nativeT\("common\.settings", \{\}, "Settings"\), accelerator: "CommandOrControl\+,"/, "application menu should expose a localized settings shortcut");
+  assert.match(main, /label: nativeT\("electron\.openAssistant", \{\}, "Open AI assistant"\), accelerator: "CommandOrControl\+Shift\+A"/, "application menu should expose a localized AI shortcut");
+  assert.match(main, /Menu\.setApplicationMenu\(null\)/, "native menu should stay hidden so it does not create a second top strip");
   assert.match(preload, /onShellCommand: \(handler\) => \{[\s\S]*?ipcRenderer\.on\("shell:command", listener\)[\s\S]*?removeListener\("shell:command", listener\)/, "preload should expose a disposable shell command listener");
   assert.match(shellScript, /onShellCommand\?\.\(command => \{[\s\S]*?type === 'settings'[\s\S]*?KairosSettingsFeature\?\.open\?\.[\s\S]*?\['calendar', 'schedule', 'habits', 'music'\]\.includes\(type\)/, "shell commands should reuse the settings dialog and route only supported SPA views");
+});
+
+test("Electron AI errors and web-search permission dialog use the shared catalog", async () => {
+  const main = await fs.readFile(path.join(root, "electron/main/index.js"), "utf8");
+
+  assert.match(main, /new ProviderError\("unknown_provider", nativeT\("errors\.unknownProvider", \{\}, "Unknown AI provider\."\)\)/, "unknown-provider errors should follow the selected application language");
+  assert.match(main, /new ProviderError\("no_enabled_model", nativeT\("errors\.noEnabledModel", \{\}, "Select at least one chat model in Settings first\."\)\)/, "missing-model errors should follow the selected application language");
+  assert.match(main, /new ProviderError\("agent_model_unsupported",nativeT\("errors\.agentModelUnsupported",\{\},"The selected provider does not yet support AI tools\."\)\)/, "agent capability errors should follow the selected application language");
+  assert.match(main, /buttons:\[nativeT\("electron\.allowWebSearch",\{\},"Allow web search"\),nativeT\("common\.cancel",\{\},"Cancel"\)\][\s\S]*?title:nativeT\("electron\.webSearchPermissionTitle"[\s\S]*?message:nativeT\("electron\.webSearchPermissionMessage"/, "the native web-search permission dialog should use the shared catalog");
 });
 
 test("settings expose configurable reminder defaults", async () => {
@@ -523,13 +590,19 @@ test("Vue shell keeps a persistent restore control when the desktop pet is hidde
   const shell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
   const styles = await fs.readFile(path.join(root, "renderer/src/styles.css"), "utf8");
   const types = await fs.readFile(path.join(root, "renderer/src/env.d.ts"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload/index.cjs"), "utf8");
 
-  assert.match(shell, /getVisibility\?\.\(\)\.then\(syncPetVisibility\)/, "the Vue shell should recover the persisted visibility state after it mounts");
+  assert.match(shell, /async function refreshPetVisibility\(\)[\s\S]*?getVisibility\?\.\(\)/, "the Vue shell should recover the persisted visibility state after it mounts");
+  assert.match(shell, /void refreshPetVisibility\(\)/, "the Vue shell should request the persisted visibility state after it mounts");
   assert.match(shell, /onVisibilityChanged\?\.\(syncPetVisibility\)/, "the Vue shell should react to hide and show events from Electron");
-  assert.match(shell, /v-if="petHidden" class="vue-pet-restore"/, "the restore control should live in the persistent Vue shell instead of the calendar iframe");
+  assert.match(shell, /PET_VISIBILITY_CACHE_KEY/, "the Vue shell should retain the hidden state while its one-shot Electron event is unavailable");
+  assert.match(shell, /setInterval\(refreshPetVisibility, 2000\)/, "the Vue shell should reconcile pet visibility after a missed renderer event");
+  assert.match(shell, /<Teleport to="body">[\s\S]*?v-show="petHidden" class="vue-pet-restore"/, "the restore control should remain mounted above the shell and calendar iframe");
   assert.match(shell, /await window\.kairosDesktop\?\.pet\?\.show\?\.\(\)/, "the restore control should call the desktop pet show bridge");
-  assert.match(styles, /\.vue-pet-restore\s*\{[^}]*position:fixed;[^}]*z-index:4000;/, "the restore control should remain visible above page content and the player");
+  assert.match(styles, /body\.kairos-calendar-background-active\s*>\s*\.vue-pet-restore,[\s\S]*?\.vue-pet-restore\s*\{[^}]*position:fixed!important;[^}]*z-index:5000!important;[^}]*inset:auto 20px 112px auto!important;/, "the Calendar wallpaper must not turn the body-teleported restore control into a normal-flow element");
+  assert.match(shell, /replays its cached native state/, "the shell should document its cached native visibility recovery path");
   assert.match(types, /onVisibilityChanged\?\(handler: \(visible: boolean\) => void\): \(\) => void;/, "the renderer bridge typing should expose the disposable visibility listener");
+  assert.match(preload, /onVisibilityChanged:[\s\S]*?ipcRenderer\.invoke\("pet:get-visibility"\)\.then\(publishPetVisibility\)/, "a newly mounted Vue shell should re-read visibility instead of relying on a missed one-shot pet event");
 });
 
 test("time format preference is applied in the shell and refreshed in legacy calendar views", async () => {
@@ -656,27 +729,36 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.equal(pkg.scripts["dev:vue"], "node scripts/kairos-vue-dev.cjs");
   assert.equal(pkg.scripts["build:renderer"], "pnpm renderer:build");
   assert.equal(pkg.scripts.doctor, "node scripts/kairos-doctor.cjs");
-  assert.equal(pkg.scripts.pack, "pnpm build:styles && pnpm build:renderer && electron-builder --dir");
-  assert.equal(pkg.scripts.dist, "pnpm build:styles && pnpm build:renderer && electron-builder --win");
-  assert.equal(pkg.scripts["dist:win"], "pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable");
+  assert.equal(pkg.scripts.pack, undefined, "pnpm's built-in pack command must remain available");
+  assert.equal(pkg.scripts["pack:dir"], "pnpm verify:version && pnpm build:styles && pnpm build:renderer && electron-builder --dir");
+  assert.equal(pkg.scripts.dist, "pnpm verify:version && pnpm check:signing:win && pnpm build:styles && pnpm build:renderer && electron-builder --win");
+  assert.equal(pkg.scripts["dist:win"], "pnpm verify:version && pnpm check:signing:win && pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable");
   assert.equal(pkg.scripts["audit:app-state"], "node electron/scripts/audit/app-state-audit.js");
   assert.equal(pkg.scripts["audit:desktop-data"], "node electron/scripts/audit/desktop-data-audit.js");
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-dev\.cjs/);
   assert.match(pkg.scripts.check, /pnpm typecheck/);
+  assert.match(pkg.scripts.check, /pnpm verify:version/);
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-vue-dev\.cjs/);
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-doctor\.cjs/);
   assert.match(pkg.scripts.check, /node --check electron\/data\/sqlite\/index\.js/);
   assert.match(pkg.scripts.check, /node --check electron\/scripts\/audit\/app-state-audit\.js/);
   assert.match(pkg.scripts.check, /node --check electron\/scripts\/audit\/desktop-data-audit\.js/);
   assert.equal(pkg.scripts["verify:dist"], "node --test electron/tests/distribution/dist-artifacts.test.js");
+  assert.equal(pkg.scripts["verify:pack:dir"], "node electron/scripts/release/verify-pack-dir.js");
+  assert.equal(pkg.scripts["verify:version"], "node scripts/verify-release-version.cjs");
+  assert.equal(pkg.scripts["check:signing:win"], "node scripts/verify-windows-signing.cjs");
+  assert.equal(pkg.scripts["verify:signatures:win"], "node scripts/verify-windows-signatures.cjs");
   assert.equal(pkg.scripts["verify:installer"], "node electron/scripts/release/installer-smoke.js");
   assert.equal(pkg.scripts["release:manifest"], "node electron/scripts/release/release-manifest.js");
-  assert.equal(pkg.scripts["verify:release"], "pnpm check && pnpm dist:win && pnpm release:manifest && pnpm verify:dist");
+  assert.equal(pkg.scripts["verify:release"], "pnpm check && pnpm dist:win && pnpm release:manifest && pnpm verify:dist && pnpm verify:signatures:win");
   assert.equal(pkg.scripts["verify:release:full"], "pnpm verify:release && pnpm verify:installer");
   assert.equal(pkg.build.appId, "app.kairos.desktop");
   assert.equal(pkg.build.artifactName, "${productName}-${version}-${os}-${arch}.${ext}");
   assert.equal(pkg.build.directories.output, "release");
-  assert.equal(pkg.build.win.icon, "app/assets/icons/netease-format.ico");
+  assert.equal(pkg.build.win.icon, "app/assets/icons/kairos.ico");
+  assert.ok((await fs.stat(path.join(root, pkg.build.win.icon))).isFile(), "Windows app icon should be bundled with app assets");
+  assert.deepEqual(pkg.build.win.signtoolOptions.signingHashAlgorithms, ["sha256"]);
+  assert.equal(pkg.build.win.signtoolOptions.rfc3161TimeStampServer, "http://timestamp.digicert.com");
   assert.deepEqual(pkg.build.win.target.map(item => item.target), ["nsis", "portable"]);
   assert.equal(pkg.build.nsis.artifactName, "${productName}-${version}-${os}-${arch}-setup.${ext}");
   assert.equal(pkg.build.portable.artifactName, "${productName}-${version}-${os}-${arch}-portable.${ext}");
@@ -689,9 +771,9 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.ok(pkg.build.files.includes("!.env*"), "local secret files must not be packaged");
   assert.ok(pkg.build.files.includes("!docs{,/**}"), "project docs should stay out of the runtime package");
   assert.ok(pkg.devDependencies["electron-builder"], "electron-builder should be available for distribution builds");
-  assert.ok(pkg.dependencies.vue, "Vue should be available for the opt-in preview renderer");
-  assert.ok(pkg.devDependencies.vite, "Vite should be available for the opt-in preview renderer");
-  assert.match(main, /process\.env\.KAIROS_RENDERER === "vue"/);
+  assert.ok(pkg.dependencies.vue, "Vue should be available for the released renderer");
+  assert.ok(pkg.devDependencies.vite, "Vite should be available to build the released renderer");
+  assert.match(main, /process\.env\.KAIROS_RENDERER === "legacy"/);
   assert.match(main, /app["', ]+vue-preview["', ]+index\.html/);
   assert.match(checklist, /pnpm audit:app-state[\s\S]*?退出码为 `0`[\s\S]*?退出码为 `2`[\s\S]*?退出码为 `1`/, "release checklist should document app-state audit usage and exit codes");
 });
@@ -724,8 +806,8 @@ test("distribution smoke verifies desktop userData health", async () => {
   );
   assert.match(
     verifier,
-    /const audit = await auditDesktopDataDir\(userDataDir\);[\s\S]*?assert\.equal\(audit\.ok, true[\s\S]*?app-state\.json[\s\S]*?migration-ready/,
-    "distribution smoke should fail when generated userData is not migration-ready"
+    /const audit = await auditDesktopDataDir\(userDataDir\);[\s\S]*?assert\.equal\(audit\.ok, true[\s\S]*?database\?\.database\?\.snapshot/,
+    "distribution smoke should accept migrated SQLite app state while auditing the generated userData"
   );
   assert.match(
     verifier,
@@ -831,16 +913,12 @@ test("settings music panel manages NetEase account and quality preferences", asy
   );
   assert.match(
     settingsScript,
-    /neteaseQuality: \[\['standard', 'Standard'\], \['higher', 'Higher'\], \['exhigh', 'Very high'\], \['lossless', 'Lossless'\]\]/,
-    "settings should expose supported NetEase quality levels"
+    /neteaseQuality: \[\['standard', t\('settings\.qualityStandard', 'Standard'\)\], \['higher', t\('settings\.qualityHigher', 'Higher'\)\], \['exhigh', t\('settings\.qualityVeryHigh', 'Very high'\)\], \['lossless', t\('settings\.qualityLossless', 'Lossless'\)\]\]/,
+    "settings should expose translated supported NetEase quality levels"
   );
-  assert.match(settingsScript, /data-netease-refresh[\s\S]*?Refresh account data[\s\S]*?data-netease-clear-cache[\s\S]*?Clear local cache/, "music settings should render account refresh and cache-clearing actions");
+  assert.match(settingsScript, /data-netease-refresh[\s\S]*?t\('settings\.neteaseRefresh', 'Refresh account data'\)[\s\S]*?data-netease-clear-cache[\s\S]*?t\('settings\.clearCache', 'Clear cache'\)/, "music settings should render translated account refresh and cache-clearing actions");
   assert.doesNotMatch(settingsScript, /data-netease-clear-session/, "music settings should not render a duplicate logout action");
-  assert.match(
-    settingsScript,
-    /Scan with your own Netease Music account[\s\S]*?personal learning use only[\s\S]*?does not redistribute music content/,
-    "settings QR login dialog should remind the user of personal-account scope before login"
-  );
+  assert.match(settingsScript, /t\('settings\.neteaseLoginDescription', 'Scan with your own Netease Music account to continue\.'\)/, "settings QR login dialog should use a translated login description");
   assert.doesNotMatch(
     musicHtml,
     /class="netease-login-scope"[\s\S]*?Use your own Netease Music account for personal learning only[\s\S]*?does not redistribute music content[\s\S]*?commercial public playback/,
@@ -848,7 +926,7 @@ test("settings music panel manages NetEase account and quality preferences", asy
   );
   assert.match(
     settingsScript,
-    /data-netease-refresh[\s\S]*?window\.kairosDesktop\?\.netease\?\.getStatus\?\.\(\)[\s\S]*?Netease account refreshed/,
+    /data-netease-refresh[\s\S]*?window\.kairosDesktop\?\.netease\?\.getStatus\?\.\(\)[\s\S]*?t\('settings\.neteaseAccountRefreshed', 'Netease account refreshed'\)/,
     "account refresh should reload NetEase status through the desktop bridge"
   );
   assert.match(
@@ -858,7 +936,7 @@ test("settings music panel manages NetEase account and quality preferences", asy
   );
   assert.match(
     settingsScript,
-    /data-netease-clear-cache[\s\S]*?Clear Netease local cache\?[\s\S]*?clearNeteaseLocalCache\(\)[\s\S]*?Netease local cache cleared/,
+    /data-netease-clear-cache[\s\S]*?t\('settings\.neteaseClearCacheTitle', 'Clear Netease local cache\?'\)[\s\S]*?clearNeteaseLocalCache\(\)[\s\S]*?t\('settings\.neteaseCacheCleared', 'Netease local cache cleared'\)/,
     "settings should expose a confirmed NetEase local cache cleanup action"
   );
   assert.match(
@@ -918,12 +996,12 @@ test("settings data panel supports app-state import and export", async () => {
   assert.match(settingsCss, /\.kairos-select-wrap \.kairos-data-action-button\{display:inline-flex;width:100%;height:42px[\s\S]*?border-radius:999px[\s\S]*?background:#fbf9f2/, "Data action buttons should match the Reminders control styling");
   assert.match(
     settingsScript,
-    /data-export-app-state[\s\S]*?window\.kairosDesktop\?\.appState\?\.exportCurrent\?\.\(\)[\s\S]*?flashSaved\('App data exported'\)/,
+    /data-export-app-state[\s\S]*?window\.kairosDesktop\?\.appState\?\.exportCurrent\?\.\(\)[\s\S]*?flashSaved\(t\('settings\.appDataExported', 'App data exported'\)\)/,
     "exporting app state should use the desktop save dialog bridge and report success"
   );
   assert.match(
     settingsScript,
-    /data-import-app-state[\s\S]*?confirmAction\(\{ title: 'Import app data\?'[\s\S]*?window\.kairosDesktop\?\.appState\?\.importJson\?\.\(\)[\s\S]*?flashSaved\('App data imported'\)/,
+    /data-import-app-state[\s\S]*?confirmAction\(\{ title: t\('settings\.appDataImportTitle', 'Import app data\?'\)[\s\S]*?window\.kairosDesktop\?\.appState\?\.importJson\?\.\(\)[\s\S]*?flashSaved\(t\('settings\.appDataImported', 'App data imported'\)\)/,
     "importing app state should require confirmation and use the desktop open dialog bridge"
   );
 });
@@ -960,8 +1038,8 @@ test("desktop app state exposes constrained backup management", async () => {
   );
   assert.match(
     main,
-    /ipcMain\.handle\("app:audit",async\(\)=>auditAppState\(await appStateStore\.read\(\)\)\);[\s\S]*?ipcMain\.handle\("app:list-backups",\(\)=>appStateStore\.listBackups\(\)\);[\s\S]*?ipcMain\.handle\("app:read-backup",\(_event,name\)=>appStateStore\.readBackup\(name\)\);[\s\S]*?ipcMain\.handle\("app:restore-backup",async\(_event,name\)=>\{const state=await appStateStore\.restoreBackup\(name\);mainWindow\?\.webContents\.send\("app:state-changed",state\);return state;\}\);/,
-    "main process should expose read-only app-state audit and backup management"
+    /function broadcastAppState\(state\) \{[\s\S]*?\[mainWindow, aiChatWindow, petWindow\][\s\S]*?webContents\.send\("app:state-changed", state\);[\s\S]*?ipcMain\.handle\("app:audit",async\(\)=>auditAppState\(await appStateStore\.read\(\)\)\);[\s\S]*?ipcMain\.handle\("app:list-backups",\(\)=>appStateStore\.listBackups\(\)\);[\s\S]*?ipcMain\.handle\("app:read-backup",\(_event,name\)=>appStateStore\.readBackup\(name\)\);[\s\S]*?ipcMain\.handle\("app:restore-backup",async\(_event,name\)=>\{const state=await appStateStore\.restoreBackup\(name\);broadcastAppState\(state\);return state;\}\);/,
+    "main process should broadcast app-state changes to every localized renderer"
   );
   assert.match(
     preload,
@@ -1001,7 +1079,7 @@ test("NetEase playback stays isolated from local queue persistence", async () =>
   );
   assert.match(
     musicHtml,
-    /const enqueueNeteaseTrack = async \(song, mode = 'queue'\) => \{[\s\S]*?if \(!api\?\.playSong\) throw new Error\('NetEase API is unavailable\.'\);[\s\S]*?const track = makeNeteaseTrackShell\(song\);[\s\S]*?notifyMusicPlayer\(\{/,
+    /const enqueueNeteaseTrack = async \(song, mode = 'queue'\) => \{[\s\S]*?if \(!api\?\.playSong\) throw new Error\(tr\('music\.neteaseApiUnavailable', \{\}, 'NetEase API is unavailable\.'\)\);[\s\S]*?const track = makeNeteaseTrackShell\(song\);[\s\S]*?notifyMusicPlayer\(\{/,
     "NetEase queue actions should enqueue song metadata immediately and defer URL fetching until playback"
   );
   assert.doesNotMatch(
@@ -1016,12 +1094,12 @@ test("NetEase playback stays isolated from local queue persistence", async () =>
   );
   assert.match(
     musicHtml,
-    /const switchingFromLocalQueue = !isCurrentNetease && Boolean\(snapshot\.currentTrackId \|\| snapshot\.queueTrackIds\?\.length\);[\s\S]*?toast\.message\('Switched to NetEase queue'/,
+    /const switchingFromLocalQueue = !isCurrentNetease && Boolean\(snapshot\.currentTrackId \|\| snapshot\.queueTrackIds\?\.length\);[\s\S]*?toast\.message\(tr\('music\.switchedToNeteaseQueue', \{\}, 'Switched to NetEase queue'\)/,
     "NetEase queue actions should clearly communicate when they replace a local queue instead of mixing sources"
   );
   assert.match(
     musicHtml,
-    /const reason = mode === 'next'[\s\S]*?'Online songs cannot play next after local tracks\.'[\s\S]*?'Online songs use a separate queue from local tracks\.'[\s\S]*?toast\.message\('Switched to NetEase queue', `[$]\{track\.title \|\| 'NetEase song'\} \\u00b7 [$]\{reason\}`\);/,
+    /const reason = mode === 'next'[\s\S]*?tr\('music\.onlineCannotPlayNext', \{\}, 'Online songs cannot play next after local tracks\.'\)[\s\S]*?tr\('music\.onlineSeparateQueue', \{\}, 'Online songs use a separate queue from local tracks\.'\)[\s\S]*?toast\.message\(tr\('music\.switchedToNeteaseQueue', \{\}, 'Switched to NetEase queue'\), `[$]\{track\.title \|\| tr\('music\.netease', \{\}, 'NetEase Music'\)\} \\u00b7 [$]\{reason\}`\);/,
     "NetEase queue actions should explain that online and local tracks use separate queues"
   );
   assert.match(
@@ -1175,12 +1253,12 @@ test("NetEase playable URLs are refreshed before expiry-sensitive playback", asy
   );
   assert.match(
     playerScript,
-    /const playbackErrorText = error => \{[\s\S]*?reportPlaybackFailure\(error\);[\s\S]*?return error\?\.message === 'Unable to refresh NetEase URL' \? 'Unable to refresh NetEase URL' : 'Unable to play this audio file';[\s\S]*?\};/,
-    "shared player should keep local audio failure messaging separate from NetEase URL refresh failures"
+    /const playbackErrorText = error => \{[\s\S]*?reportPlaybackFailure\(error\);[\s\S]*?return error\?\.message === tr\('player\.refreshUrlFailed'[\s\S]*?tr\('player\.audioPlayFailed'[\s\S]*?\};/,
+    "shared player should keep localized local-audio failure messaging separate from NetEase URL refresh failures"
   );
   assert.match(
     playerScript,
-    /state\.currentTrackId=previousTrackId;[\s\S]*?state\.playing=false;[\s\S]*?els\.status\.textContent='Unable to refresh NetEase URL';[\s\S]*?loadTrack\(false\);[\s\S]*?syncPlayButton\(\);[\s\S]*?updateQueuePlaybackState\(\);[\s\S]*?emitState\(\);/,
+    /state\.currentTrackId=previousTrackId;[\s\S]*?state\.playing=false;[\s\S]*?els\.status\.textContent=tr\('player\.refreshUrlFailed'[\s\S]*?loadTrack\(false\);[\s\S]*?syncPlayButton\(\);[\s\S]*?updateQueuePlaybackState\(\);[\s\S]*?emitState\(\);/,
     "shared player should immediately roll back its own controls when NetEase URL refresh fails"
   );
   assert.match(
@@ -1226,8 +1304,8 @@ test("NetEase rows mirror local playing-state highlighting", async () => {
   );
   assert.match(
     musicHtml,
-    /playButton\.setAttribute\('aria-label', 'Play track'\);/,
-    "NetEase row play buttons should use the same initial aria label as local row play buttons"
+    /playButton\.setAttribute\('aria-label', tr\('player\.playTrack', \{\}, 'Play track'\)\);/,
+    "NetEase row play buttons should use the shared localized play-track label"
   );
   assert.doesNotMatch(
     musicHtml,
@@ -1256,7 +1334,7 @@ test("NetEase rows mirror local playing-state highlighting", async () => {
   );
   assert.match(
     musicHtml,
-    /input\.addEventListener\('input', \(\) => \{[\s\S]*?const visible = refreshNeteaseVisibleIndexes\(\) \|\| 0;[\s\S]*?resultsLabel\.textContent = `\$\{visible\} result\$\{visible === 1 \? '' : 's'\}`;[\s\S]*?updateNeteasePlaybackRows\(\);[\s\S]*?\}\);/,
+    /input\.addEventListener\('input', \(\) => \{[\s\S]*?const visible = refreshNeteaseVisibleIndexes\(\) \|\| 0;[\s\S]*?resultsLabel\.textContent = musicCount\('resultCount', visible, `\$\{visible\} results`\);[\s\S]*?updateNeteasePlaybackRows\(\);[\s\S]*?\}\);/,
     "filtering NetEase collection rows should refresh row numbering and then re-apply shared playback state"
   );
   assert.match(
@@ -1326,13 +1404,13 @@ test("local and NetEase liked menu copy stays aligned", async () => {
 
   assert.match(
     musicHtml,
-    /\$\{track\.liked \? 'Remove from Liked' : 'Like'\}/,
-    "local playlist row menus should use the same liked-removal wording as NetEase rows"
+    /\$\{likedAriaLabel\(track\.liked\)\}/,
+    "local playlist row menus should use the shared state-aware liked label"
   );
   assert.match(
     musicHtml,
-    /\$\{isNeteaseSongLiked\(song\) \? 'Remove from Liked' : 'Like'\}/,
-    "NetEase row menus should keep the same liked-removal wording"
+    /\$\{likedAriaLabel\(isNeteaseSongLiked\(song\)\)\}/,
+    "NetEase row menus should use the shared state-aware liked label"
   );
   assert.doesNotMatch(
     musicHtml,
@@ -1346,8 +1424,8 @@ test("local liked buttons expose current liked state like NetEase rows", async (
 
   assert.match(
     musicHtml,
-    /const likedAriaLabel = liked => liked \? 'Remove from liked songs' : 'Add to liked songs';/,
-    "local liked buttons should have a reusable state-aware aria label"
+    /const likedAriaLabel = liked => liked \? tr\('music\.removeFromLiked', \{\}, 'Remove from liked songs'\) : tr\('player\.addCurrentToLiked', \{\}, 'Add to liked songs'\);/,
+    "local liked buttons should have a reusable localized state-aware aria label"
   );
   assert.match(
     musicHtml,
@@ -1376,7 +1454,7 @@ test("local liked buttons expose current liked state like NetEase rows", async (
   );
   assert.match(
     musicHtml,
-    /console\.error\('toggle history like failed', error\);[\s\S]*?track\.liked = !liked;[\s\S]*?button\.setAttribute\('aria-pressed', String\(track\.liked === true\)\);[\s\S]*?button\.setAttribute\('aria-label', likedAriaLabel\(track\.liked === true\)\);[\s\S]*?toast\.error\('Like failed', 'Please try again\.'\);/,
+    /console\.error\('toggle history like failed', error\);[\s\S]*?track\.liked = !liked;[\s\S]*?button\.setAttribute\('aria-pressed', String\(track\.liked === true\)\);[\s\S]*?button\.setAttribute\('aria-label', likedAriaLabel\(track\.liked === true\)\);[\s\S]*?toast\.error\(tr\('music\.likeFailed', \{\}, 'Like failed'\), tr\('legacy\.tryAgain', \{\}, 'Please try again\.'\)\);/,
     "local history liked button failures should roll back like state like playlist and NetEase rows"
   );
   assert.doesNotMatch(
@@ -1397,7 +1475,7 @@ test("local music missing files are visible and cleanable", async () => {
   assert.match(library, /async publicTrack\(track\) \{[\s\S]*?available[\s\S]*?unavailableReason[\s\S]*?missing_file/, "public music state should mark moved or deleted files");
   assert.match(library, /async removeUnavailableTracks\(\) \{[\s\S]*?state\.queueTrackIds = state\.queueTrackIds\.filter[\s\S]*?delete state\.positions\[id\][\s\S]*?playlist\.trackIds = \(playlist\.trackIds \|\| \[\]\)\.filter/, "cleanup should remove missing files from queues, positions, and playlists");
   assert.match(musicHtml, /const unavailable = track\.available === false;[\s\S]*?row\.classList\.toggle\('is-unavailable', unavailable\);[\s\S]*?File unavailable[\s\S]*?Missing/, "local playlist rows should visibly mark unavailable files");
-  assert.match(musicHtml, /if \(target\.available === false\) \{[\s\S]*?toast\.error\('File unavailable', 'The local file was moved or deleted\.'\);[\s\S]*?return;/, "local playlist playback should stop before trying to play a moved file");
+  assert.match(musicHtml, /if \(target\.available === false\) \{[\s\S]*?toast\.error\(tr\('music\.fileUnavailable', \{}, 'File unavailable'\), tr\('errors\.localFileMoved', \{}, 'The local file was moved or deleted\.'\)\);[\s\S]*?return;/, "local playlist playback should stop before trying to play a moved file");
 });
 
 test("local music import rejects empty audio files", async () => {
@@ -1422,7 +1500,7 @@ test("local music import explains skipped files", async () => {
 
   assert.match(
     musicHtml,
-    /const rejectedImportReasonLabels = \{[\s\S]*?unsupported_format: 'unsupported format'[\s\S]*?empty_file: 'empty file'[\s\S]*?unreadable_file: 'unreadable file'[\s\S]*?\};/,
+    /const rejectedImportReasonLabels = \{[\s\S]*?unsupported_format: tr\('music\.rejectedUnsupportedFormat', \{\}, 'unsupported format'\)[\s\S]*?empty_file: tr\('music\.rejectedEmptyFile', \{\}, 'empty file'\)[\s\S]*?unreadable_file: tr\('music\.rejectedUnreadableFile', \{\}, 'unreadable file'\)[\s\S]*?\};/,
     "local import UI should translate rejected file reasons into readable copy"
   );
   assert.match(
@@ -1432,7 +1510,7 @@ test("local music import explains skipped files", async () => {
   );
   assert.match(
     musicHtml,
-    /const rejectedSummary = summarizeRejectedImports\(result\.rejected\);[\s\S]*?skipped: \$\{rejectedSummary\}[\s\S]*?toast\.message\('Playlist imported', `\$\{result\.imported\?\.length \|\| 0\} imported, \$\{rejectedSummary\}`\);/,
+    /const rejectedSummary = summarizeRejectedImports\(result\.rejected\);[\s\S]*?tr\('music\.playlistImportSummary', \{ imported: result\.imported\?\.length \|\| 0, rejected: result\.rejected\.length, summary: rejectedSummary \}[\s\S]*?toast\.message\(tr\('music\.playlistImported', \{\}, 'Playlist imported'\), tr\('music\.playlistImportSummary'/,
     "local import status and toast should include skipped-file reasons"
   );
 });
@@ -1447,13 +1525,13 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /if \(!visibleRows && neteaseResults\) neteaseResults\.innerHTML = '<p class="netease-empty">No liked songs yet\.<\/p>';/,
-    "removing the last NetEase liked song should show an empty-state message"
+    /if \(!visibleRows && neteaseResults\) neteaseResults\.innerHTML = `<p class="netease-empty">[$]\{tr\('legacy\.noLikedSongs', \{\}, 'No liked songs yet\.'\)\}<\/p>`;/,
+    "removing the last NetEase liked song should show a localized empty-state message"
   );
   assert.match(
     musicHtml,
-    /const metaLabel = neteaseAccountPanel\?\.querySelector\('\.playlist-detail-meta'\);[\s\S]*?if \(metaLabel\) metaLabel\.textContent = `\$\{visibleRows\} track\$\{visibleRows === 1 \? '' : 's'\}`;/,
-    "removing a NetEase liked song should update the liked hero count with the table count"
+    /const metaLabel = neteaseAccountPanel\?\.querySelector\('\.playlist-detail-meta'\);[\s\S]*?if \(metaLabel\) metaLabel\.textContent = musicCount\('trackCount', visibleRows, `\$\{visibleRows\} tracks`\);/,
+    "removing a NetEase liked song should update the localized liked hero count with the table count"
   );
   assert.match(
     musicHtml,
@@ -1467,17 +1545,17 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /setNeteaseStatus\(`Logged in[$]\{name\}\.`, true\);[\s\S]*?await ensureNeteaseLikedIds\(true\)\.catch/,
+    /setNeteaseStatus\(tr\('music\.neteaseStatusLoggedIn', \{ name \}, `Logged in[$]\{name\}\.`\), true\);[\s\S]*?await ensureNeteaseLikedIds\(true\)\.catch/,
     "NetEase login/status refresh should force-refresh liked ids before relying on row state"
   );
   assert.match(
     musicHtml,
-    /neteaseLikedIds = new Set\(\);[\s\S]*?neteaseLikedIdsLoaded = false;[\s\S]*?setNeteaseStatus\('Anonymous mode\. Login may improve availability\.', true\);/,
+    /neteaseLikedIds = new Set\(\);[\s\S]*?neteaseLikedIdsLoaded = false;[\s\S]*?setNeteaseStatus\(tr\('music\.neteaseStatusAnonymous', \{\}, 'Anonymous mode\. Login may improve availability\.'\), true\);/,
     "NetEase anonymous status should clear account liked state"
   );
   assert.match(
     musicHtml,
-    /<div class="music-sidebar-footer">[\s\S]*?<div class="music-sidebar-account-wrap" id="neteaseSidebarAccountWrap">[\s\S]*?id="neteaseSidebarAvatar" alt="" hidden[\s\S]*?id="neteaseSidebarAvatarFallback"[\s\S]*?id="neteaseSidebarName">&#x672A;&#x767B;&#x5F55;<\/span>[\s\S]*?class="music-sidebar-account-service"[\s\S]*?hidden[\s\S]*?class="material-symbols-outlined music-sidebar-account-chevron"[\s\S]*?hidden[\s\S]*?id="neteaseSidebarAccountMenu" role="menu" hidden/,
+    /<div class="music-sidebar-footer">[\s\S]*?<div class="music-sidebar-account-wrap" id="neteaseSidebarAccountWrap">[\s\S]*?id="neteaseSidebarAvatar" alt="" hidden[\s\S]*?id="neteaseSidebarAvatarFallback"[\s\S]*?id="neteaseSidebarName" data-i18n="music\.notSignedIn">Not signed in<\/span>[\s\S]*?class="music-sidebar-account-service"[\s\S]*?hidden[\s\S]*?class="material-symbols-outlined music-sidebar-account-chevron"[\s\S]*?hidden[\s\S]*?id="neteaseSidebarAccountMenu" role="menu" hidden/,
     "NetEase account profile should render an always-visible signed-out placeholder in the sidebar footer"
   );
   assert.doesNotMatch(
@@ -1487,7 +1565,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccountWrap\.hidden = false;[\s\S]*?if \(!hasProfile\) \{[\s\S]*?neteaseSidebarName\.textContent = '\\u672a\\u767b\\u5f55';[\s\S]*?neteaseSidebarAvatar\.hidden = true;[\s\S]*?neteaseSidebarAvatarFallback\.hidden = false;[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| 'NetEase Cloud';[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
+    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccountWrap\.hidden = false;[\s\S]*?if \(!hasProfile\) \{[\s\S]*?neteaseSidebarName\.textContent = tr\('music\.notSignedIn', \{\}, 'Not signed in'\);[\s\S]*?neteaseSidebarAvatar\.hidden = true;[\s\S]*?neteaseSidebarAvatarFallback\.hidden = false;[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| tr\('music\.neteaseCloud', \{\}, 'NetEase Cloud'\);[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
     "NetEase status refresh should keep signed-out placeholder visible and update avatar/nickname when logged in"
   );
   assert.match(
@@ -1497,7 +1575,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /setNeteaseStatus\(`Logged in[$]\{name\}\.`, true\);[\s\S]*?renderNeteaseSidebarProfile\(status\.profile\);/,
+    /setNeteaseStatus\(tr\('music\.neteaseStatusLoggedIn', \{ name \}, `Logged in[$]\{name\}\.`\), true\);[\s\S]*?renderNeteaseSidebarProfile\(status\.profile\);/,
     "successful NetEase login should populate the sidebar profile"
   );
   assert.match(
@@ -1507,7 +1585,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /setNeteaseStatus\('Anonymous mode\. Login may improve availability\.', true\);[\s\S]*?renderNeteaseSidebarProfile\(null\);/,
+    /setNeteaseStatus\(tr\('music\.neteaseStatusAnonymous', \{\}, 'Anonymous mode\. Login may improve availability\.'\), true\);[\s\S]*?renderNeteaseSidebarProfile\(null\);/,
     "anonymous NetEase status should hide the sidebar profile"
   );
   assert.match(
@@ -1547,7 +1625,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /catch \(error\) \{[\s\S]*?if \(requestId !== neteaseLoginRequestId\) return;[\s\S]*?Login failed/,
+    /catch \(error\) \{[\s\S]*?if \(requestId !== neteaseLoginRequestId\) return;[\s\S]*?tr\('music\.loginQrUnavailable', \{\}, 'Login QR unavailable'\)/,
     "stale NetEase QR creation errors should not overwrite a newer login state"
   );
   assert.match(
@@ -1647,7 +1725,7 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /const result = await api\.getHistory\(\{ type: neteaseHistoryType \}\);[\s\S]*?await ensureNeteaseLikedIds\(\)\.catch[\s\S]*?renderNeteaseSongCollection\('NetEase History'/,
+    /const result = await api\.getHistory\(\{ type: neteaseHistoryType \}\);[\s\S]*?await ensureNeteaseLikedIds\(\)\.catch[\s\S]*?renderNeteaseSongCollection\(tr\('music\.neteaseHistory', \{\}, 'NetEase History'\)/,
     "NetEase history rows should sync liked ids before rendering row state"
   );
   assert.match(
@@ -1667,7 +1745,7 @@ test("NetEase collection empty states stay contextual", async () => {
 
   assert.match(
     musicHtml,
-    /neteaseResults\.innerHTML = `<p class="netease-empty">[$]\{options\.emptyMessage \|\| 'No songs found\.'\}<\/p>`;/,
+    /neteaseResults\.innerHTML = `<p class="netease-empty">[$]\{options\.emptyMessage \|\| tr\('music\.noSongsFound', \{\}, 'No songs found\.'\)\}<\/p>`;/,
     "NetEase result rendering should allow collection-specific empty messages"
   );
   assert.match(
@@ -1677,13 +1755,13 @@ test("NetEase collection empty states stay contextual", async () => {
   );
   assert.match(
     musicHtml,
-    /const playlist = result\.playlist \|\| \{\};[\s\S]*?renderNeteaseSongCollection\(playlist\.name \|\| 'Liked Songs'[\s\S]*?coverUrl: playlist\.coverUrl \|\| ''[\s\S]*?emptyMessage: 'No liked songs yet\.'/,
-    "NetEase liked view should render the account red-heart playlist instead of a synthetic liked collection"
+    /const playlist = result\.playlist \|\| \{\};[\s\S]*?renderNeteaseSongCollection\(playlist\.name \|\| tr\('music\.likedSongs', \{\}, 'Liked Songs'\)[\s\S]*?coverUrl: playlist\.coverUrl \|\| ''[\s\S]*?emptyMessage: tr\('legacy\.noLikedSongs', \{\}, 'No liked songs yet\.'\)/,
+    "NetEase liked view should retain the account red-heart playlist while localizing its empty state"
   );
   assert.match(
     musicHtml,
-    /renderNeteaseSongCollection\('NetEase History'[\s\S]*?historyType: neteaseHistoryType,[\s\S]*?emptyMessage: 'No NetEase listening history yet\.'/,
-    "NetEase history should use a history-specific empty state"
+    /renderNeteaseSongCollection\(tr\('music\.neteaseHistory', \{\}, 'NetEase History'\)[\s\S]*?historyType: neteaseHistoryType,[\s\S]*?emptyMessage: tr\('legacy\.noNeteaseHistory', \{\}, 'No NetEase listening history yet\.'\)/,
+    "NetEase history should use a localized history-specific empty state"
   );
   assert.match(
     musicHtml,
@@ -1717,8 +1795,8 @@ test("NetEase history row menu follows history layout", async () => {
   );
   assert.match(
     musicHtml,
-    /data-history-type="1"[\s\S]*?最近一周[\s\S]*?data-history-type="0"[\s\S]*?所有时间/,
-    "NetEase history should expose API range buttons for weekly and all-time records"
+    /data-history-type="1"[\s\S]*?music\.historyRecent[\s\S]*?data-history-type="0"[\s\S]*?music\.historyAllTime/,
+    "NetEase history should expose localized API range buttons for weekly and all-time records"
   );
   assert.match(
     musicHtml,
@@ -1790,8 +1868,8 @@ test("music controls suppress global hover backgrounds", async () => {
   );
   assert.match(
     playerScript,
-    /class="music-queue-clear" type="button" id="musicClearButton">Clear All<\/button>/,
-    "queue Clear All control should be explicitly excluded from global button hover styling"
+    /class="music-queue-clear" data-i18n="player\.clearAll" type="button" id="musicClearButton">Clear All<\/button>/,
+    "queue Clear All control should retain its source layout while taking its label from the language catalog"
   );
   assert.match(
     themeCss,
@@ -1842,8 +1920,8 @@ test("NetEase sidebar uses bundled app icon", async () => {
   assert.ok(icon.isFile(), "NetEase sidebar icon should be bundled with app assets");
   assert.match(
     musicHtml,
-    /<img class="music-item-icon-img" src="\.\.\/\.\.\/assets\/icons\/netease-format\.ico" alt="" aria-hidden="true">[\s\S]*?<span>Netease Music<\/span>/,
-    "Netease Music sidebar entry should render the bundled ico instead of the generic cloud icon"
+    /<img class="music-item-icon-img" src="\.\.\/\.\.\/assets\/icons\/netease-format\.ico" alt="" aria-hidden="true">[\s\S]*?<span data-i18n="music\.netease">Netease Music<\/span>/,
+    "Netease Music sidebar entry should retain the bundled ico while taking its label from the language catalog"
   );
 });
 
@@ -1852,8 +1930,8 @@ test("NetEase sidebar labels use requested copy", async () => {
 
   assert.match(
     musicHtml,
-    /<span>Netease Music<\/span>[\s\S]*?data-netease-view="playlists"[\s\S]*?<span>Playlist<\/span>[\s\S]*?data-netease-view="liked"[\s\S]*?<span>Like<\/span>/,
-    "NetEase sidebar labels should read Netease Music, Playlist, and Like"
+    /<span data-i18n="music\.netease">Netease Music<\/span>[\s\S]*?data-netease-view="playlists"[\s\S]*?<span data-i18n="music\.playlist">Playlist<\/span>[\s\S]*?data-netease-view="liked"[\s\S]*?<span data-i18n="music\.like">Like<\/span>/,
+    "NetEase sidebar labels should retain their English fallback while being localized through the shared catalog"
   );
 });
 
@@ -1873,13 +1951,13 @@ test("NetEase sidebar account menu can log out", async () => {
   assert.match(main, /ipcMain\.handle\("netease:send-captcha",\(_event,input\)=>neteaseService\.sendCaptcha\(input\)\);/, "main should register NetEase captcha sending");
   assert.match(main, /ipcMain\.handle\("netease:login-with-phone",\(_event,input\)=>neteaseService\.loginWithPhone\(input\)\);/, "main should register NetEase phone login");
   assert.match(main, /ipcMain\.handle\("netease:open-verification"[\s\S]*?shell\.openExternal\(target\)/, "main should open NetEase verification links through Electron shell");
-  assert.match(service, /function neteaseFailure\(error, fallback\) \{[\s\S]*?needsVerification: Number\(code\) === 10004 \|\| Number\(code\) === 10003,[\s\S]*?retryAfter: Number\(code\) === 406 \? 60000 : 0/, "service should convert NetEase failures into normal UI responses");
-  assert.match(service, /export function readableNeteasePlaybackMessage\(data = \{\}, fallback = ""\)[\s\S]*?requires NetEase membership or purchase[\s\S]*?restricted by NetEase rights[\s\S]*?unavailable on NetEase/, "service should provide readable playback failure messages");
-  assert.match(service, /async playSong\(\{ id, neteaseId, level = DEFAULT_LEVEL \} = \{\}\) \{[\s\S]*?try \{[\s\S]*?readableNeteasePlaybackMessage\(urlData, "No playable URL returned for this song\."\)[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, "Unable to load playable NetEase URL\."\);/, "service should return readable NetEase playback failures instead of throwing raw API errors");
+  assert.match(service, /function neteaseFailure\(error, fallback, translateFn = fallbackTranslate\) \{[\s\S]*?readableNeteaseMessage\(code,[\s\S]*?translateFn\)[\s\S]*?needsVerification: Number\(code\) === 10004 \|\| Number\(code\) === 10003,[\s\S]*?retryAfter: Number\(code\) === 406 \? 60000 : 0/, "service should convert NetEase failures into localized normal UI responses");
+  assert.match(service, /export function readableNeteasePlaybackMessage\(data = \{\}, fallback = "", translateFn = fallbackTranslate\)[\s\S]*?music\.neteaseMembershipRequired[\s\S]*?music\.neteaseRightsRestricted[\s\S]*?music\.neteaseSongUnavailable/, "service should route readable playback failure messages through the shared catalog");
+  assert.match(service, /async playSong\(\{ id, neteaseId, level = DEFAULT_LEVEL \} = \{\}\) \{[\s\S]*?try \{[\s\S]*?readableNeteasePlaybackMessage\(urlData, this\.message\("music\.neteaseNoPlayableUrlReturned"[\s\S]*?this\.t\)[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, this\.message\("music\.unableToLoadPlayableNeteaseUrl"[\s\S]*?this\.t\);/, "service should return localized NetEase playback failures instead of throwing raw API errors");
   assert.match(service, /async function withSuppressedNeteaseErrors\(task\)[\s\S]*?if \(args\[0\] === "\[ERR\]"\) return;/, "service should suppress noisy NetEase API internal error logs");
   assert.doesNotMatch(service, /\?{4,}/, "service should not contain question-mark fallback messages");
   assert.match(service, /async sendCaptcha\(\{ phone, countrycode = "86" \} = \{\}\) \{[\s\S]*?neteaseApi\.captcha_sent\(\{ phone: targetPhone, ctcode:/, "service should send NetEase SMS captcha");
-  assert.match(service, /async loginWithPhone\(\{ phone, captcha, countrycode = "86" \} = \{\}\) \{[\s\S]*?neteaseApi\.login_cellphone\(\{[\s\S]*?captcha: targetCaptcha,[\s\S]*?this\.cookie = body\.cookie;[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, "Phone login failed\."\);/, "service should login with phone captcha and return readable failures");
+  assert.match(service, /async loginWithPhone\(\{ phone, captcha, countrycode = "86" \} = \{\}\) \{[\s\S]*?neteaseApi\.login_cellphone\(\{[\s\S]*?captcha: targetCaptcha,[\s\S]*?this\.cookie = body\.cookie;[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, this\.message\("music\.neteasePhoneLoginFailed"[\s\S]*?this\.t\);/, "service should login with phone captcha and return localized failures");
   assert.doesNotMatch(service, /this\.accounts|rememberAccount|switchAccount/, "service should not keep removed account switching state");
   assert.match(service, /async logout\(\) \{[\s\S]*?this\.cookie = "";[\s\S]*?this\.loginKey = "";[\s\S]*?await this\.save\(\);/, "logout should clear saved NetEase session state");
   assert.match(
@@ -1889,7 +1967,7 @@ test("NetEase sidebar account menu can log out", async () => {
   );
   assert.match(
     musicHtml,
-    /id="neteaseSidebarAccountMenu" role="menu" hidden>[\s\S]*?data-action="logout"[\s\S]*?Log Out[\s\S]*?neteaseSidebarAccountMenu\?\.addEventListener\('click'[\s\S]*?if \(button\.dataset\.action === 'logout'\) \{[\s\S]*?await api\?\.logout\?\.\(\);[\s\S]*?resetNeteaseSessionUi\(\);[\s\S]*?toast\.message\('Logged out'\);/,
+    /id="neteaseSidebarAccountMenu" role="menu" hidden>[\s\S]*?data-action="logout"[\s\S]*?data-i18n="music\.logout">Log out[\s\S]*?neteaseSidebarAccountMenu\?\.addEventListener\('click'[\s\S]*?if \(button\.dataset\.action === 'logout'\) \{[\s\S]*?await api\?\.logout\?\.\(\);[\s\S]*?resetNeteaseSessionUi\(\);[\s\S]*?toast\.message\(tr\('music\.loggedOut', \{\}, 'Logged out'\)\);/,
     "account menu should directly show only logout"
   );
   assert.doesNotMatch(musicHtml, /renderNeteaseAccountMenu|data-action="account"|data-action="new-login"|switchAccount/, "account switching UI should be removed");
@@ -1934,7 +2012,7 @@ test("NetEase search page renders daily recommendations and hot playlists", asyn
   assert.match(musicHtml, /\.netease-search-home\{display:grid;gap:28px/, "search home should have dedicated layout styles");
   assert.match(
     musicHtml,
-    /const loadNeteaseSearchHome = async \(\{ force = false \} = \{\}\) => \{[\s\S]*?api\.getSearchHome\(\{ songLimit: 8, playlistLimit: 8 \}\);[\s\S]*?Daily Recommended Songs[\s\S]*?createNeteaseHomeSongTable\(dailySongs\)[\s\S]*?Hot Playlists[\s\S]*?makeNeteasePlaylistCard\(playlist, 'search-home'\)/,
+    /const renderNeteaseSearchHome = \(\{ dailySongs = \[\], hotPlaylists = \[\] \} = \{\}\) => \{[\s\S]*?legacy\.dailyRecommended[\s\S]*?createNeteaseHomeSongTable\(dailySongs\)[\s\S]*?legacy\.hotPlaylists[\s\S]*?makeNeteasePlaylistCard\(playlist, 'search-home'\)[\s\S]*?const loadNeteaseSearchHome = async \(\{ force = false \} = \{\}\) => \{[\s\S]*?api\.getSearchHome\(\{ songLimit: 8, playlistLimit: 8 \}\);/,
     "search home should render daily songs and hot playlist cards"
   );
   assert.match(
@@ -1999,7 +2077,7 @@ test("NetEase Play All skips unavailable leading songs", async () => {
   );
   assert.match(
     musicHtml,
-    /throw lastError \|\| new Error\('No playable songs in this collection\.'\);/,
+    /throw lastError \|\| new Error\(tr\('music\.noPlayableSongs', \{\}, 'No playable songs'\)\);/,
     "NetEase Play All should only fail after every candidate is unavailable"
   );
 });
@@ -2099,17 +2177,17 @@ test("shared player skips unavailable NetEase songs while advancing the queue", 
   );
   assert.match(
     playerScript,
-    /async function playAdjacentTrack\(direction=1\)\{[\s\S]*?for\(const id of adjacentCandidates\(direction\)\)\{[\s\S]*?const ok=await playTrack\(id,true,\{silentFailure:true\}\);[\s\S]*?if\(skipped\) toast\('message','Skipped unavailable songs'/,
+    /async function playAdjacentTrack\(direction=1\)\{[\s\S]*?for\(const id of adjacentCandidates\(direction\)\)\{[\s\S]*?const ok=await playTrack\(id,true,\{silentFailure:true\}\);[\s\S]*?if\(skipped\) toast\('message',trPlural\('player\.skippedUnavailable'/,
     "shared player should keep trying later queue items when a NetEase track cannot be played"
   );
   assert.match(
     playerScript,
-    /const silentFailure = options\.silentFailure === true;[\s\S]*?if\(!silentFailure\) toast\('error','Unable to refresh NetEase URL'\);[\s\S]*?catch\(error\)\{[\s\S]*?const message=playbackErrorText\(error\);[\s\S]*?if\(!silentFailure\) toast\('error',message\);/,
+    /const silentFailure = options\.silentFailure === true;[\s\S]*?if\(!silentFailure\) toast\('error',tr\('player\.refreshUrlFailed'[\s\S]*?catch\(error\)\{[\s\S]*?const message=playbackErrorText\(error\);[\s\S]*?if\(!silentFailure\) toast\('error',message\);/,
     "skip-aware queue advance should suppress per-track failure toasts while preserving source-aware normal errors"
   );
   assert.match(
     playerScript,
-    /state\.playing=false;[\s\S]*?syncPlayButton\(\);[\s\S]*?updateQueuePlaybackState\(\);[\s\S]*?if\(skipped\) toast\('error','No playable songs left'/,
+    /state\.playing=false;[\s\S]*?syncPlayButton\(\);[\s\S]*?updateQueuePlaybackState\(\);[\s\S]*?if\(skipped\) toast\('error',tr\('player\.noPlayableSongsLeft'/,
     "shared player should clear the playing state when every remaining queue candidate is unavailable"
   );
   assert.match(
@@ -2179,13 +2257,13 @@ test("shared player queue empty state is source-neutral", async () => {
 
   assert.match(
     playerScript,
-    /e\.textContent='Queue is empty';/,
-    "shared player should not describe an empty NetEase queue as a missing local import"
+    /e\.textContent=tr\('player\.queueEmpty',\{\},'Queue is empty'\);/,
+    "shared player should keep the empty queue copy source-neutral through the language catalog"
   );
   assert.match(
     playerScript,
-    /<button aria-label="Queue" class="music-playlist-button" id="musicPlaylistToggle" type="button">/,
-    "shared player queue toggle should use the same queue terminology as the queue panel"
+    /<button aria-label="Queue" data-i18n-aria-label="player\.toggleQueue" class="music-playlist-button" id="musicPlaylistToggle" type="button">/,
+    "shared player queue toggle should use the same localized queue terminology as the queue panel"
   );
   assert.doesNotMatch(
     playerScript,
@@ -2199,8 +2277,8 @@ test("shared player queue empty state is source-neutral", async () => {
   );
   assert.match(
     playerScript,
-    /toast\('success','Queue cleared'\);/,
-    "clearing the shared player should describe the action as a queue operation"
+    /toast\('success',tr\('player\.queueCleared',\{\},'Queue cleared'\)\);/,
+    "clearing the shared player should describe the action as a localized queue operation"
   );
   assert.doesNotMatch(
     playerScript,
@@ -2214,8 +2292,8 @@ test("shared player artist fallback respects local and NetEase sources", async (
 
   assert.match(
     playerScript,
-    /const artistFallback = track => isNeteaseId\(track\?\.id\) \? 'NetEase Cloud' : 'Local music';/,
-    "shared player should choose fallback artist text from the active track source"
+    /const artistFallback = track => isNeteaseId\(track\?\.id\) \? tr\('music\.neteaseCloud',\{\},'NetEase Cloud'\) : tr\('music\.localMusic',\{\},'Local music'\);/,
+    "shared player should choose localized fallback artist text from the active track source"
   );
   assert.match(
     playerScript,
@@ -2297,27 +2375,27 @@ test("NetEase playlist cards reuse local tilted-card interaction", async () => {
 
   assert.match(
     musicHtml,
-    /hero\.querySelector\('\.playlist-detail-meta'\)\.textContent = subtitle \|\| `[$]\{songs\.length\} track[$]\{songs\.length === 1 \? '' : 's'\}`;/,
-    "NetEase detail hero fallback should use the same track/tracks wording as local playlist details"
+    /hero\.querySelector\('\.playlist-detail-meta'\)\.textContent = subtitle \|\| musicCount\('trackCount', songs\.length, `[$]\{songs\.length\} tracks`\);/,
+    "NetEase detail hero fallback should use the shared localized track-count wording"
   );
   assert.match(
     musicHtml,
-    /const creator = playlist\.creator \|\| 'NetEase Cloud';[\s\S]*?`[$]\{trackCount\} track[$]\{trackCount === 1 \? '' : 's'\} \\u00b7 [$]\{creator\}`/,
+    /const creator = playlist\.creator \|\| tr\('music\.neteaseCloud', \{\}, 'NetEase Cloud'\);[\s\S]*?musicCount\('trackCount', trackCount, `[$]\{trackCount\} tracks`\)[\s\S]*?[$]\{creator\}/,
     "NetEase playlist detail meta should include track count and source context like local playlist details"
   );
   assert.match(
     musicHtml,
-    /const totalTracks = result\.playlists\.reduce\(\(sum, playlist\) => sum \+ \(Number\(playlist\.trackCount\) \|\| 0\), 0\);[\s\S]*?`[$]\{result\.playlists\.length\} playlist[$]\{result\.playlists\.length === 1 \? '' : 's'\} \\u00b7 [$]\{totalTracks\} track[$]\{totalTracks === 1 \? '' : 's'\}`/,
-    "NetEase playlist summary should match the local playlists/tracks count format"
+    /const totalTracks = result\.playlists\.reduce\(\(sum, playlist\) => sum \+ \(Number\(playlist\.trackCount\) \|\| 0\), 0\);[\s\S]*?musicCount\('playlistCount', result\.playlists\.length, `[$]\{result\.playlists\.length\} playlists`\)[\s\S]*?musicCount\('trackCount', totalTracks, `[$]\{totalTracks\} tracks`\)/,
+    "NetEase playlist summary should use localized playlist and track counts"
   );
   assert.match(
     musicHtml,
-    /if \(!result\.playlists\.length\) \{[\s\S]*?empty\.className = 'netease-empty';[\s\S]*?empty\.textContent = 'No NetEase playlists found\.';[\s\S]*?neteaseAccountPanel\.replaceChildren\(wrap\);[\s\S]*?return;/,
-    "NetEase playlist account view should show an explicit empty state instead of a blank grid"
+    /if \(!result\.playlists\.length\) \{[\s\S]*?empty\.className = 'netease-empty';[\s\S]*?music\.noNeteasePlaylists[\s\S]*?neteaseAccountPanel\.replaceChildren\(wrap\);[\s\S]*?return;/,
+    "NetEase playlist account view should show a localized explicit empty state instead of a blank grid"
   );
   assert.match(
     musicHtml,
-    /card\.className = 'playlist-tilted-card';[\s\S]*?card\.querySelector\('\.playlist-card-meta'\)\.textContent = `\$\{playlist\.trackCount \|\| 0\} tracks`;[\s\S]*?attachTiltedCard\(card\);/,
+    /card\.className = 'playlist-tilted-card';[\s\S]*?card\.querySelector\('\.playlist-card-meta'\)\.textContent = musicCount\('trackCount', playlist\.trackCount \|\| 0, `\$\{playlist\.trackCount \|\| 0\} tracks`\);[\s\S]*?attachTiltedCard\(card\);/,
     "NetEase playlist cards should use the same tilted hover behavior as local playlist cards"
   );
   assert.match(
@@ -2337,12 +2415,12 @@ test("NetEase playlist cards reuse local tilted-card interaction", async () => {
   );
   assert.match(
     neteaseService,
-    /createdPlaylists = createdResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(playlist => normalizePlaylist\(playlist, \{ owned: true \}\)\);[\s\S]*?savedPlaylists = savedResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(playlist => normalizePlaylist\(playlist, \{ subscribed: true \}\)\);/,
+    /createdPlaylists = createdResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(playlist => normalizePlaylist\(playlist, \{ owned: true \}, this\.t\)\);[\s\S]*?savedPlaylists = savedResult\.playlists\.filter\(playlist => !isLikedPlaylist\(playlist\)\)\.map\(playlist => normalizePlaylist\(playlist, \{ subscribed: true \}, this\.t\)\);/,
     "NetEase playlist service should use API-provided created and collected groups for ownership and collection state"
   );
   assert.match(
     musicHtml,
-    /const createdGroup = Array\.isArray\(result\.createdPlaylists\) \? result\.createdPlaylists : result\.playlists;[\s\S]*?const savedGroup = Array\.isArray\(result\.savedPlaylists\) \? result\.savedPlaylists : \[\];[\s\S]*?appendPlaylistGroup\('Created Playlists', createdGroup \|\| \[\]\);[\s\S]*?appendPlaylistGroup\('Saved Playlists', savedGroup \|\| \[\]\);/,
+    /const createdGroup = Array\.isArray\(result\.createdPlaylists\) \? result\.createdPlaylists : result\.playlists;[\s\S]*?const savedGroup = Array\.isArray\(result\.savedPlaylists\) \? result\.savedPlaylists : \[\];[\s\S]*?appendPlaylistGroup\(tr\('music\.createdPlaylists', \{\}, 'Created Playlists'\), createdGroup \|\| \[\]\);[\s\S]*?appendPlaylistGroup\(tr\('music\.savedPlaylists', \{\}, 'Saved Playlists'\), savedGroup \|\| \[\]\);/,
     "NetEase playlist view should render API-provided groups and avoid an empty grouped page while the main process is still on an older response shape"
   );
   assert.match(
@@ -2372,7 +2450,7 @@ test("NetEase loading states use shimmer placeholders", async () => {
   );
   assert.match(
     musicHtml,
-    /const renderSongRowsLoading = \(label = 'Loading songs'\) => `[\s\S]*?netease-loading-row[\s\S]*?netease-loading-thumb shimmer/,
+    /const renderSongRowsLoading = \(label = tr\('common\.loading', \{\}, 'Loading…'\)\) => `[\s\S]*?netease-loading-row[\s\S]*?netease-loading-thumb shimmer/,
     "song loading should show shimmering table rows"
   );
   assert.match(
@@ -2387,7 +2465,27 @@ test("NetEase loading states use shimmer placeholders", async () => {
   );
   assert.match(
     musicHtml,
-    /neteaseResults\.innerHTML = renderSongRowsLoading\('Searching songs'\);/,
+    /neteaseResults\.innerHTML = renderSongRowsLoading\(tr\('music\.searchingSongs', \{\}, 'Searching songs'\)\);/,
     "searching songs should use shimmering rows"
+  );
+});
+
+test("legacy shell localizes titles and fullscreen accessibility text without reloading embedded views", async () => {
+  const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
+
+  assert.match(
+    shell,
+    /const titleKeyForView = view => `app\.title\.[$]\{view in spaPages \? view : 'calendar'\}`;[\s\S]*?const syncDocumentTitle = view => \{ document\.title = t\(titleKeyForView\(view\)/,
+    "legacy shell document titles should resolve from the shared i18n catalog"
+  );
+  assert.match(
+    shell,
+    /window\.addEventListener\('kairos:locale-changed', \(\) => \{[\s\S]*?syncDocumentTitle\(view\);[\s\S]*?spaFrames\.forEach\(frame => \{ frame\.title = t\(titleKeyForView\(frame\.dataset\.view\)/,
+    "language changes should update legacy shell and iframe titles without rebuilding the current view"
+  );
+  assert.match(
+    shell,
+    /fullscreenButton\.dataset\.i18nAriaLabel = 'calendar\.fullscreen';[\s\S]*?fullscreenButton\.setAttribute\('aria-label',t\('calendar\.fullscreen','Enter calendar fullscreen'\)\)[\s\S]*?const labelKey = active \? 'calendar\.fullscreenExit' : 'calendar\.fullscreen';/,
+    "calendar fullscreen accessibility text should be catalog-backed in both states"
   );
 });

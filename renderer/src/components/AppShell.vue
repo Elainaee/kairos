@@ -9,6 +9,7 @@ import ReminderPanel from "./ReminderPanel.vue";
 import ReminderRuntime from "./ReminderRuntime.vue";
 import ToastHost from "./ToastHost.vue";
 import LegacyScheduleDialogHost from "./LegacyScheduleDialogHost.vue";
+import CloseChoiceDialog from "./CloseChoiceDialog.vue";
 import { applyLocale, applyTheme, applyTimeFormat, t } from "../i18n";
 
 const route = useRoute();
@@ -19,7 +20,17 @@ const toasts = useToastsStore();
 const settingsOpen = ref(false);
 const settingsOpener = ref<HTMLElement>();
 const remindersOpen = ref(false);
-const petHidden = ref(false);
+const closeChoiceOpen = ref(false);
+const windowMaximized = ref(false);
+// Preserve the last authoritative desktop-pet state while the shell or an
+// embedded legacy frame is being recreated.  Electron remains the source of
+// truth; this only prevents the restore affordance from disappearing during a
+// missed IPC notification.
+const PET_VISIBILITY_CACHE_KEY = "kairos.desktop-pet-hidden";
+// Render from the last known hidden state immediately. The preload bridge
+// replays its cached native state after subscription, so a hide action that
+// happened before this Vue shell mounted cannot make the restore button vanish.
+const petHidden = ref(sessionStorage.getItem(PET_VISIBILITY_CACHE_KEY) === "1");
 const nav = ref<HTMLElement>();
 const indicatorStyle = ref<Record<string, string>>({});
 let navObserver: ResizeObserver | undefined;
@@ -30,6 +41,9 @@ let playerAlignmentFrame = 0;
 let playerAlignmentTimers: number[] = [];
 let stopStateChanges: (() => void) | undefined;
 let stopPetVisibilityChanges: (() => void) | undefined;
+let stopWindowMaximizedChanges: (() => void) | undefined;
+let stopCloseRequested: (() => void) | undefined;
+let petVisibilityPoll: number | undefined;
 let appearanceSignature = "";
 const links = computed(() => [
   ["calendar", "calendar_today", t("nav.calendar")], ["habits", "repeat", t("nav.habits")],
@@ -89,16 +103,35 @@ function handleSettingsChanged(event: Event) {
   applyAppearance((event as CustomEvent).detail || {});
 }
 
-function syncPetVisibility(visible: boolean) {
-  petHidden.value = visible === false;
+function syncPetVisibility(visible: unknown) {
+  if (typeof visible !== "boolean") return;
+  petHidden.value = !visible;
+  sessionStorage.setItem(PET_VISIBILITY_CACHE_KEY, petHidden.value ? "1" : "0");
+}
+
+function handleDocumentVisibility() {
+  if (!document.hidden) void refreshPetVisibility();
+}
+
+async function refreshPetVisibility() {
+  try {
+    const visible = await window.kairosDesktop?.pet?.getVisibility?.();
+    if (typeof visible === "boolean") syncPetVisibility(visible);
+  } catch {
+    // Keep the last known state. A transient bridge failure must not remove
+    // the only in-app way to restore a hidden desktop pet.
+  }
 }
 
 async function restorePet() {
   try {
     const restored = await window.kairosDesktop?.pet?.show?.();
-    if (restored !== false) petHidden.value = false;
+    if (restored !== false) syncPetVisibility(true);
   } catch {
-    petHidden.value = true;
+    // Keep the recovery control visible if the bridge is temporarily
+    // unavailable, so the user can retry instead of losing the only restore
+    // path.
+    syncPetVisibility(false);
   }
 }
 
@@ -295,7 +328,9 @@ function syncDocumentTitle() {
     ? t("app.title.music")
     : activePage.value === "schedule"
       ? t("app.title.schedule")
-      : t("app.title.calendar");
+      : activePage.value === "habits"
+        ? t("app.title.habits")
+        : t("app.title.calendar");
 }
 
 onMounted(() => {
@@ -311,13 +346,24 @@ onMounted(() => {
   window.addEventListener("resize", placeIndicator);
   window.addEventListener("resize", settlePlayerAlignment);
   window.addEventListener("kairos:settings-changed", handleSettingsChanged);
+  window.addEventListener("kairos:locale-changed", syncDocumentTitle);
   window.addEventListener("kairos:calendar-frame-ready", handleCalendarFrameReady);
   window.addEventListener("kairos:calendar-dialog", handleCalendarDialog);
   window.addEventListener("kairos:toast", handleToast);
   window.addEventListener("kairos:music-state-changed", handleMusicStateChanged);
   window.addEventListener("kairos:music-command", handleMusicCommand);
+  window.addEventListener("focus", refreshPetVisibility);
+  window.addEventListener("pageshow", refreshPetVisibility);
+  document.addEventListener("visibilitychange", handleDocumentVisibility);
   stopPetVisibilityChanges = window.kairosDesktop?.pet?.onVisibilityChanged?.(syncPetVisibility);
-  window.kairosDesktop?.pet?.getVisibility?.().then(syncPetVisibility).catch(() => {});
+  stopWindowMaximizedChanges = window.kairosDesktop?.windowControls?.onMaximizedChanged?.(maximized => { windowMaximized.value = maximized; });
+  stopCloseRequested = window.kairosDesktop?.windowControls?.onCloseRequested?.(() => { closeChoiceOpen.value = true; });
+  void window.kairosDesktop?.windowControls?.isMaximized?.().then(maximized => { windowMaximized.value = maximized; });
+  void refreshPetVisibility();
+  // IPC events normally update this immediately.  The small reconciliation
+  // loop covers the one edge case where a pet is hidden while Vite recreates
+  // the shell and the one-shot event is missed.
+  petVisibilityPoll = window.setInterval(refreshPetVisibility, 2000);
   stopStateChanges = (window.kairosDesktop?.appState as any)?.onChanged?.((state: any) => { appState.sync(state); applyAppearance(state?.settings || {}); });
 });
 onBeforeUnmount(() => {
@@ -330,14 +376,21 @@ onBeforeUnmount(() => {
   playerAlignmentTimers.forEach(timer => window.clearTimeout(timer));
   stopStateChanges?.();
   stopPetVisibilityChanges?.();
+  stopWindowMaximizedChanges?.();
+  stopCloseRequested?.();
+  if (petVisibilityPoll) window.clearInterval(petVisibilityPoll);
   window.removeEventListener("resize", placeIndicator);
   window.removeEventListener("resize", settlePlayerAlignment);
   window.removeEventListener("kairos:settings-changed", handleSettingsChanged);
+  window.removeEventListener("kairos:locale-changed", syncDocumentTitle);
   window.removeEventListener("kairos:calendar-frame-ready", handleCalendarFrameReady);
   window.removeEventListener("kairos:calendar-dialog", handleCalendarDialog);
   window.removeEventListener("kairos:toast", handleToast);
   window.removeEventListener("kairos:music-state-changed", handleMusicStateChanged);
   window.removeEventListener("kairos:music-command", handleMusicCommand);
+  window.removeEventListener("focus", refreshPetVisibility);
+  window.removeEventListener("pageshow", refreshPetVisibility);
+  document.removeEventListener("visibilitychange", handleDocumentVisibility);
   document.body.classList.remove("kairos-secondary-view", "kairos-music-view", "kairos-vue-shell", "kairos-calendar-background-active");
   delete document.body.dataset.kairosVuePage;
 });
@@ -357,6 +410,19 @@ function triggerCreate() {
 function openSettings(event: MouseEvent) {
   settingsOpener.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined;
   settingsOpen.value = true;
+}
+function minimizeAppWindow() {
+  void window.kairosDesktop?.windowControls?.minimize?.();
+}
+function toggleAppWindowMaximize() {
+  void window.kairosDesktop?.windowControls?.toggleMaximize?.();
+}
+function closeAppWindow() {
+  void window.kairosDesktop?.windowControls?.close?.();
+}
+function chooseCloseAction(action: "tray" | "exit" | "cancel") {
+  closeChoiceOpen.value = false;
+  void window.kairosDesktop?.windowControls?.closeAction?.(action);
 }
 function syncPlayerVisibility() {
   const player = document.getElementById("musicPlayer");
@@ -403,10 +469,6 @@ function ensureMusicPlayer() {
   <div class="vue-shell">
     <div class="kairos-wallpaper" aria-hidden="true" />
     <header class="kairos-topbar">
-      <RouterLink class="kairos-brand kairos-brand-shiny" to="/calendar">
-        <span class="kairos-brand-mark kairos-brand-mark-shiny material-symbols-outlined">auto_awesome</span>
-        <span class="kairos-brand-name-shiny">Kairos</span>
-      </RouterLink>
       <nav ref="nav" class="kairos-nav kairos-gooey-nav" :aria-label="t('nav.primary')">
         <span class="kairos-gooey-effect" :style="indicatorStyle" aria-hidden="true" />
         <RouterLink v-for="link in links" :key="link[0]" :data-page="link[0]" :class="{ active: activePage === link[0] }" :to="`/${link[0]}`" @click="navigateWithTransition($event, link[0])">
@@ -417,6 +479,11 @@ function ensureMusicPlayer() {
         <button class="kairos-create" type="button" @click="triggerCreate"><span class="material-symbols-outlined">add</span>{{ t('common.createNew') }}</button>
         <button class="kairos-icon-button kairos-reminder-button" type="button" :aria-label="t('common.reminders')" :title="t('common.reminders')" :aria-expanded="remindersOpen" @click="remindersOpen = !remindersOpen"><span class="material-symbols-outlined">notifications</span></button>
         <button class="kairos-icon-button kairos-settings-button" data-settings-bound="1" type="button" :aria-label="t('common.settings')" :title="t('common.settings')" @click="openSettings"><span class="material-symbols-outlined">settings</span></button>
+        <div class="kairos-window-controls" aria-label="Window controls">
+          <button class="kairos-window-minimize" type="button" :aria-label="t('electron.minimize')" :title="t('electron.minimize')" @click="minimizeAppWindow"><span class="kairos-window-glyph kairos-window-glyph--minimize" aria-hidden="true" /></button>
+          <button class="kairos-window-maximize" :class="{ 'is-window-maximized': windowMaximized }" type="button" :aria-label="t(windowMaximized ? 'electron.restore' : 'electron.maximize')" :title="t(windowMaximized ? 'electron.restore' : 'electron.maximize')" @click="toggleAppWindowMaximize"><span class="kairos-window-glyph" :class="windowMaximized ? 'kairos-window-glyph--restore' : 'kairos-window-glyph--maximize'" aria-hidden="true" /></button>
+          <button class="kairos-window-close" type="button" :aria-label="t('common.close')" :title="t('common.close')" @click="closeAppWindow"><span class="kairos-window-glyph kairos-window-glyph--close" aria-hidden="true" /></button>
+        </div>
       </div>
     </header>
     <main class="vue-shell-content" :class="{ 'vue-shell-content--music': activePage === 'music' }" :data-view="activePage"><slot /></main>
@@ -424,9 +491,12 @@ function ensureMusicPlayer() {
     <ReminderPanel :open="remindersOpen" @close="remindersOpen = false" />
     <ReminderRuntime />
     <ToastHost />
+    <CloseChoiceDialog :open="closeChoiceOpen" @choose="chooseCloseAction" />
     <LegacyScheduleDialogHost :page="activePage" />
-    <button v-if="petHidden" class="vue-pet-restore" type="button" aria-label="Restore desktop pet" title="Restore desktop pet" @click="restorePet">
-      <span class="material-symbols-outlined" aria-hidden="true">pets</span>
-    </button>
+    <Teleport to="body">
+      <button v-show="petHidden" class="vue-pet-restore" type="button" :aria-label="t('pet.restore')" :title="t('pet.restore')" @click="restorePet">
+        <span class="material-symbols-outlined" aria-hidden="true">pets</span>
+      </button>
+    </Teleport>
   </div>
 </template>

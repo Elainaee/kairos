@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useAppStateStore } from "../stores/app-state";
+import { t } from "../i18n";
 
 const props = defineProps<{ page: string }>();
 const appState = useAppStateStore();
@@ -17,6 +18,7 @@ function syncFrame() {
   if (!target) return;
   const state = JSON.parse(JSON.stringify(appState.state));
   target.postMessage({ type: "kairos:state-sync", state }, "*");
+  target.postMessage({ type: "kairos:locale-sync", preference: state?.settings?.general?.language || "en" }, "*");
   try {
     (target as any).KairosPendingState = state;
     (target as any).KairosScheduleSyncState?.(state);
@@ -77,14 +79,16 @@ function handleMessage(event: MessageEvent) {
 
 window.addEventListener("kairos:create-new", openOriginalDialog);
 window.addEventListener("message", handleMessage);
+window.addEventListener("kairos:locale-changed", syncFrame);
 onBeforeUnmount(() => {
   window.removeEventListener("kairos:create-new", openOriginalDialog);
   window.removeEventListener("message", handleMessage);
+  window.removeEventListener("kairos:locale-changed", syncFrame);
 });
 </script>
 
 <template>
   <Teleport to="body">
-    <iframe v-if="open" ref="frame" class="vue-legacy-schedule-dialog-host" :class="{ 'is-ready': ready }" title="Add Schedule" :src="source" @load="handleLoad" />
+    <iframe v-if="open" ref="frame" class="vue-legacy-schedule-dialog-host" :class="{ 'is-ready': ready }" :title="t('schedule.add')" :src="source" @load="handleLoad" />
   </Teleport>
 </template>

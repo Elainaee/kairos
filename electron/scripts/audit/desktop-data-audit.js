@@ -65,9 +65,11 @@ export async function auditDesktopDataDir(dir = defaultUserDataDir()) {
   const userDataDir = path.resolve(dir);
   const files = await Promise.all(JSON_FILES.map(([name, required]) => inspectJsonFile(userDataDir, name, required)));
   const database = await inspectDatabase(userDataDir);
+  const databaseIsAuthoritative = database.exists && database.ok;
+  const requiredIssues = files.filter(file => !file.ok && !(databaseIsAuthoritative && file.name === "app-state.json" && file.issue === "missing_required_file"));
   const issues = files.filter(file => !file.ok || file.issue === "missing_optional_file");
   return {
-    ok: files.every(file => file.ok) && database.ok,
+    ok: requiredIssues.length === 0 && database.ok,
     userDataDir,
     files,
     database,

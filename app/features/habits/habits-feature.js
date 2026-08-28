@@ -3,6 +3,8 @@
   const ICONS=[['📚','Reading'],['🏋️','Exercise'],['🧠','Study'],['🌙','Sleep'],['💧','Hydration'],['🧘','Meditation'],['✍️','Writing'],['🥗','Healthy Eating'],['🏃','Running'],['🧹','Cleaning']];
   const LEGACY_ICONS={menu_book:'📚',fitness_center:'🏋️',school:'🧠',bedtime:'🌙',water_drop:'💧',self_improvement:'🧘',edit_note:'✍️',nutrition:'🥗',directions_run:'🏃',cleaning_services:'🧹',routine:'📚'};
   const core=window.KairosHabitCore;
+  const tr=(key,params,fallback=key)=>window.KairosI18n?.t?.(key,params,fallback)||fallback;
+  const trPlural=(key,count,fallback)=>window.KairosI18n?.plural?.(key,count,{},fallback)||fallback;
   let state;
   let lastHabitCompletionRate=null,habitCompletionFrame=0;
   const pad=n=>String(n).padStart(2,'0');
@@ -14,10 +16,10 @@
   const reactPet=(action,payload={})=>{if(window.kairosDesktop?.pet?.react)return window.kairosDesktop.pet.react(action,payload).catch(()=>{});if(window.top!==window)window.top.postMessage({type:'kairos:pet-react',action,payload},'*')};
   const escape=value=>String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
-  const kairosConfirmAlert=({title,description,action='Continue',cancel='Cancel',tone='danger'}={})=>new Promise(resolve=>{
+  const kairosConfirmAlert=({title,description,action=tr('common.continue',{},'Continue'),cancel=tr('common.cancel',{},'Cancel'),tone='danger'}={})=>new Promise(resolve=>{
     let dialog=document.getElementById('kairosAlertDialog');
     if(!dialog){dialog=document.createElement('dialog');dialog.id='kairosAlertDialog';dialog.className='kairos-alert-dialog';dialog.setAttribute('role','alertdialog');dialog.innerHTML='<form method="dialog" class="kairos-alert-content"><div class="kairos-alert-header"><div class="kairos-alert-media"><span class="material-symbols-outlined">warning</span></div><div><h2 class="kairos-alert-title"></h2><p class="kairos-alert-description"></p></div></div><footer class="kairos-alert-footer"><button class="kairos-alert-cancel" value="cancel" type="submit"></button><button class="kairos-alert-action" value="confirm" type="submit"></button></footer></form>';document.body.append(dialog)}
-    dialog.dataset.tone=tone;dialog.querySelector('.kairos-alert-title').textContent=title||'Are you sure?';dialog.querySelector('.kairos-alert-description').textContent=description||'This action cannot be undone.';dialog.querySelector('.kairos-alert-cancel').textContent=cancel;dialog.querySelector('.kairos-alert-action').textContent=action;
+    dialog.dataset.tone=tone;dialog.querySelector('.kairos-alert-title').textContent=title||tr('common.confirmTitle',{},'Are you sure?');dialog.querySelector('.kairos-alert-description').textContent=description||tr('common.confirmDescription',{},'This action cannot be undone.');dialog.querySelector('.kairos-alert-cancel').textContent=cancel;dialog.querySelector('.kairos-alert-action').textContent=action;
     const done=value=>{dialog.removeEventListener('close',onClose);resolve(value)};const onClose=()=>done(dialog.returnValue==='confirm');
     dialog.addEventListener('close',onClose,{once:true});dialog.showModal();dialog.querySelector('.kairos-alert-cancel')?.focus();
   });
@@ -46,11 +48,12 @@
 
   async function load(){
     let local={};try{local=JSON.parse(localStorage.getItem(KEY)||'{}')}catch{}
+    const hasLegacyHabits=Array.isArray(local.habits)&&local.habits.length>0;
     state={...local,habits:(Array.isArray(local.habits)?local.habits:[]).map(clean)};
     if(window.kairosDesktop){
       const persisted=await window.kairosDesktop.appState.get();
       state={...state,...persisted,habits:[...(persisted.habits||[]),...(state.habits||[]).filter(item=>!(persisted.habits||[]).some(existing=>existing.id===item.id))]};
-      await window.kairosDesktop.appState.save(state);localStorage.removeItem(KEY);
+      if(hasLegacyHabits)await window.kairosDesktop.appState.save(state);localStorage.removeItem(KEY);
       state.habits=(Array.isArray(state.habits)?state.habits:[]).map(clean);
       window.kairosDesktop.appState.onChanged(next=>{state=next;state.habits=(next.habits||[]).map(clean);render()});
     }
@@ -67,18 +70,18 @@
   }
   function card(habit){
     const done=habit.dates.includes(today());
-    return `<article class="real-habit-card habit-magic-card" data-id="${habit.id}"><button class="habit-drag-handle" type="button" draggable="true" aria-label="Drag to reorder"><span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span></button><button class="habit-check-button ${done?'done':''}" data-toggle="${habit.id}" aria-label="${done?'Mark incomplete':'Mark complete'}"><span aria-hidden="true">${done?'✓':''}</span></button><div class="habit-card-copy"><span class="habit-card-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><div><h3>${escape(habit.name)}</h3><p>${escape(habit.description||'A little progress every day')}</p></div></div><strong>${streak(habit)}<small>day streak</small></strong><button class="habit-more" data-edit="${habit.id}" aria-label="Edit habit"><span class="material-symbols-outlined">more_vert</span></button></article>`;
+    const days=streak(habit);return `<article class="real-habit-card habit-magic-card" data-id="${habit.id}"><button class="habit-drag-handle" type="button" draggable="true" aria-label="${tr('habits.dragToReorder',{},'Drag to reorder')}"><span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span></button><button class="habit-check-button ${done?'done':''}" data-toggle="${habit.id}" aria-label="${done?tr('habits.markIncomplete',{},'Mark incomplete'):tr('habits.markComplete',{},'Mark complete')}"><span aria-hidden="true">${done?'✓':''}</span></button><div class="habit-card-copy"><span class="habit-card-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><div><h3>${escape(habit.name)}</h3><p>${escape(habit.description||tr('habits.defaultDescription',{},'A little progress every day'))}</p></div></div><strong>${days}<small>${tr('habits.streak',{},'day streak')}</small></strong><button class="habit-more" data-edit="${habit.id}" aria-label="${tr('habits.editAction',{},'Edit habit')}"><span class="material-symbols-outlined">more_vert</span></button></article>`;
   }
   function heatmap(habit){
     let cells='';for(const cell of core?.heatmapWindow?core.heatmapWindow(habit,today(),84):Array.from({length:84},(_,i)=>{const date=shift(today(),i-83);return{date,done:habit.dates.includes(date)}})){cells+=`<span class="heat-cell ${cell.done?'done':''}" title="${cell.date}"></span>`}
     const completed=habit.dates.filter(date=>date>=shift(today(),-83)&&date<=today()).length;
-    return `<article class="habit-magic-card"><header><span class="habit-heatmap-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><strong>${escape(habit.name)}</strong><small>${completed}/84 days</small></header><div class="real-heatmap">${cells}</div></article>`;
+    return `<article class="habit-magic-card"><header><span class="habit-heatmap-icon" aria-hidden="true">${escape(habit.icon||'📚')}</span><strong>${escape(habit.name)}</strong><small>${tr('habits.heatmapCount',{completed},`${completed}/84 days`)}</small></header><div class="real-heatmap">${cells}</div></article>`;
   }
   function render(){
     const main=document.querySelector('main.kairos-page-main');if(!main)return;
     const done=state.habits.filter(habit=>habit.dates.includes(today())).length,total=state.habits.length,rate=total?Math.round(done/total*100):0;
     const progressStart=(lastHabitCompletionRate===null?0:lastHabitCompletionRate)*3.6;
-    main.innerHTML=`<div class="habit-dashboard"><header class="habit-page-head"><div><span class="habit-kicker">DAILY RHYTHM</span><h1>My Habits</h1><p>${done} of ${total} completed today. Every small step counts.</p></div><button class="habit-primary" data-add><span class="material-symbols-outlined">add</span>Add Habit</button></header><div class="habit-columns"><section><h2>Active Habits</h2><div class="habit-cards">${total?state.habits.map(card).join(''):'<div class="habit-empty">No habits yet. Add a small goal to get started.</div>'}</div></section><section class="habit-progress-column"><h2 aria-hidden="true">&nbsp;</h2><div class="habit-momentum habit-magic-card"><span>Today&apos;s Progress</span><div class="habit-ring" data-habit-progress-ring style="--progress:${progressStart}deg"><div><strong class="habit-count-up-text" data-habit-countup>${rate}%</strong><small>completion</small></div></div><dl><div class="habit-magic-card"><dt>Current Longest Streak</dt><dd>${Math.max(0,...state.habits.map(streak))} days</dd></div><div class="habit-magic-card"><dt>Personal Best</dt><dd>${Math.max(0,...state.habits.map(best))} days</dd></div></dl></div></section><section><h2>Last 12 Weeks</h2><div class="habit-heatmaps">${state.habits.map(heatmap).join('')}</div></section></div></div>`;
+    const longest=Math.max(0,...state.habits.map(streak)),personalBest=Math.max(0,...state.habits.map(best));main.innerHTML=`<div class="habit-dashboard"><header class="habit-page-head"><div><span class="habit-kicker">${tr('habits.dailyRhythm',{},'DAILY RHYTHM')}</span><h1>${tr('habits.myHabits',{},'My Habits')}</h1><p>${tr('habits.completedToday',{completed:done,total},`${done} of ${total} completed today. Every small step counts.`)}</p></div><button class="habit-primary" data-add><span class="material-symbols-outlined">add</span>${tr('habits.add',{},'Add Habit')}</button></header><div class="habit-columns"><section><h2>${tr('habits.active',{},'Active Habits')}</h2><div class="habit-cards">${total?state.habits.map(card).join(''):`<div class="habit-empty">${tr('habits.none',{},'No habits yet. Add a small goal to get started.')}</div>`}</div></section><section class="habit-progress-column"><h2 aria-hidden="true">&nbsp;</h2><div class="habit-momentum habit-magic-card"><span>${tr('habits.todayProgress',{},"Today's Progress")}</span><div class="habit-ring" data-habit-progress-ring style="--progress:${progressStart}deg"><div><strong class="habit-count-up-text" data-habit-countup>${rate}%</strong><small>${tr('habits.completion',{},'completion')}</small></div></div><dl><div class="habit-magic-card"><dt>${tr('habits.currentLongestStreak',{},'Current Longest Streak')}</dt><dd>${trPlural('habits.dayCount',longest,`${longest} days`)}</dd></div><div class="habit-magic-card"><dt>${tr('habits.personalBest',{},'Personal Best')}</dt><dd>${trPlural('habits.dayCount',personalBest,`${personalBest} days`)}</dd></div></dl></div></section><section><h2>${tr('habits.last12Weeks',{},'Last 12 Weeks')}</h2><div class="habit-heatmaps">${state.habits.map(heatmap).join('')}</div></section></div></div>`;
     animateHabitCompletion(rate);
     main.querySelectorAll('[data-toggle]').forEach(button=>button.onclick=()=>toggle(button.dataset.toggle));
     main.querySelectorAll('[data-edit]').forEach(button=>button.onclick=()=>editor(button.dataset.edit));
@@ -89,14 +92,14 @@
   }
   function history(habit){
     let days='';for(let index=29;index>=0;index--){const date=shift(today(),-index);days+=`<button type="button" data-history="${date}" class="${habit.dates.includes(date)?'done':''}">${from(date).getDate()}</button>`}
-    return `<section class="editor-history"><strong>Last 30 Days</strong><div>${days}</div></section>`;
+    return `<section class="editor-history"><strong>${tr('habits.last30Days',{},'Last 30 Days')}</strong><div>${days}</div></section>`;
   }
   function editor(id){
     const habit=state.habits.find(item=>item.id===id);let dialog=document.getElementById('realHabitEditor');
     if(!dialog){dialog=document.createElement('dialog');dialog.id='realHabitEditor';dialog.className='habit-editor';document.body.append(dialog)}
-    const selectedIcon=habit?.icon||ICONS[0][0],iconGrid=ICONS.map(([emoji])=>`<button type="button" class="habit-emoji-option ${selectedIcon===emoji?'selected':''}" data-emoji="${emoji}" aria-label="Select ${emoji}" aria-pressed="${selectedIcon===emoji}">${emoji}</button>`).join('');
+    const selectedIcon=habit?.icon||ICONS[0][0],iconGrid=ICONS.map(([emoji])=>`<button type="button" class="habit-emoji-option ${selectedIcon===emoji?'selected':''}" data-emoji="${emoji}" aria-label="${tr('habits.selectIcon',{icon:emoji},`Select ${emoji}`)}" aria-pressed="${selectedIcon===emoji}">${emoji}</button>`).join('');
     const allowBackfill=!!habit?.allowBackfill;
-    dialog.innerHTML=`<form><header><div><small>ROUTINE</small><h2>${habit?'Edit Habit':'Add Habit'}</h2></div><button type="button" data-cancel aria-label="Close">×</button></header><label>Name<input name="name" maxlength="24" required value="${escape(habit?.name)}"></label><label>Short Description<input name="description" maxlength="40" value="${escape(habit?.description)}"></label><label>Icon<div class="habit-icon-picker"><input name="icon" type="hidden" value="${selectedIcon}"><button class="habit-icon-trigger" type="button" aria-expanded="false"><span>${selectedIcon}</span><span class="material-symbols-outlined">expand_more</span></button><div class="habit-emoji-grid" hidden>${iconGrid}</div></div></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px" class="schedule-all-day"><input name="backfill" type="checkbox" ${allowBackfill?'checked':''}>Allow check-ins for past dates</label><section class="editor-history${allowBackfill?'':' collapsed'}">${habit?history(habit):history({dates:[]})}</section><footer>${habit?'<button type="button" class="habit-danger" data-delete>Delete Habit</button>':'<span></span>'}<button type="button" data-cancel>Cancel</button><button type="submit" class="habit-primary">Save</button></footer></form>`;
+    dialog.innerHTML=`<form><header><div><small>${tr('habits.routine',{},'ROUTINE')}</small><h2>${habit?tr('habits.edit',{},'Edit Habit'):tr('habits.add',{},'Add Habit')}</h2></div><button type="button" data-cancel aria-label="${tr('common.close',{},'Close')}">×</button></header><label>${tr('habits.name',{},'Name')}<input name="name" maxlength="24" required value="${escape(habit?.name)}"></label><label>${tr('habits.shortDescription',{},'Short Description')}<input name="description" maxlength="40" value="${escape(habit?.description)}"></label><label>${tr('habits.icon',{},'Icon')}<div class="habit-icon-picker"><input name="icon" type="hidden" value="${selectedIcon}"><button class="habit-icon-trigger" type="button" aria-expanded="false"><span>${selectedIcon}</span><span class="material-symbols-outlined">expand_more</span></button><div class="habit-emoji-grid" hidden>${iconGrid}</div></div></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px" class="schedule-all-day"><input name="backfill" type="checkbox" ${allowBackfill?'checked':''}>${tr('habits.allowBackfill',{},'Allow check-ins for past dates')}</label><section class="editor-history${allowBackfill?'':' collapsed'}">${habit?history(habit):history({dates:[]})}</section><footer>${habit?`<button type="button" class="habit-danger" data-delete>${tr('habits.delete',{},'Delete Habit')}</button>`:'<span></span>'}<button type="button" data-cancel>${tr('common.cancel',{},'Cancel')}</button><button type="submit" class="habit-primary">${tr('common.save',{},'Save')}</button></footer></form>`;
     dialog.showModal();
     const iconTrigger=dialog.querySelector('.habit-icon-trigger'),iconGridElement=dialog.querySelector('.habit-emoji-grid'),iconInput=dialog.querySelector('[name=icon]');
     iconTrigger.onclick=()=>{const open=iconGridElement.hidden;iconGridElement.hidden=!open;iconTrigger.setAttribute('aria-expanded',String(open))};
@@ -104,7 +107,7 @@
     dialog.querySelector('[name=backfill]').onchange=()=>{const hist=dialog.querySelector('.editor-history');if(hist)hist.classList.toggle('collapsed',!dialog.querySelector('[name=backfill]').checked)};
     dialog.querySelectorAll('[data-cancel]').forEach(button=>button.onclick=()=>dialog.close());
     dialog.querySelector('form').onsubmit=event=>{event.preventDefault();const form=new FormData(event.currentTarget),item=clean({...habit,id:habit?.id||uid(),name:form.get('name').trim(),description:form.get('description').trim(),icon:form.get('icon')||ICONS[0][0],dates:habit?.dates||[],allowBackfill:form.get('backfill')==='on'});state.habits=habit?state.habits.map(current=>current.id===habit.id?item:current):[...state.habits,item];save();dialog.close();render()};
-    dialog.querySelector('[data-delete]')?.addEventListener('click',async()=>{const ok=await kairosConfirmAlert({title:'Delete habit?',description:'This habit and all of its check-in history will be permanently removed.',action:'Delete Habit',cancel:'Cancel'});if(!ok)return;state.habits=state.habits.filter(item=>item.id!==habit.id);save();dialog.close();render()});
+    dialog.querySelector('[data-delete]')?.addEventListener('click',async()=>{const ok=await kairosConfirmAlert({title:tr('habits.delete',{},'Delete Habit'),description:tr('habits.deleteConfirm',{},'Delete this habit and all of its check-in history?'),action:tr('habits.delete',{},'Delete Habit'),cancel:tr('common.cancel',{},'Cancel')});if(!ok)return;state.habits=state.habits.filter(item=>item.id!==habit.id);save();dialog.close();render()});
     const bindHistoryClicks=()=>{dialog.querySelectorAll('[data-history]').forEach(button=>button.onclick=()=>{const allow=dialog.querySelector('[name=backfill]').checked;habit.allowBackfill=allow;if(button.dataset.history===today()||allow){toggle(habit.id,button.dataset.history);const section=dialog.querySelector('.editor-history');if(section)section.outerHTML=history(habit);bindHistoryClicks()}})};bindHistoryClicks();
   }
   function setupDrag(){
@@ -160,6 +163,7 @@
     });
   }
   window.addEventListener('message',event=>{if(event.data?.type==='kairos:state-sync'&&event.data.state){state=event.data.state;state.habits=(Array.isArray(state.habits)?state.habits:[]).map(clean);render()}});
+  window.addEventListener('kairos:locale-changed',render);
   document.addEventListener('click',event=>{const button=event.target.closest?.('.habit-check-button[data-toggle]');if(!button||button.classList.contains('done'))return;const title=button.closest('.real-habit-card')?.querySelector('h3')?.textContent||'';queueMicrotask(()=>reactPet('happy',{title}))},true);
   load();
 })();

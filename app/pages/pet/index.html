@@ -148,7 +148,7 @@ html.kairos-reduce-motion .particle { display: none !important; }
   <div onclick="playHappy()">✨ 开心一下</div>
   <div onclick="showTime()">🕐 现在几点了</div>
   <div onclick="hidePet()">🌸 隐藏桌宠</div>
-  <div onclick="hideMenu()">关闭菜单</div>
+  <div onclick="hideMenu()">关闭</div>
 </div>
 
 <script>
@@ -185,22 +185,15 @@ document.addEventListener('mouseleave', () => {
   if (startX === undefined && !isDragging) setMousePassthrough(true);
 });
 
-const greetings = {
-  morning: ["早上好～今天也要元气满满哦！","晨安！记得吃早饭了吗？","新的一天开始了，加油！"],
-  noon:    ["午休时间到，要吃午饭哦～","工作半天辛苦了！","下午好！记得喝水哦。"],
-  evening: ["傍晚了，今天过得怎么样？","工作别太累，注意休息～","记得活动一下身体哦！"],
-  night:   ["夜深了，早点休息哦～","不要熬夜！身体最重要！","今天辛苦了，好好睡一觉吧。"]
-};
-const clickLines = [
-  "唔……别戳我啦！","是、是在叫我吗？","我还在呢，放心吧。",
-  "今天你还好吗？","嘿！轻一点！","……我有在认真工作的！",
-  "需要帮什么忙吗？","( ˘ω˘ ) 嗯？","哼哼～"
-];
-const idleLines = [
-  "好困……打个小盹可以吗？","你还在工作吗？要加油哦！",
-  "要不要喝杯水？","记得保护眼睛，看看远处吧。",
-  "外面天气怎么样呀～","我在这里陪着你哦～"
-];
+// 桌宠是固定的中文陪伴角色，不参与应用的中英文界面切换。
+const petLines = Object.freeze({
+  morning: ['早上好～今天也要元气满满哦！'],
+  noon: ['午休时间到，要吃午饭哦～'],
+  evening: ['傍晚了，今天过得怎么样？'],
+  night: ['夜深了，早点休息哦～'],
+  click: ['我还在呢，放心吧。'],
+  idle: ['记得保护眼睛，看看远处吧。']
+});
 
 let bubbleTimer = null;
 let isDragging  = false;
@@ -261,18 +254,18 @@ function spawnParticles(cx, cy) {
   }
 }
 
-setTimeout(() => showBubble(rand(greetings[getSlot()]), 5000), 1000);
+setTimeout(() => showBubble(rand(petLines[getSlot()]), 5000), 1000);
 
 wrap.addEventListener('click', (e) => {
   if (isDragging) return;
   hideMenu();
   clickCount++;
   if (clickCount >= 5) {
-    showBubble('好啦好啦，别再戳了！(｡>﹏<｡)', 3000);
+    showBubble('好啦好啦，别再戳了！', 3000);
     playAnim('shake', 500);
     clickCount = 0;
   } else {
-    showBubble(rand(clickLines));
+    showBubble(rand(petLines.click));
     playAnim('bounce', 560);
   }
   spawnParticles(e.clientX, e.clientY);
@@ -282,7 +275,7 @@ wrap.addEventListener('click', (e) => {
 wrap.addEventListener('dblclick', (e) => {
   e.stopPropagation();
   playAnim('happy', 600);
-  showBubble('哎呀！不要摇我～ (>ω<)');
+  showBubble('哎呀！不要摇我～');
 });
 
 wrap.addEventListener('contextmenu', (e) => {
@@ -298,7 +291,7 @@ if (window.kairosDesktop?.pet?.onBlur) window.kairosDesktop.pet.onBlur(hideMenu)
 function hideMenu() { menu.style.display='none'; window.kairosDesktop?.pet?.resize(195, 230) }
 function openAi() { hideMenu(); window.parent!==window?(window.parent.postMessage({type:'kairos-pet-click'},'*')):window.kairosDesktop?.pet?.click() }
 function hidePet() { hideMenu(); window.parent!==window?window.parent.postMessage({type:'kairos-pet-hide'},'*'):window.kairosDesktop?.pet?.hide() }
-function sayRandom() { showBubble(rand(clickLines)); hideMenu(); }
+function sayRandom() { showBubble(rand(petLines.click)); hideMenu(); }
 function playHappy() {
   playAnim('happy',600);
   const r=wrap.getBoundingClientRect();
@@ -309,47 +302,48 @@ function handleDesktopAction(payload={}) {
   const action=payload.action||'idle', title=String(payload.title||'').trim();
   if(action==='happy') {
     playAnim('happy',600);
-    showBubble(title?`${title} 完成啦，做得真棒！`:'完成啦，做得真棒！',4200);
+    showBubble(title ? `${title} 完成啦，做得真棒！` : '完成啦，做得真棒！',4200);
     const r=wrap.getBoundingClientRect();
     spawnParticles(r.left+90,r.top+90);
     return;
   }
   if(action==='reminder') {
     playAnim('bounce',560);
-    showBubble(title?`提醒：${title}`:'有一条新提醒哦～',5200);
+    showBubble(title ? `新提醒：${title}` : '有一条新提醒哦～',5200);
     return;
   }
   if(action==='sleepy') {
     playAnim('shake',500);
-    showBubble(title?`错过提醒：${title}`:'好像错过了一条提醒……',5200);
+    showBubble(title ? `错过提醒：${title}` : '好像错过了一条提醒……',5200);
     return;
   }
   if(action==='talk') {
     playAnim('bounce',560);
-    showBubble(rand(clickLines));
+    showBubble(rand(petLines.click));
     return;
   }
   playAnim('idle',0);
 }
-const applyMotionPreference=state=>document.documentElement.classList.toggle('kairos-reduce-motion',state?.settings?.accessibility?.reduceMotion===true);
-window.kairosDesktop?.appState?.get?.().then(applyMotionPreference).catch(()=>{});
-window.kairosDesktop?.appState?.onChanged?.(applyMotionPreference);
+const applyAppSettings=state=>{document.documentElement.classList.toggle('kairos-reduce-motion',state?.settings?.accessibility?.reduceMotion===true);};
+window.kairosDesktop?.appState?.get?.().then(applyAppSettings).catch(()=>{});
+window.kairosDesktop?.appState?.onChanged?.(applyAppSettings);
 window.kairosDesktop?.pet?.onAction?.(handleDesktopAction);
+const formatPetTime = value => `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
 function showTime() {
-  const now=new Date(), h=now.getHours(), m=String(now.getMinutes()).padStart(2,'0');
-  showBubble(`现在是 ${h}:${m} ～`, 4000);
+  const now=new Date(), time=formatPetTime(now);
+  showBubble(`现在是 ${time} ～`, 4000);
   hideMenu();
 }
 
 setInterval(()=>{
-  const m=new Date().getMinutes(), h=new Date().getHours();
-  if(m===0) showBubble(`现在是 ${h}:00，注意休息一下哦～`,5000);
-  else if(m===30) showBubble(`${h}:30 啦，时间过得真快！`,4500);
+  const now=new Date(), m=now.getMinutes(), time=formatPetTime(now);
+  if(m===0) showBubble(`现在是 ${time}，注意休息一下哦～`,5000);
+  else if(m===30) showBubble(`${time} 啦，时间过得真快！`,4500);
 }, 60000);
 
 setInterval(()=>{
   if(!bubble.classList.contains('show')&&Math.random()<0.6)
-    showBubble(rand(idleLines),4200);
+    showBubble(rand(petLines.idle),4200);
 }, 5*60*1000);
 
 wrap.addEventListener('mousedown',(e)=>{

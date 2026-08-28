@@ -28,18 +28,18 @@ async function* streamOpenAICompatible(request) {
     yield { type: "completed", usage };
   } catch (error) {
     if (request.signal?.aborted) yield { type: "stopped" };
-    else throw normalizeProviderError(request.provider, error);
+    else throw normalizeProviderError(request.provider, error, request.t);
   }
 }
 
 export async function* streamProviderRequest(request) {
-  if (!request.apiKey) throw new ProviderError("missing_key", "请先配置 API Key");
+  if (!request.apiKey) throw new ProviderError("missing_key", typeof request.t === "function" ? request.t("errors.missingApiKey", {}, "Please configure an API key first.") : "Please configure an API key first.");
   yield* streamOpenAICompatible(request);
 }
 
-export async function testProvider({ provider, apiKey, model }) {
+export async function testProvider({ provider, apiKey, model, t }) {
   const signal = new AbortController().signal;
-  for await (const event of streamProviderRequest({ provider, apiKey, model, messages: [{ role: "user", content: "回复 OK" }], signal })) {
+  for await (const event of streamProviderRequest({ provider, apiKey, model, messages: [{ role: "user", content: "Reply OK" }], signal, t })) {
     if (event.type === "completed") return { ok: true };
   }
   return { ok: false, code: "connection_stopped" };

@@ -4,6 +4,7 @@ import { onBeforeRouteUpdate } from "vue-router";
 import { useAppStateStore } from "../stores/app-state";
 import { useToastsStore } from "../stores/toasts";
 import { useMusicRuntimeStore } from "../stores/music-runtime";
+import { t } from "../i18n";
 
 const props = defineProps<{ page: "calendar" | "schedule" | "music" }>();
 const frame = ref<HTMLIFrameElement>();
@@ -20,6 +21,7 @@ type EmbeddedLegacyWindow = Window & {
   CustomEvent: typeof CustomEvent;
   KairosPendingState?: Record<string, unknown>;
   KairosScheduleSyncState?: (state: Record<string, unknown>) => void;
+  KairosI18n?: { setLocale?: (preference?: string) => string };
 };
 const source = computed(() => import.meta.env.DEV
   ? `/legacy/pages/${props.page}/index.html?embed=1`
@@ -59,6 +61,8 @@ async function syncFrame() {
   const target = frame.value?.contentWindow as EmbeddedLegacyWindow | null;
   target?.postMessage({ type: "kairos:state-sync", state: payload }, "*");
   target?.postMessage({ type: "kairos:motion-preference", reduce: document.documentElement.classList.contains("kairos-reduce-motion") }, "*");
+  const localePreference = String(payload.settings && typeof payload.settings === "object" && (payload.settings as any).general?.language || "en");
+  target?.postMessage({ type: "kairos:locale-sync", preference: localePreference }, "*");
   // `file:`-backed embedded pages can miss the first postMessage while their
   // legacy controllers are being attached.  They expose this state bridge so
   // the Vue shell can deliver the same desktop snapshot once initialization is
@@ -66,6 +70,7 @@ async function syncFrame() {
   try {
     if (target) {
       target.KairosPendingState = payload;
+      target.KairosI18n?.setLocale?.(localePreference);
       target.KairosScheduleSyncState?.(payload);
       target.dispatchEvent(
         new target.CustomEvent("kairos:state-changed", { detail: payload }),
@@ -91,7 +96,7 @@ function calendarSection() {
 function syncFullscreenButton(active: boolean) {
   if (!fullscreenButton) return;
   fullscreenButton.setAttribute("aria-pressed", String(active));
-  fullscreenButton.setAttribute("aria-label", active ? "退出全屏月历" : "全屏显示月历");
+  fullscreenButton.setAttribute("aria-label", active ? t("calendar.fullscreenExit") : t("calendar.fullscreen"));
   const icon = fullscreenButton.querySelector(".material-symbols-outlined");
   if (icon) icon.textContent = active ? "fullscreen_exit" : "fullscreen";
 }
@@ -195,7 +200,7 @@ onBeforeRouteUpdate(() => {
   window.dispatchEvent(new CustomEvent("kairos:calendar-dialog", { detail: { open: false } }));
   frame.value?.contentDocument?.querySelectorAll<HTMLDialogElement>("dialog[open]").forEach(dialog => dialog.close());
 });
-function handleSettingsChanged() { syncFrame(); }
+function handleSettingsChanged() { void syncFrame(); }
 function handleMusicContentReady() {
   if (props.page === "music") void musicRuntime.load();
 }
@@ -203,6 +208,7 @@ function handleEscape(event: KeyboardEvent) { if (event.key === "Escape") toggle
 onMounted(async () => {
   window.addEventListener("message", handleMessage);
   window.addEventListener("kairos:settings-changed", handleSettingsChanged);
+  window.addEventListener("kairos:locale-changed", handleSettingsChanged);
   window.addEventListener("kairos:music-content-ready", handleMusicContentReady);
   window.addEventListener("keydown", handleEscape);
   await mountFrame();
@@ -213,6 +219,7 @@ onBeforeUnmount(() => {
   stateSyncTimers.forEach(timer => window.clearTimeout(timer));
   window.removeEventListener("message", handleMessage);
   window.removeEventListener("kairos:settings-changed", handleSettingsChanged);
+  window.removeEventListener("kairos:locale-changed", handleSettingsChanged);
   window.removeEventListener("kairos:music-content-ready", handleMusicContentReady);
   window.removeEventListener("keydown", handleEscape);
 });
@@ -222,5 +229,5 @@ watch(() => appState.state, () => {
 </script>
 
 <template>
-  <iframe v-if="frameSource" ref="frame" class="vue-legacy-frame" :name="frameName" :title="`${page} workspace`" :src="frameSource" @load="handleFrameLoad" />
+  <iframe v-if="frameSource" ref="frame" class="vue-legacy-frame" :name="frameName" :title="t(`${page}.workspace`)" :src="frameSource" @load="handleFrameLoad" />
 </template>

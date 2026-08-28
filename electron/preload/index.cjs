@@ -1,5 +1,25 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+// The desktop-pet window can be hidden before a hot-reloaded Vue shell has
+// mounted its listener.  Keep the latest main-process state in preload (which
+// is created before the renderer application) and replay it to the first
+// subscriber.  This makes the in-app restore affordance reliable instead of
+// depending on one timing-sensitive IPC event.
+let latestPetVisibility;
+const petVisibilitySubscribers = new Set();
+function publishPetVisibility(value) {
+  if (typeof value !== "boolean") return;
+  latestPetVisibility = value;
+  for (const handler of petVisibilitySubscribers) {
+    try { handler(value); } catch {}
+  }
+}
+ipcRenderer.on("pet:visibility", (_event, visible) => publishPetVisibility(visible));
+// Prime the cached value before the Vue application mounts.  In development
+// the renderer can be recreated while the pet is already hidden; relying only
+// on a later one-shot event leaves the recovery action with no state to render.
+ipcRenderer.invoke("pet:get-visibility").then(publishPetVisibility).catch(() => {});
+
 contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   isDesktop: true,
   listProviders: () => ipcRenderer.invoke("ai:list-providers"),
@@ -16,6 +36,23 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     return () => ipcRenderer.removeListener("ai:settings-changed", listener);
   },
   closeAiWindow: () => ipcRenderer.invoke("ai-window:close"),
+  windowControls: Object.freeze({
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
+    isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    onMaximizedChanged: (handler) => {
+      const listener = (_event, maximized) => handler(Boolean(maximized));
+      ipcRenderer.on("window:maximized-changed", listener);
+      return () => ipcRenderer.removeListener("window:maximized-changed", listener);
+    },
+    close: () => ipcRenderer.invoke("window:close"),
+    closeAction: (action) => ipcRenderer.invoke("window:close-action", action),
+    onCloseRequested: (handler) => {
+      const listener = () => handler();
+      ipcRenderer.on("window:close-requested", listener);
+      return () => ipcRenderer.removeListener("window:close-requested", listener);
+    }
+  }),
   setAiMousePassthrough: (ignore) => ipcRenderer.send("ai-window:set-mouse-passthrough", Boolean(ignore)),
   onShellCommand: (handler) => {
     const listener = (_event, command) => handler(command);
@@ -83,19 +120,38 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     return () => ipcRenderer.removeListener("ai:stream", listener);
   },
   pet: Object.freeze({
-    hide: () => ipcRenderer.invoke("pet:hide"),
-    show: () => ipcRenderer.invoke("pet:show"),
+    hide: async () => {
+      const result = await ipcRenderer.invoke("pet:hide");
+      if (result !== false) publishPetVisibility(false);
+      return result;
+    },
+    show: async () => {
+      const result = await ipcRenderer.invoke("pet:show");
+      if (result !== false) publishPetVisibility(true);
+      return result;
+    },
     click: () => ipcRenderer.invoke("pet:click"),
     react: (action, payload = {}) => ipcRenderer.invoke("pet:react", { action, ...payload }),
     isReady: () => ipcRenderer.invoke("pet:is-ready"),
-    getVisibility: () => ipcRenderer.invoke("pet:get-visibility"),
+    getVisibility: async () => {
+      const visible = await ipcRenderer.invoke("pet:get-visibility");
+      publishPetVisibility(visible);
+      return visible;
+    },
     resize: (w, h) => ipcRenderer.invoke("pet:resize", { width: w, height: h }),
     move: (dx, dy) => ipcRenderer.invoke("pet:move", { dx, dy }),
     setMousePassthrough: (ignore) => ipcRenderer.send("pet:set-mouse-passthrough", Boolean(ignore)),
     onVisibilityChanged: (handler) => {
-      const listener = (_event, visible) => handler(visible);
-      ipcRenderer.on("pet:visibility", listener);
-      return () => ipcRenderer.removeListener("pet:visibility", listener);
+      if (typeof handler !== "function") return () => {};
+      petVisibilitySubscribers.add(handler);
+      if (typeof latestPetVisibility === "boolean") queueMicrotask(() => handler(latestPetVisibility));
+      // Do not rely exclusively on the initial broadcast.  The pet can be
+      // hidden while Vite is replacing the Vue renderer, in which case the
+      // renderer's first subscriber arrives after that broadcast.  Ask the
+      // main process again when a subscriber is installed so the in-app
+      // restore control always receives the persisted state.
+      ipcRenderer.invoke("pet:get-visibility").then(publishPetVisibility).catch(() => {});
+      return () => petVisibilitySubscribers.delete(handler);
     },
     onOpenAi: (handler) => {
       const listener = () => handler();

@@ -11,7 +11,8 @@ import { auditDesktopDataDir } from "../../scripts/audit/desktop-data-audit.js";
 
 const root = path.resolve(".");
 const releaseDir = path.join(root, "release");
-const product = "Kairos-0.1.0-win-x64";
+const packageJson = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
+const product = `${packageJson.productName}-${packageJson.version}-win-x64`;
 const execFileAsync = promisify(execFile);
 
 async function exists(filePath) {
@@ -155,7 +156,7 @@ test("Windows app.asar contains runtime files without local secrets or source do
   const entries = listPackage(asar).map(entry => entry.replaceAll("\\", "/").replace(/^\/+/, ""));
 
   assert.ok(entries.includes("package.json"), "runtime package metadata should be bundled");
-  assert.ok(entries.includes("app/pages/calendar/index.html"), "main renderer should be bundled");
+  assert.ok(entries.includes("app/vue-preview/index.html"), "production Vue renderer should be bundled");
   assert.ok(entries.includes("electron/main/index.js"), "main process should be bundled");
   assert.ok(entries.some(entry => entry.startsWith("node_modules/")), "runtime dependencies should be bundled");
 
@@ -178,8 +179,8 @@ test("release manifest records artifact sizes and hashes", async () => {
   assert.equal(await exists(manifestPath), true, "release manifest should exist");
 
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-  assert.equal(manifest.productName, "Kairos");
-  assert.equal(manifest.version, "0.1.0");
+  assert.equal(manifest.productName, packageJson.productName);
+  assert.equal(manifest.version, packageJson.version);
   assert.equal(manifest.appId, "app.kairos.desktop");
   assert.equal(manifest.artifacts.length, 4);
 
@@ -231,54 +232,28 @@ async function verifyExecutableStartup(executablePath) {
   const restarted = await verifySmokeFiles(userDataDir, secondResultPath);
   assertSmokePersistence(restarted, { expectExisting: true });
 
-  await fs.rm(path.join(userDataDir, "app-state.json"));
-  const recoveredResultPath = path.join(userDataDir, "smoke-result-recovered.json");
-  await runFileBackedSmokeTest(executablePath, { KAIROS_USER_DATA_DIR: userDataDir, KAIROS_SMOKE_RESULT_PATH: recoveredResultPath, KAIROS_SMOKE_STATE_MARKER: marker, KAIROS_SMOKE_EXPECT_STATE_MARKER: "1", KAIROS_SMOKE_MUSIC_FILE: musicFile }, recoveredResultPath);
-  const restored = await verifySmokeFiles(userDataDir, recoveredResultPath);
-  assertSmokePersistence(restored, { expectExisting: true });
-  const restoredState = JSON.parse(await fs.readFile(path.join(userDataDir, "app-state.json"), "utf8"));
-  assert.equal((restoredState.schedules || []).some(item => item.id === marker), true, "app-state JSON should restore persisted schedules after deletion");
-  assert.equal((restoredState.habits || []).some(item => item.id === marker), true, "app-state JSON should restore persisted habits after deletion");
-
-  await fs.rm(path.join(userDataDir, "music-state.json"));
-  const recoveredMusicResultPath = path.join(userDataDir, "smoke-result-recovered-music.json");
-  await runFileBackedSmokeTest(executablePath, { KAIROS_USER_DATA_DIR: userDataDir, KAIROS_SMOKE_RESULT_PATH: recoveredMusicResultPath, KAIROS_SMOKE_STATE_MARKER: marker, KAIROS_SMOKE_EXPECT_STATE_MARKER: "1", KAIROS_SMOKE_MUSIC_FILE: musicFile }, recoveredMusicResultPath);
-  const restoredMusic = await verifySmokeFiles(userDataDir, recoveredMusicResultPath);
-  assertSmokePersistence(restoredMusic, { expectExisting: true });
-  const restoredMusicState = JSON.parse(await fs.readFile(path.join(userDataDir, "music-state.json"), "utf8"));
-  assert.equal((restoredMusicState.tracks || []).some(item => item.path === musicFile), true, "music-state JSON should restore imported tracks after deletion");
-  assert.equal((restoredMusicState.queueTrackIds || []).length > 0, true, "music-state JSON should restore playback queue after deletion");
-
   await fs.rm(musicFile);
   const unavailableMusicResultPath = path.join(userDataDir, "smoke-result-unavailable-music.json");
   await runFileBackedSmokeTest(executablePath, { KAIROS_USER_DATA_DIR: userDataDir, KAIROS_SMOKE_RESULT_PATH: unavailableMusicResultPath, KAIROS_SMOKE_STATE_MARKER: marker, KAIROS_SMOKE_EXPECT_STATE_MARKER: "1", KAIROS_SMOKE_MUSIC_FILE: musicFile, KAIROS_SMOKE_EXPECT_MUSIC_MISSING: "1" }, unavailableMusicResultPath);
   const unavailableMusicResult = await verifySmokeFiles(userDataDir, unavailableMusicResultPath);
   assertSmokePersistence(unavailableMusicResult, { expectExisting: true, expectMusicUnavailable: true });
 
-  await fs.rm(path.join(userDataDir, "ai-data.json"));
-  const recoveredAiResultPath = path.join(userDataDir, "smoke-result-recovered-ai.json");
-  await runFileBackedSmokeTest(executablePath, { KAIROS_USER_DATA_DIR: userDataDir, KAIROS_SMOKE_RESULT_PATH: recoveredAiResultPath, KAIROS_SMOKE_STATE_MARKER: marker, KAIROS_SMOKE_EXPECT_STATE_MARKER: "1", KAIROS_SMOKE_MUSIC_FILE: musicFile }, recoveredAiResultPath);
-  const restoredAi = await verifySmokeFiles(userDataDir, recoveredAiResultPath);
-  assertSmokePersistence(restoredAi, { expectExisting: true });
-  const restoredAiState = JSON.parse(await fs.readFile(path.join(userDataDir, "ai-data.json"), "utf8"));
-  assert.equal((restoredAiState.conversations || []).some(item => item.title === `Kairos smoke AI ${marker}`), true, "ai-data JSON should restore conversations after deletion");
 }
 
 async function verifySmokeFiles(userDataDir, resultPath, options = {}) {
   const result = JSON.parse(await fs.readFile(resultPath, "utf8"));
   assert.equal(result.ok, true, "renderer smoke should report success");
-  assert.equal(result.checks.calendarHeading, true, "calendar heading should mount");
-  assert.equal(result.checks.habitList, true, "habit list should mount");
-  assert.equal(result.checks.musicPlayer, true, "music player should mount");
-  assert.equal(result.checks.reminderButton, true, "reminder button should mount");
-  assert.equal(result.checks.aiPanel, true, "AI panel should mount");
-  assert.equal(await exists(path.join(userDataDir, "ai-data.json")), true, "AI data store should initialize in clean userData");
-  assert.equal(await exists(path.join(userDataDir, "app-state.json")), true, "app state store should initialize in clean userData");
+  assert.equal(result.renderer, "vue", "release should load the Vue renderer");
+  assert.equal(result.checks.calendar, true, "calendar should mount");
+  assert.equal(result.checks.habits, true, "habits should mount");
+  assert.equal(result.checks.calendarQueue, true, "calendar queue should mount");
+  assert.equal(result.checks.sharedPlayer, true, "shared bottom music player should mount");
+  assert.equal(result.checks.reminderPanel, true, "reminder panel should mount");
   assert.equal(await exists(path.join(userDataDir, "kairos.sqlite")), true, "SQLite app database should initialize in clean userData");
   const audit = await auditDesktopDataDir(userDataDir);
-  assert.equal(audit.ok, true, "smoke userData JSON stores should pass desktop data audit");
-  assert.equal(audit.files.find(file => file.name === "app-state.json")?.appState?.ok, true, "smoke app-state should be migration-ready");
+  assert.equal(audit.ok, true, "smoke userData should pass desktop data audit");
   assert.equal(audit.database?.ok, true, "smoke SQLite app database should pass desktop data audit");
+  assert.ok(audit.database?.database?.snapshot, "smoke SQLite database should record an app state snapshot");
   const storeNames = new Set((audit.database?.database?.stores || []).map(store => store.store));
   assert.equal(storeNames.has("ai-data"), true, "smoke SQLite database should index AI data store");
   assert.equal(storeNames.has("music-state"), true, "smoke SQLite database should index music data store");

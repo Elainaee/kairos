@@ -5,7 +5,7 @@
   <script>setTimeout(()=>document.documentElement.classList.remove('kairos-boot'),3000)</script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Clarity Calendar · Schedule</title>
+  <title data-i18n="app.title.schedule">Kairos | Schedule</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -26,31 +26,32 @@
 </head>
 <body data-page="schedule">
   <main>
-    <div class="headline"><div><h1>Schedule Overview</h1></div></div>
-    <section class="cards" aria-label="Schedule overview">
-      <article class="card" data-filter="progress"><span class="label">In Progress</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">autorenew</span> Active</span><div class="card-footer">Current activity<span>Schedules currently in progress</span></div></article>
-      <article class="card" data-filter="done"><span class="label">Completed</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">done_all</span> Done</span><div class="card-footer">Completion status<span>Schedules marked as completed</span></div></article>
-      <article class="card" data-filter="todo"><span class="label">To Do</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">pending_actions</span> Pending</span><div class="card-footer">Pending schedules<span>Schedules waiting to be completed</span></div></article>
-      <article class="card" data-filter="overdue"><span class="label">Overdue</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">priority_high</span> Review</span><div class="card-footer">Needs attention<span>Unfinished items past their due time</span></div></article>
+    <div class="headline"><div><h1 data-i18n="legacy.scheduleOverview">Schedule Overview</h1></div></div>
+    <section class="cards" aria-label="Schedule overview" data-i18n-aria-label="schedule.workspace">
+      <article class="card" data-filter="progress"><span class="label" data-i18n="schedule.inProgress">In Progress</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">autorenew</span> <span data-i18n="schedule.active">Active</span></span><div class="card-footer"><span data-i18n="schedule.currentActivity">Current activity</span><span data-i18n="schedule.schedulesCurrentlyInProgress">Schedules currently in progress</span></div></article>
+      <article class="card" data-filter="done"><span class="label" data-i18n="schedule.completed">Completed</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">done_all</span> <span data-i18n="schedule.done">Done</span></span><div class="card-footer"><span data-i18n="schedule.completionStatus">Completion status</span><span data-i18n="schedule.schedulesMarkedCompleted">Schedules marked as completed</span></div></article>
+      <article class="card" data-filter="todo"><span class="label" data-i18n="schedule.toDo">To Do</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">pending_actions</span> <span data-i18n="schedule.pending">Pending</span></span><div class="card-footer"><span data-i18n="schedule.pendingSchedules">Pending schedules</span><span data-i18n="schedule.schedulesWaiting">Schedules waiting to be completed</span></div></article>
+      <article class="card" data-filter="overdue"><span class="label" data-i18n="schedule.overdue">Overdue</span><strong>0</strong><span class="trend"><span class="material-symbols-outlined">priority_high</span> <span data-i18n="schedule.review">Review</span></span><div class="card-footer"><span data-i18n="schedule.needsAttention">Needs attention</span><span data-i18n="schedule.unfinishedPastDue">Unfinished items past their due time</span></div></article>
     </section>
     <section class="workspace">
       <div class="tabsbar">
         <div class="tabs">
-          <button class="tab active" data-filter="all" type="button">All Schedules</button>
-          <button class="tab" data-filter="progress" type="button">In Progress <span class="count">0</span></button>
-          <button class="tab" data-filter="done" type="button">Completed <span class="count">0</span></button>
-          <button class="tab" data-filter="todo" type="button">To Do <span class="count">0</span></button>
-          <button class="tab" data-filter="overdue" type="button">Overdue <span class="count">0</span></button>
+          <button class="tab active" data-filter="all" data-i18n="schedule.all" type="button">All Schedules</button>
+          <button class="tab" data-filter="progress" type="button"><span data-i18n="schedule.inProgress">In Progress</span> <span class="count">0</span></button>
+          <button class="tab" data-filter="done" type="button"><span data-i18n="schedule.completed">Completed</span> <span class="count">0</span></button>
+          <button class="tab" data-filter="todo" type="button"><span data-i18n="schedule.toDo">To Do</span> <span class="count">0</span></button>
+          <button class="tab" data-filter="overdue" data-i18n="schedule.overdue" type="button">Overdue</button>
         </div>
         <div class="actions">
-          <input class="search" id="search" placeholder="Search schedules…" type="search" autocomplete="off">
-          <button class="button" id="scheduleFilterButton" type="button" aria-haspopup="menu" aria-expanded="false"><span class="material-symbols-outlined">filter_list</span><span data-filter-label>All Types</span></button>
+          <input class="search" id="search" data-i18n-placeholder="schedule.searchPlaceholder" placeholder="Search schedules…" type="search" autocomplete="off">
+          <button class="button" id="scheduleFilterButton" type="button" aria-haspopup="menu" aria-expanded="false"><span class="material-symbols-outlined">filter_list</span><span data-filter-label data-i18n="schedule.allTypes">All Types</span></button>
         </div>
       </div>
-      <div class="table-wrap"><table><thead><tr><th style="width:44px"><input class="check" type="checkbox" aria-label="Select all schedules"></th><th>Schedule</th><th>Status</th><th>Date</th><th>Type</th><th style="width:44px"><span class="sr-only">Actions</span></th></tr></thead><tbody id="scheduleRows"></tbody></table></div>
-      <div class="table-footer"><span id="resultCount">0 schedules</span><div class="pager"><span>Page 1 of 1</span><button class="icon-btn" disabled aria-label="Previous page"><span class="material-symbols-outlined">chevron_left</span></button><button class="icon-btn" disabled aria-label="Next page"><span class="material-symbols-outlined">chevron_right</span></button></div></div>
+      <div class="table-wrap"><table><thead><tr><th style="width:44px"><input class="check" type="checkbox" aria-label="Select all schedules" data-i18n-aria-label="schedule.selectAll"></th><th data-i18n="schedule.schedule">Schedule</th><th data-i18n="schedule.status">Status</th><th data-i18n="schedule.date">Date</th><th data-i18n="schedule.type">Type</th><th style="width:44px"><span class="sr-only" data-i18n="common.actions">Actions</span></th></tr></thead><tbody id="scheduleRows"></tbody></table></div>
+      <div class="table-footer"><span id="resultCount" data-i18n="schedule.zeroSchedules">0 schedules</span><div class="pager"><span data-i18n="schedule.pageSummary">Page 1 of 1</span><button class="icon-btn" disabled aria-label="Previous page" data-i18n-aria-label="schedule.previousPage"><span class="material-symbols-outlined">chevron_left</span></button><button class="icon-btn" disabled aria-label="Next page" data-i18n-aria-label="schedule.nextPage"><span class="material-symbols-outlined">chevron_right</span></button></div></div>
     </section>
   </main>
+  <script src="../../i18n/i18n-messages.js"></script>
   <script src="../../i18n/i18n-core.js"></script>
   <script src="../../themes/theme-core.js"></script>
   <script src="../../shell/navigation/stitch-shell.js?v=96"></script>

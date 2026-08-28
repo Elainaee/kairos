@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { bestStreak, currentStreak, dateKey, shiftDateKey, type Habit, useHabitsStore } from "../stores/habits";
 import { useToastsStore } from "../stores/toasts";
+import { plural, t } from "../i18n";
 
 const store = useHabitsStore();
 const toasts = useToastsStore();
@@ -53,13 +54,13 @@ async function saveHabit() {
     allowBackfill: form.allowBackfill
   });
   closeEditor();
-  toasts.show({ message: wasEditing ? "Habit updated" : "Habit added", tone: "success" });
+  toasts.show({ message: t(wasEditing ? "habits.updated" : "habits.added"), tone: "success" });
 }
 async function deleteHabit() {
-  if (!editingId.value || !window.confirm("Delete this habit and all of its check-in history?")) return;
+  if (!editingId.value || !window.confirm(t("habits.deleteConfirm"))) return;
   await store.remove(editingId.value);
   closeEditor();
-  toasts.show({ message: "Habit deleted", tone: "message" });
+  toasts.show({ message: t("habits.deleted"), tone: "message" });
 }
 function pointerGlow(event: PointerEvent) {
   const card = event.currentTarget as HTMLElement;
@@ -92,12 +93,12 @@ async function dropHabit(targetId: string) {
   ids.splice(targetIndex + (dropPosition.value === "after" ? 1 : 0), 0, draggingId.value);
   await store.reorder(ids);
   endDrag();
-  toasts.show({ message: "Habit order updated", tone: "success" });
+  toasts.show({ message: t("habits.orderUpdated"), tone: "success" });
 }
 async function toggleHabit(habit: Habit) {
   const wasDone = habit.dates.includes(today.value);
   await store.toggle(habit.id);
-  toasts.show({ message: wasDone ? `${habit.name} marked incomplete` : `${habit.name} completed`, tone: wasDone ? "message" : "success" });
+  toasts.show({ message: t(wasDone ? "habits.markedIncomplete" : "habits.markedComplete", { name: habit.name }), tone: wasDone ? "message" : "success" });
   if (!wasDone) await window.kairosDesktop?.pet?.react?.("happy", { title: habit.name }).catch(() => {});
 }
 
@@ -141,36 +142,36 @@ onBeforeUnmount(() => {
   <div class="kairos-page-main vue-habits-page">
       <div class="habit-dashboard">
         <header class="habit-page-head">
-          <div><span class="habit-kicker">DAILY RHYTHM</span><h1>My Habits</h1><p>{{ completed }} of {{ store.habits.length }} completed today. Every small step counts.</p></div>
-          <button class="habit-primary" type="button" data-add @click="openEditor()"><span class="material-symbols-outlined">add</span>Add Habit</button>
+          <div><span class="habit-kicker">{{ t("habits.dailyRhythm") }}</span><h1>{{ t("habits.myHabits") }}</h1><p>{{ t("habits.completedToday", { completed, total: store.habits.length }) }}</p></div>
+          <button class="habit-primary" type="button" data-add @click="openEditor()"><span class="material-symbols-outlined">add</span>{{ t("habits.add") }}</button>
         </header>
         <div class="habit-columns">
           <section>
-            <h2>Active Habits</h2>
+            <h2>{{ t("habits.active") }}</h2>
             <div class="habit-cards">
               <article v-for="habit in store.habits" :key="habit.id" class="real-habit-card habit-magic-card" :class="{ 'is-dragging': draggingId === habit.id, 'is-drop-before': dropTargetId === habit.id && dropPosition === 'before', 'is-drop-after': dropTargetId === habit.id && dropPosition === 'after' }" :data-id="habit.id" @pointermove="pointerGlow" @pointerleave="pointerLeave" @dragover="dragOver(habit.id, $event)" @dragleave="dropTargetId === habit.id && (dropTargetId = '')" @drop.prevent="dropHabit(habit.id)">
-                <button class="habit-drag-handle" type="button" draggable="true" aria-label="Drag to reorder" @dragstart="startDrag(habit.id, $event)" @dragend="endDrag"><span class="material-symbols-outlined">drag_indicator</span></button>
-                <button class="habit-check-button" :class="{ done: habit.dates.includes(today) }" type="button" :aria-label="habit.dates.includes(today) ? 'Mark incomplete' : 'Mark complete'" @click="toggleHabit(habit)"><span aria-hidden="true">{{ habit.dates.includes(today) ? "✓" : "" }}</span></button>
-                <div class="habit-card-copy"><span class="habit-card-icon" aria-hidden="true">{{ habit.icon }}</span><div><h3>{{ habit.name }}</h3><p>{{ habit.description || "A little progress every day" }}</p></div></div>
-                <strong>{{ currentStreak(habit, today) }}<small>day streak</small></strong>
-                <button class="habit-more" type="button" aria-label="Edit habit" @click="openEditor(habit)"><span class="material-symbols-outlined">more_vert</span></button>
+                <button class="habit-drag-handle" type="button" draggable="true" :aria-label="t('habits.dragToReorder')" @dragstart="startDrag(habit.id, $event)" @dragend="endDrag"><span class="material-symbols-outlined">drag_indicator</span></button>
+                <button class="habit-check-button" :class="{ done: habit.dates.includes(today) }" type="button" :aria-label="habit.dates.includes(today) ? t('habits.markIncomplete') : t('habits.markComplete')" @click="toggleHabit(habit)"><span aria-hidden="true">{{ habit.dates.includes(today) ? "✓" : "" }}</span></button>
+                <div class="habit-card-copy"><span class="habit-card-icon" aria-hidden="true">{{ habit.icon }}</span><div><h3>{{ habit.name }}</h3><p>{{ habit.description || t("habits.defaultDescription") }}</p></div></div>
+                <strong>{{ currentStreak(habit, today) }}<small>{{ t("habits.streak") }}</small></strong>
+                <button class="habit-more" type="button" :aria-label="t('habits.editAction')" @click="openEditor(habit)"><span class="material-symbols-outlined">more_vert</span></button>
               </article>
-              <div v-if="!store.habits.length" class="habit-empty">No habits yet. Add a small goal to get started.</div>
+              <div v-if="!store.habits.length" class="habit-empty">{{ t("habits.none") }}</div>
             </div>
           </section>
           <section class="habit-progress-column">
             <h2 aria-hidden="true">&nbsp;</h2>
             <div class="habit-momentum habit-magic-card" @pointermove="pointerGlow" @pointerleave="pointerLeave">
-              <span>Today's Progress</span>
-              <div class="habit-ring" :class="{ 'is-progressing': progressAnimating }" :style="{ '--progress': `${ringProgress * 3.6}deg` }"><div><strong class="habit-count-up-text" :class="{ 'is-counting': progressAnimating }">{{ displayedRate }}%</strong><small>completion</small></div></div>
-              <dl><div class="habit-magic-card" @pointermove="pointerGlow" @pointerleave="pointerLeave"><dt>Current Longest Streak</dt><dd>{{ longest }} days</dd></div><div class="habit-magic-card" @pointermove="pointerGlow" @pointerleave="pointerLeave"><dt>Personal Best</dt><dd>{{ personalBest }} days</dd></div></dl>
+              <span>{{ t("habits.todayProgress") }}</span>
+              <div class="habit-ring" :class="{ 'is-progressing': progressAnimating }" :style="{ '--progress': `${ringProgress * 3.6}deg` }"><div><strong class="habit-count-up-text" :class="{ 'is-counting': progressAnimating }">{{ displayedRate }}%</strong><small>{{ t("habits.completion") }}</small></div></div>
+              <dl><div class="habit-magic-card" @pointermove="pointerGlow" @pointerleave="pointerLeave"><dt>{{ t("habits.currentLongestStreak") }}</dt><dd>{{ plural("habits.dayCount", longest) }}</dd></div><div class="habit-magic-card" @pointermove="pointerGlow" @pointerleave="pointerLeave"><dt>{{ t("habits.personalBest") }}</dt><dd>{{ plural("habits.dayCount", personalBest) }}</dd></div></dl>
             </div>
           </section>
           <section>
-            <h2>Last 12 Weeks</h2>
+            <h2>{{ t("habits.last12Weeks") }}</h2>
             <div class="habit-heatmaps">
               <article v-for="habit in store.habits" :key="habit.id" class="habit-magic-card" @pointermove="pointerGlow" @pointerleave="pointerLeave">
-                <header><span class="habit-heatmap-icon" aria-hidden="true">{{ habit.icon }}</span><strong>{{ habit.name }}</strong><small>{{ heatmap(habit).filter(cell => cell.done).length }}/84 days</small></header>
+                <header><span class="habit-heatmap-icon" aria-hidden="true">{{ habit.icon }}</span><strong>{{ habit.name }}</strong><small>{{ t("habits.heatmapCount", { completed: heatmap(habit).filter(cell => cell.done).length }) }}</small></header>
                 <div class="real-heatmap"><span v-for="cell in heatmap(habit)" :key="cell.date" class="heat-cell" :class="{ done: cell.done }" :title="cell.date" /></div>
               </article>
             </div>
@@ -181,13 +182,13 @@ onBeforeUnmount(() => {
   <Teleport to="body">
       <dialog ref="editor" class="habit-editor">
         <form method="dialog" @submit.prevent="saveHabit">
-          <header><div><small>ROUTINE</small><h2>{{ editingId ? "Edit Habit" : "Add Habit" }}</h2></div><button type="button" data-cancel aria-label="Close" @click="closeEditor">×</button></header>
-          <label>Name<input v-model="form.name" name="name" maxlength="24" required /></label>
-          <label>Short Description<input v-model="form.description" name="description" maxlength="40" /></label>
-          <label>Icon<div class="habit-icon-picker"><button class="habit-icon-trigger" type="button" :aria-expanded="iconPickerOpen" @click="iconPickerOpen = !iconPickerOpen"><span>{{ form.icon }}</span><span class="material-symbols-outlined">expand_more</span></button><div class="habit-emoji-grid" :hidden="!iconPickerOpen"><button v-for="icon in icons" :key="icon" class="habit-emoji-option" :class="{ selected: form.icon === icon }" type="button" :aria-pressed="form.icon === icon" @click="form.icon = icon; iconPickerOpen = false">{{ icon }}</button></div></div></label>
-          <label class="schedule-all-day" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px"><input v-model="form.allowBackfill" name="backfill" type="checkbox" />Allow check-ins for past dates</label>
-          <section class="editor-history" :class="{ collapsed: !form.allowBackfill }"><strong>Last 30 Days</strong><div><button v-for="day in historyDays" :key="day" type="button" :class="{ done: editingHabit?.dates.includes(day) }" :disabled="!editingHabit" @click="editingHabit && store.toggle(editingHabit.id, day)">{{ Number(day.slice(-2)) }}</button></div></section>
-          <footer><button v-if="editingId" type="button" class="habit-danger" @click="deleteHabit">Delete Habit</button><span v-else></span><button type="button" @click="closeEditor">Cancel</button><button type="submit" class="habit-primary">Save</button></footer>
+          <header><div><small>{{ t("habits.routine") }}</small><h2>{{ t(editingId ? "habits.edit" : "habits.add") }}</h2></div><button type="button" data-cancel :aria-label="t('common.close')" @click="closeEditor">×</button></header>
+          <label>{{ t("habits.name") }}<input v-model="form.name" name="name" maxlength="24" required /></label>
+          <label>{{ t("habits.shortDescription") }}<input v-model="form.description" name="description" maxlength="40" /></label>
+          <label>{{ t("habits.icon") }}<div class="habit-icon-picker"><button class="habit-icon-trigger" type="button" :aria-expanded="iconPickerOpen" @click="iconPickerOpen = !iconPickerOpen"><span>{{ form.icon }}</span><span class="material-symbols-outlined">expand_more</span></button><div class="habit-emoji-grid" :hidden="!iconPickerOpen"><button v-for="icon in icons" :key="icon" class="habit-emoji-option" :class="{ selected: form.icon === icon }" type="button" :aria-pressed="form.icon === icon" @click="form.icon = icon; iconPickerOpen = false">{{ icon }}</button></div></div></label>
+          <label class="schedule-all-day" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px"><input v-model="form.allowBackfill" name="backfill" type="checkbox" />{{ t("habits.allowBackfill") }}</label>
+          <section class="editor-history" :class="{ collapsed: !form.allowBackfill }"><strong>{{ t("habits.last30Days") }}</strong><div><button v-for="day in historyDays" :key="day" type="button" :class="{ done: editingHabit?.dates.includes(day) }" :disabled="!editingHabit" @click="editingHabit && store.toggle(editingHabit.id, day)">{{ Number(day.slice(-2)) }}</button></div></section>
+          <footer><button v-if="editingId" type="button" class="habit-danger" @click="deleteHabit">{{ t("habits.delete") }}</button><span v-else></span><button type="button" @click="closeEditor">{{ t("common.cancel") }}</button><button type="submit" class="habit-primary">{{ t("common.save") }}</button></footer>
         </form>
       </dialog>
   </Teleport>

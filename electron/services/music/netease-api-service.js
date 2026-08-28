@@ -10,6 +10,11 @@ const DEFAULT_LEVEL = "standard";
 const PAGE_SIZE = 200;
 const MAX_ACCOUNT_SONGS = 5000;
 const MAX_ACCOUNT_PLAYLISTS = 500;
+const fallbackTranslate = (_key, _params = {}, fallback = "") => fallback;
+
+function translate(translateFn, key, fallback, params = {}) {
+  return translateFn(key, params, fallback);
+}
 
 function normalizeImageUrl(value) {
   const url = String(value || "");
@@ -21,13 +26,13 @@ function artistsText(song) {
   return Array.isArray(artists) ? artists.map(item => item?.name).filter(Boolean).join(" / ") : "";
 }
 
-function normalizeSong(song = {}) {
+function normalizeSong(song = {}, translateFn = fallbackTranslate) {
   const album = song.al || song.album || {};
   return {
     id: `netease:${song.id}`,
     neteaseId: song.id,
-    title: song.name || "NetEase song",
-    artist: artistsText(song) || "NetEase Cloud",
+    title: song.name || translate(translateFn, "music.neteaseSong", "NetEase song"),
+    artist: artistsText(song) || translate(translateFn, "music.neteaseCloud", "NetEase Cloud"),
     album: album.name || "",
     coverUrl: normalizeImageUrl(album.picUrl || album.coverImgUrl),
     duration: Number(song.dt || song.duration || 0) / 1000 || 0,
@@ -35,11 +40,11 @@ function normalizeSong(song = {}) {
   };
 }
 
-function normalizePlaylist(playlist = {}, patch = {}) {
+function normalizePlaylist(playlist = {}, patch = {}, translateFn = fallbackTranslate) {
   return {
     id: `netease-playlist:${playlist.id}`,
     neteaseId: playlist.id,
-    name: playlist.name || "NetEase playlist",
+    name: playlist.name || translate(translateFn, "music.neteasePlaylist", "NetEase playlist"),
     coverUrl: normalizeImageUrl(playlist.coverImgUrl || playlist.picUrl),
     trackCount: playlist.trackCount || 0,
     playCount: playlist.playCount || 0,
@@ -103,20 +108,20 @@ function publicStatus(cookie) {
   };
 }
 
-function readableNeteaseMessage(code, fallback = "") {
-  if (Number(code) === 406) return "Too many NetEase login requests. Please wait and try again.";
-  if (Number(code) === 10004 || Number(code) === 10003) return "NetEase blocked this login for account security. Please complete security verification or try again later.";
-  return fallback || "NetEase request failed.";
+function readableNeteaseMessage(code, fallback = "", translateFn = fallbackTranslate) {
+  if (Number(code) === 406) return translate(translateFn, "music.neteaseLoginRateLimited", "Too many NetEase login requests. Please wait and try again.");
+  if (Number(code) === 10004 || Number(code) === 10003) return translate(translateFn, "music.neteaseLoginSecurityBlocked", "NetEase blocked this login for account security. Please complete security verification or try again later.");
+  return fallback || translate(translateFn, "music.neteaseRequestFailed", "NetEase request failed.");
 }
 
-export function readableNeteasePlaybackMessage(data = {}, fallback = "") {
+export function readableNeteasePlaybackMessage(data = {}, fallback = "", translateFn = fallbackTranslate) {
   const code = Number(data.code || 0);
   const fee = Number(data.fee ?? -1);
-  if (data.freeTrialInfo) return "This song is only available as a NetEase trial preview.";
-  if (fee === 1 || fee === 4) return "This song requires NetEase membership or purchase.";
-  if (data.payed === 0 && fee > 0) return "This song is restricted by NetEase rights.";
-  if (code === 404 || code === -110) return "NetEase cannot provide a playable URL for this song.";
-  return data.message || data.msg || fallback || "This song is unavailable on NetEase.";
+  if (data.freeTrialInfo) return translate(translateFn, "music.neteaseTrialPreview", "This song is only available as a NetEase trial preview.");
+  if (fee === 1 || fee === 4) return translate(translateFn, "music.neteaseMembershipRequired", "This song requires NetEase membership or purchase.");
+  if (data.payed === 0 && fee > 0) return translate(translateFn, "music.neteaseRightsRestricted", "This song is restricted by NetEase rights.");
+  if (code === 404 || code === -110) return translate(translateFn, "music.neteaseNoPlayableUrl", "NetEase cannot provide a playable URL for this song.");
+  return data.message || data.msg || fallback || translate(translateFn, "music.neteaseSongUnavailable", "This song is unavailable on NetEase.");
 }
 
 async function withSuppressedNeteaseErrors(task) {
@@ -132,10 +137,10 @@ async function withSuppressedNeteaseErrors(task) {
   }
 }
 
-function neteaseFailure(error, fallback) {
+function neteaseFailure(error, fallback, translateFn = fallbackTranslate) {
   const body = error?.body || {};
   const code = body.code || error?.status || 0;
-  const message = readableNeteaseMessage(code, body.message || body.msg || error?.message || fallback);
+  const message = readableNeteaseMessage(code, body.message || body.msg || error?.message || fallback, translateFn);
   return {
     ok: false,
     code,
@@ -148,9 +153,10 @@ function neteaseFailure(error, fallback) {
 }
 
 export class NeteaseApiService {
-  constructor({ statePath, database } = {}) {
+  constructor({ statePath, database, t } = {}) {
     this.statePath = statePath;
     this.database = database || null;
+    this.t = typeof t === "function" ? t : fallbackTranslate;
     this.stateRepository = statePath ? new SettingsRepository({
       filePath: statePath,
       defaults: { cookie: "" },
@@ -161,6 +167,10 @@ export class NeteaseApiService {
     }) : null;
     this.cookie = "";
     this.loginKey = "";
+  }
+
+  message(key, fallback, params = {}) {
+    return translate(this.t, key, fallback, params);
   }
 
   async initialize() {
@@ -191,7 +201,7 @@ export class NeteaseApiService {
   async requireProfile() {
     const status = await this.getStatus();
     if (!status.loggedIn || !status.profile?.userId) {
-      return { ok: false, message: "Please login to NetEase Cloud first." };
+      return { ok: false, message: this.message("music.neteaseLoginRequired", "Please login to NetEase Cloud first.") };
     }
     return { ok: true, profile: status.profile };
   }
@@ -200,7 +210,7 @@ export class NeteaseApiService {
     try {
       const keyResult = await withSuppressedNeteaseErrors(() => neteaseApi.login_qr_key({}));
       const key = keyResult.body?.data?.unikey;
-      if (!key) return { ok: false, message: "Unable to create NetEase QR login key." };
+      if (!key) return { ok: false, message: this.message("music.unableToCreateNeteaseQrKey", "Unable to create NetEase QR login key.") };
       this.loginKey = key;
       const qrResult = await withSuppressedNeteaseErrors(() => neteaseApi.login_qr_create({ key, qrimg: true }));
       return {
@@ -210,13 +220,13 @@ export class NeteaseApiService {
         qrImg: qrResult.body?.data?.qrimg || ""
       };
     } catch (error) {
-      return neteaseFailure(error, "Unable to create NetEase QR login key.");
+      return neteaseFailure(error, this.message("music.unableToCreateNeteaseQrKey", "Unable to create NetEase QR login key."), this.t);
     }
   }
 
   async loginCheck({ key } = {}) {
     const targetKey = key || this.loginKey;
-    if (!targetKey) return { ok: false, code: 0, message: "No QR login in progress." };
+    if (!targetKey) return { ok: false, code: 0, message: this.message("music.noNeteaseQrLogin", "No QR login in progress.") };
     const result = await neteaseApi.login_qr_check({ key: targetKey });
     const body = result.body || {};
     if (body.code === 803 && body.cookie) {
@@ -228,21 +238,21 @@ export class NeteaseApiService {
 
   async sendCaptcha({ phone, countrycode = "86" } = {}) {
     const targetPhone = String(phone || "").trim();
-    if (!targetPhone) return { ok: false, message: "Missing phone number." };
+    if (!targetPhone) return { ok: false, message: this.message("music.missingPhoneNumber", "Missing phone number.") };
     try {
       const result = await withSuppressedNeteaseErrors(() => neteaseApi.captcha_sent({ phone: targetPhone, ctcode: String(countrycode || "86").trim() || "86" }));
       const body = result.body || {};
       return { ok: body.code === 200, code: body.code, message: body.message || body.msg || "", raw: body };
     } catch (error) {
-      return neteaseFailure(error, "Unable to send verification code.");
+      return neteaseFailure(error, this.message("music.unableToSendVerificationCode", "Unable to send verification code."), this.t);
     }
   }
 
   async loginWithPhone({ phone, captcha, countrycode = "86" } = {}) {
     const targetPhone = String(phone || "").trim();
     const targetCaptcha = String(captcha || "").trim();
-    if (!targetPhone) return { ok: false, message: "Missing phone number." };
-    if (!targetCaptcha) return { ok: false, message: "Missing verification code." };
+    if (!targetPhone) return { ok: false, message: this.message("music.missingPhoneNumber", "Missing phone number.") };
+    if (!targetCaptcha) return { ok: false, message: this.message("music.missingVerificationCode", "Missing verification code.") };
     try {
       const result = await withSuppressedNeteaseErrors(() => neteaseApi.login_cellphone({
         phone: targetPhone,
@@ -259,13 +269,13 @@ export class NeteaseApiService {
       return {
         ok: false,
         code: body.code || 0,
-        message: readableNeteaseMessage(body.code, body.message || body.msg || "Phone login failed."),
+        message: readableNeteaseMessage(body.code, body.message || body.msg || this.message("music.neteasePhoneLoginFailed", "Phone login failed."), this.t),
         redirectUrl: body.redirectUrl || "",
         needsVerification: Number(body.code) === 10004 || Number(body.code) === 10003,
         raw: body
       };
     } catch (error) {
-      return neteaseFailure(error, "Phone login failed.");
+      return neteaseFailure(error, this.message("music.neteasePhoneLoginFailed", "Phone login failed."), this.t);
     }
   }
 
@@ -287,7 +297,7 @@ export class NeteaseApiService {
       offset
     }));
     const songs = result.body?.result?.songs || [];
-    return { ok: true, songs: songs.map(normalizeSong), raw: result.body };
+    return { ok: true, songs: songs.map(song => normalizeSong(song, this.t)), raw: result.body };
   }
 
   async getSearchHome({ songLimit = 10, playlistLimit = 8 } = {}) {
@@ -301,11 +311,11 @@ export class NeteaseApiService {
     const playlists = playlistBody.result || playlistBody.playlists || [];
     return {
       ok: true,
-      dailySongs: dailySongs.slice(0, Math.max(1, Number(songLimit) || 10)).map(normalizeSong),
-      hotPlaylists: playlists.slice(0, Math.max(1, Number(playlistLimit) || 8)).map(normalizePlaylist),
+      dailySongs: dailySongs.slice(0, Math.max(1, Number(songLimit) || 10)).map(song => normalizeSong(song, this.t)),
+      hotPlaylists: playlists.slice(0, Math.max(1, Number(playlistLimit) || 8)).map(playlist => normalizePlaylist(playlist, {}, this.t)),
       raw: {
-        daily: songsResult.error ? { error: readableNeteaseMessage(songsResult.error?.body?.code, songsResult.error?.message) } : songBody,
-        playlists: playlistsResult.error ? { error: readableNeteaseMessage(playlistsResult.error?.body?.code, playlistsResult.error?.message) } : playlistBody
+        daily: songsResult.error ? { error: readableNeteaseMessage(songsResult.error?.body?.code, songsResult.error?.message, this.t) } : songBody,
+        playlists: playlistsResult.error ? { error: readableNeteaseMessage(playlistsResult.error?.body?.code, playlistsResult.error?.message, this.t) } : playlistBody
       }
     };
   }
@@ -337,8 +347,8 @@ export class NeteaseApiService {
       fetchPages(neteaseApi.user_playlist_create),
       fetchPages(neteaseApi.user_playlist_collect)
     ]);
-    const createdPlaylists = createdResult.playlists.filter(playlist => !isLikedPlaylist(playlist)).map(playlist => normalizePlaylist(playlist, { owned: true }));
-    const savedPlaylists = savedResult.playlists.filter(playlist => !isLikedPlaylist(playlist)).map(playlist => normalizePlaylist(playlist, { subscribed: true }));
+    const createdPlaylists = createdResult.playlists.filter(playlist => !isLikedPlaylist(playlist)).map(playlist => normalizePlaylist(playlist, { owned: true }, this.t));
+    const savedPlaylists = savedResult.playlists.filter(playlist => !isLikedPlaylist(playlist)).map(playlist => normalizePlaylist(playlist, { subscribed: true }, this.t));
     return {
       ok: true,
       playlists: [...createdPlaylists, ...savedPlaylists],
@@ -352,7 +362,7 @@ export class NeteaseApiService {
 
   async getPlaylistSongs({ id, neteaseId, limit = 0, offset = 0 } = {}) {
     const playlistId = String(neteaseId || id || "").replace(/^netease-playlist:/, "");
-    if (!playlistId) return { ok: false, message: "Missing NetEase playlist id." };
+    if (!playlistId) return { ok: false, message: this.message("music.missingNeteasePlaylistId", "Missing NetEase playlist id.") };
     const targetLimit = Math.max(0, Number(limit) || 0);
     const songs = [];
     let currentOffset = Math.max(0, Number(offset) || 0);
@@ -373,9 +383,9 @@ export class NeteaseApiService {
     }
     return {
       ok: true,
-      songs: songs.map(normalizeSong),
+      songs: songs.map(song => normalizeSong(song, this.t)),
       total: songs.length,
-      playlist: detailResult?.body ? normalizePlaylist({ id: playlistId }, { subscribed: playlistSubscribedState(detailResult.body) }) : null,
+      playlist: detailResult?.body ? normalizePlaylist({ id: playlistId }, { subscribed: playlistSubscribedState(detailResult.body) }, this.t) : null,
       subscribed: playlistSubscribedState(detailResult?.body || {}),
       raw: { tracks: raw, detail: detailResult?.body || null }
     };
@@ -383,7 +393,7 @@ export class NeteaseApiService {
 
   async setPlaylistSubscribed({ id, neteaseId, subscribed = true } = {}) {
     const playlistId = String(neteaseId || id || "").replace(/^netease-playlist:/, "");
-    if (!playlistId) return { ok: false, message: "Missing NetEase playlist id." };
+    if (!playlistId) return { ok: false, message: this.message("music.missingNeteasePlaylistId", "Missing NetEase playlist id.") };
     const auth = await this.requireProfile();
     if (!auth.ok) return auth;
     try {
@@ -397,7 +407,7 @@ export class NeteaseApiService {
       const fallback = await neteaseApi.playlist_subscribe(this.withCookie({ ...input, crypto: "weapi" }));
       return subscriptionResult(fallback, subscribed);
     } catch (error) {
-      return neteaseFailure(error, "Unable to update playlist collection.");
+      return neteaseFailure(error, this.message("music.unableToUpdatePlaylistCollection", "Unable to update playlist collection."), this.t);
     }
   }
 
@@ -413,7 +423,7 @@ export class NeteaseApiService {
       }));
       const page = playlistRows(result.body);
       const liked = page.find(isLikedPlaylist);
-      if (liked) return normalizePlaylist(liked);
+      if (liked) return normalizePlaylist(liked, {}, this.t);
       if (page.length < PAGE_SIZE || result.body?.more === false) break;
       currentOffset += page.length;
     }
@@ -448,7 +458,7 @@ export class NeteaseApiService {
 
   async setSongLiked({ id, neteaseId, liked = true } = {}) {
     const songId = String(neteaseId || id || "").replace(/^netease:/, "");
-    if (!songId) return { ok: false, message: "Missing NetEase song id." };
+    if (!songId) return { ok: false, message: this.message("music.missingNeteaseSongId", "Missing NetEase song id.") };
     const auth = await this.requireProfile();
     if (!auth.ok) return auth;
     const result = await neteaseApi.like(this.withCookie({ id: songId, like: liked ? "true" : "false" }));
@@ -466,14 +476,14 @@ export class NeteaseApiService {
     const rows = result.body?.weekData || result.body?.allData || [];
     return {
       ok: true,
-      songs: rows.map(row => ({ ...normalizeSong(row.song), playCount: row.playCount || row.score || 0 })),
+      songs: rows.map(row => ({ ...normalizeSong(row.song, this.t), playCount: row.playCount || row.score || 0 })),
       profile: auth.profile
     };
   }
 
   async playSong({ id, neteaseId, level = DEFAULT_LEVEL } = {}) {
     const songId = String(neteaseId || id || "").replace(/^netease:/, "");
-    if (!songId) return { ok: false, message: "Missing NetEase song id." };
+    if (!songId) return { ok: false, message: this.message("music.missingNeteaseSongId", "Missing NetEase song id.") };
     try {
       const [detailResult, urlResult] = await Promise.all([
         neteaseApi.song_detail(this.withCookie({ ids: songId })),
@@ -482,12 +492,12 @@ export class NeteaseApiService {
       const song = detailResult.body?.songs?.[0] || { id: Number(songId) || songId };
       const urlData = urlResult.body?.data?.[0] || {};
       if (!urlData.url) {
-        return { ok: false, message: readableNeteasePlaybackMessage(urlData, "No playable URL returned for this song."), data: urlData };
+        return { ok: false, message: readableNeteasePlaybackMessage(urlData, this.message("music.neteaseNoPlayableUrlReturned", "No playable URL returned for this song."), this.t), data: urlData };
       }
       const fetchedAt = Date.now();
       const expiresIn = Number(urlData.expi || 0);
       const track = {
-        ...normalizeSong(song),
+        ...normalizeSong(song, this.t),
         playUrl: urlData.url,
         duration: Number(urlData.time || 0) / 1000 || Number(song.dt || 0) / 1000 || 0,
         bitrate: urlData.br || 0,
@@ -498,7 +508,7 @@ export class NeteaseApiService {
       };
       return { ok: true, track, data: urlData };
     } catch (error) {
-      return neteaseFailure(error, "Unable to load playable NetEase URL.");
+      return neteaseFailure(error, this.message("music.unableToLoadPlayableNeteaseUrl", "Unable to load playable NetEase URL."), this.t);
     }
   }
 }

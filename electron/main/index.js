@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol, safeStorage, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, protocol, safeStorage, screen, shell, Tray } from "electron";
 import crypto from "node:crypto";
 import path from "node:path";
 import fsSync from "node:fs";
@@ -13,7 +13,7 @@ import { AppStateStore, auditAppState, createAppAdapters } from "../data/app-sta
 import { KairosAppDatabase } from "../data/sqlite/index.js";
 import { ContextManager } from "../services/ai/context-manager.js";
 import { MusicLibrary } from "../services/music/music-library.js";
-import { runKairosAgent } from "../services/ai/langchain-agent.js";
+import { runKairosAgent as runKairosAgentBase } from "../services/ai/langchain-agent.js";
 import { createWebSearch } from "../services/web/web-search.js";
 import { NeteaseApiService } from "../services/music/netease-api-service.js";
 import { SettingsRepository } from "../data/settings/index.js";
@@ -36,7 +36,30 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const rendererMode = process.env.KAIROS_RENDERER === "vue" ? "vue" : "legacy";
+const appIconPath = path.join(root, "app", "assets", "icons", "kairos.ico");
+const nativeI18nMessages = JSON.parse(fsSync.readFileSync(path.join(root, "app", "i18n", "locales", "en.json"), "utf8"));
+const nativeI18nChineseMessages = JSON.parse(fsSync.readFileSync(path.join(root, "app", "i18n", "locales", "zh-CN.json"), "utf8"));
+let nativeLocalePreference = "en";
+const nativeLocale = () => {
+  const requested = nativeLocalePreference === "system" ? app.getLocale?.() || "en" : nativeLocalePreference;
+  return /^zh(?:-|_)?cn|^zh/i.test(String(requested)) ? "zh-CN" : "en";
+};
+const nativeValue = (messages, key) => key.split(".").reduce((value, part) => value && typeof value === "object" ? value[part] : undefined, messages);
+const nativeT = (key, params = {}, fallback = key) => {
+  const messages = nativeLocale() === "zh-CN" ? nativeI18nChineseMessages : nativeI18nMessages;
+  const value = nativeValue(messages, key) ?? nativeValue(nativeI18nMessages, key) ?? fallback;
+  return String(value).replace(/\{(\w+)\}/g, (_match, name) => params[name] ?? "");
+};
+const setNativeLocale = state => {
+  nativeLocalePreference = state?.settings?.general?.language || "en";
+  // The workspace provides its own navigation.  Keeping Electron's native
+  // menu would add a second, empty-looking strip above it on Windows.
+  Menu.setApplicationMenu(null);
+};
+const runKairosAgent = input => runKairosAgentBase({ ...input, locale: nativeLocale(), t: nativeT });
+// The Vue shell is the released product experience.  The static renderer is
+// retained only for explicit diagnostics via KAIROS_RENDERER=legacy.
+const rendererMode = process.env.KAIROS_RENDERER === "legacy" ? "legacy" : "vue";
 const vueDevServerUrl = process.env.KAIROS_VITE_DEV_SERVER_URL || "";
 dotenv.config({ path: path.join(root, ".env.local"), quiet: true });
 dotenv.config({ path: path.join(root, ".env.firecrawl.local"), quiet: true });
@@ -50,6 +73,9 @@ let petMoveTimer = null;
 let petPendingDx = 0;
 let petPendingDy = 0;
 let petVisible = true;
+let tray = null;
+let isQuitting = false;
+let closePromptOpen = false;
 let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, aiSettingsRepository, calendarBackgrounds, agentMemoryService;
 const pendingCalendarBackgroundImports = new Map();
 // Electron transparent windows must not be resized after construction. Reserve
@@ -111,6 +137,9 @@ const smokeStateMarker = process.env.KAIROS_SMOKE_STATE_MARKER || "";
 const smokeExpectStateMarker = process.env.KAIROS_SMOKE_EXPECT_STATE_MARKER === "1";
 const smokeMusicFile = process.env.KAIROS_SMOKE_MUSIC_FILE || "";
 const smokeExpectMusicMissing = process.env.KAIROS_SMOKE_EXPECT_MUSIC_MISSING === "1";
+const smokeExpectedLanguage = process.env.KAIROS_SMOKE_EXPECT_LANGUAGE || "";
+const smokePersistLanguage = process.env.KAIROS_SMOKE_PERSIST_LANGUAGE || "";
+const smokeCaptureVisuals = process.env.KAIROS_SMOKE_CAPTURE_VISUALS === "1";
 
 const settingsPath = () => path.join(app.getPath("userData"), "ai-settings.json");
 const petStatePath = () => path.join(app.getPath("userData"), "pet-state.json");
@@ -301,11 +330,11 @@ function sendShellCommand(type, payload = {}) {
 }
 function showNativeReminder(input = {}) {
   if (!Notification.isSupported()) return { shown: false, reason: "not_supported" };
-  const itemTitle = typeof input.title === "string" ? input.title.trim().slice(0, 120) : "未命名日程";
+  const itemTitle = typeof input.title === "string" ? input.title.trim().slice(0, 120) : nativeT("reminders.untitledSchedule", {}, "Untitled schedule");
   const note = typeof input.note === "string" ? input.note.trim().slice(0, 220) : "";
   const missed = input.missed === true;
   const notification = new Notification({
-    title: missed ? "Kairos · 错过的提醒" : "Kairos · 日程提醒",
+    title: `Kairos · ${missed ? nativeT("electron.missedReminder", {}, "Missed reminder") : nativeT("electron.scheduleReminder", {}, "Schedule reminder")}`,
     body: note ? `${itemTitle}\n${note}` : itemTitle,
     silent: false
   });
@@ -319,30 +348,30 @@ function buildApplicationMenu() {
     {
       label: "Kairos",
       submenu: [
-        { label: "打开 AI 对话", accelerator: "CommandOrControl+Shift+A", click: () => { sendPetAction("talk"); showAiChatWindow(); } },
-        { label: petVisible ? "隐藏桌宠" : "显示桌宠", click: async () => { petVisible = !petVisible; await writePetState({ visible: petVisible }); if (petVisible) showPetWindow({ reposition: true }); else petWindow?.hide(); sendPetVisibility(); } },
+        { label: nativeT("electron.openAssistant", {}, "Open AI assistant"), accelerator: "CommandOrControl+Shift+A", click: () => { sendPetAction("talk"); showAiChatWindow(); } },
+        { label: petVisible ? nativeT("electron.hidePet", {}, "Hide desktop pet") : nativeT("electron.showPet", {}, "Show desktop pet"), click: async () => { petVisible = !petVisible; await writePetState({ visible: petVisible }); if (petVisible) showPetWindow({ reposition: true }); else petWindow?.hide(); sendPetVisibility(); Menu.setApplicationMenu(null); } },
         { type: "separator" },
-        { role: "quit", label: "退出 Kairos" }
+        { role: "quit", label: nativeT("electron.quit", {}, "Quit Kairos") }
       ]
     },
     {
-      label: "页面",
+      label: nativeT("electron.page", {}, "Page"),
       submenu: [
-        { label: "日历", accelerator: "Alt+1", click: navigate("calendar") },
-        { label: "日程", accelerator: "Alt+2", click: navigate("schedule") },
-        { label: "习惯", accelerator: "Alt+3", click: navigate("habits") },
-        { label: "音乐", accelerator: "Alt+4", click: navigate("music") },
+        { label: nativeT("nav.calendar", {}, "Calendar"), accelerator: "Alt+1", click: navigate("calendar") },
+        { label: nativeT("nav.schedule", {}, "Schedule"), accelerator: "Alt+2", click: navigate("schedule") },
+        { label: nativeT("nav.habits", {}, "Habits"), accelerator: "Alt+3", click: navigate("habits") },
+        { label: nativeT("nav.music", {}, "Music"), accelerator: "Alt+4", click: navigate("music") },
         { type: "separator" },
-        { label: "设置", accelerator: "CommandOrControl+,", click: navigate("settings") }
+        { label: nativeT("common.settings", {}, "Settings"), accelerator: "CommandOrControl+,", click: navigate("settings") }
       ]
     },
     {
-      label: "窗口",
+      label: nativeT("electron.window", {}, "Window"),
       submenu: [
-        { role: "minimize", label: "最小化" },
-        { role: "zoom", label: "缩放" },
+        { role: "minimize", label: nativeT("electron.minimize", {}, "Minimize") },
+        { role: "zoom", label: nativeT("electron.zoom", {}, "Zoom") },
         { type: "separator" },
-        { role: "close", label: "关闭窗口" }
+        { role: "close", label: nativeT("electron.closeWindow", {}, "Close window") }
       ]
     }
   ]);
@@ -398,18 +427,25 @@ function publicSettings(settings) {
 }
 function providerCatalog(settings = {}) {
   return Object.values(PROVIDERS).map(provider => {
-    const selection = resolveSelectableModels(provider, settings.providers?.[provider.id] || {});
+    const selection = resolveSelectableModels(provider, settings.providers?.[provider.id] || {}, { t: nativeT });
     return { ...provider, models: selection.enabledModels, availableModels: selection.availableModels, defaultModel: selection.defaultModel };
   });
 }
 async function searchWebWithSettings(input) {
   const settings = await readSettings();
-  return createWebSearch({ apiKey: decryptFirecrawlKey(settings) })(input);
+  return createWebSearch({ apiKey: decryptFirecrawlKey(settings), t: nativeT })(input);
 }
 function errorInfo(error) { if (error && typeof error === "object") return { code: error.code || "unknown", message: error.message || String(error) }; return { code: "unknown", message: typeof error === "string" ? error : "unknown_error" }; }
 function broadcastAiStream(payload) {
   for (const win of [mainWindow, aiChatWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send("ai:stream", payload);
+  }
+}
+function broadcastAppState(state) {
+  setNativeLocale(state);
+  refreshTrayMenu();
+  for (const win of [mainWindow, aiChatWindow, petWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.send("app:state-changed", state);
   }
 }
 function broadcastProviderSettings(settings) {
@@ -424,6 +460,63 @@ function focusMainWindow() {
   mainWindow.show();
   mainWindow.focus();
   return true;
+}
+function refreshTrayMenu() {
+  if (!tray) return;
+  tray.setToolTip(nativeT("tray.tooltip", {}, "Kairos"));
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: nativeT("tray.showKairos", {}, "Show Kairos"), click: () => focusMainWindow() },
+    { type: "separator" },
+    { label: nativeT("tray.exitKairos", {}, "Exit Kairos"), click: () => { isQuitting = true; app.quit(); } }
+  ]));
+}
+function ensureTray() {
+  if (!tray) {
+    tray = new Tray(appIconPath);
+    tray.on("click", () => focusMainWindow());
+  }
+  refreshTrayMenu();
+  return tray;
+}
+function minimizeToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  ensureTray();
+  mainWindow.hide();
+  return true;
+}
+function sendToWindowSafely(window, channel, ...args) {
+  if (!window || window.isDestroyed()) return false;
+  const contents = window.webContents;
+  if (!contents || contents.isDestroyed()) return false;
+  try {
+    contents.send(channel, ...args);
+    return true;
+  } catch (error) {
+    // A BrowserWindow can be destroyed between the checks above and send().
+    // Closing the app must remain a no-op in that short race window.
+    if (error?.message?.includes("Object has been destroyed")) return false;
+    throw error;
+  }
+}
+
+function closeWindowSafely(window) {
+  if (!window || window.isDestroyed()) return false;
+  try {
+    window.close();
+    return true;
+  } catch (error) {
+    if (error?.message?.includes("Object has been destroyed")) return false;
+    throw error;
+  }
+}
+
+function requestMainWindowClose() {
+  const window = mainWindow;
+  if (!window || window.isDestroyed() || isQuitting || closePromptOpen) return false;
+  closePromptOpen = true;
+  if (sendToWindowSafely(window, "window:close-requested")) return true;
+  closePromptOpen = false;
+  return false;
 }
 function isExternalUrl(url) {
   try {
@@ -563,7 +656,10 @@ async function verifySmokeRenderer(win) {
         rows = await api.list();
         return { available: true, existing, saved: rows.some(item => item.title === title) };
       };
-      const started = Date.now();
+      // Legacy embedded pages finish restoring their own cached state shortly
+      // after first paint. Let those startup writes settle before the smoke
+      // marker is saved, otherwise a stale bootstrap snapshot can overwrite it.
+      let started = 0;
       const tick = async () => {
         const checks = inspect();
         if (Object.values(checks).every(Boolean)) {
@@ -586,7 +682,8 @@ async function verifySmokeRenderer(win) {
         }
         setTimeout(tick, 100);
       };
-      tick();
+      started = Date.now();
+      setTimeout(tick, marker ? 3500 : 0);
     })
   `);
 }
@@ -612,11 +709,163 @@ async function verifyVuePreviewRenderer(win) {
         window.location.hash = '#/' + page;
         await waitFor(() => document.querySelector('main.vue-shell-content')?.dataset.view === page && ready(), page + ' route');
       };
+      const assertNoHorizontalOverflow = (documentRoot, label) => {
+        const root = documentRoot?.documentElement;
+        if (!root) throw new Error('missing document root: ' + label);
+        // The original screens are vertically scrollable where necessary, but
+        // locale changes must never introduce a horizontal scrollbar or push
+        // fixed controls outside the viewport.
+        if (root.scrollWidth > root.clientWidth + 2) {
+          throw new Error('locale layout overflow in ' + label + ': ' + root.scrollWidth + ' > ' + root.clientWidth);
+        }
+      };
+      const assertRendered = (node, label) => {
+        const rect = node?.getBoundingClientRect?.();
+        if (!rect || rect.width < 1 || rect.height < 1 || getComputedStyle(node).display === 'none') {
+          throw new Error('missing rendered control: ' + label);
+        }
+      };
+      const marker = ${JSON.stringify(process.env.KAIROS_SMOKE_STATE_MARKER || "")};
+      const expectMarker = ${JSON.stringify(process.env.KAIROS_SMOKE_EXPECT_STATE_MARKER || "")};
+      const musicFile = ${JSON.stringify(process.env.KAIROS_SMOKE_MUSIC_FILE || "")};
+      const expectMissingMusic = ${JSON.stringify(process.env.KAIROS_SMOKE_EXPECT_MUSIC_MISSING || "")};
+      const delay = (ms) => new Promise(resolveDelay => setTimeout(resolveDelay, ms));
+      const hasMarker = (state) =>
+        (state.schedules || []).some(item => item.id === marker) &&
+        (state.habits || []).some(item => item.id === marker);
+      const withMarker = (state) => ({
+        ...state,
+        schedules: [...(state.schedules || []).filter(item => item.id !== marker), { id: marker, title: 'Kairos smoke persisted task', date: '2026-07-14', end_date: '2026-07-14', type: 'task', status: 'todo', reminder: 'none' }],
+        habits: [...(state.habits || []).filter(item => item.id !== marker), { id: marker, name: 'Kairos smoke persisted habit', icon: 'book', dates: ['2026-07-14'] }]
+      });
+      const verifyPersistence = async () => {
+        const api = window.kairosDesktop?.appState;
+        if (!api) return { available: false };
+        let before = await api.get();
+        let existing = hasMarker(before);
+        for (let attempt = 0; expectMarker && !existing && attempt < 8; attempt += 1) {
+          await delay(100);
+          before = await api.get();
+          existing = hasMarker(before);
+        }
+        if (expectMarker && !existing) throw new Error('missing persisted smoke marker');
+        if (!marker) return { available: true, existing };
+        await api.save(withMarker(before));
+        await delay(500);
+        await api.save(withMarker(await api.get()));
+        return { available: true, existing, saved: hasMarker(await api.get()) };
+      };
+      const verifyMusic = async () => {
+        const api = window.kairosDesktop?.music;
+        if (!api) return { available: false };
+        if (!musicFile) return { available: true };
+        let before = await api.getState();
+        let existingTrack = (before.tracks || []).find(track => track.path === musicFile);
+        for (let attempt = 0; expectMarker && !existingTrack && attempt < 8; attempt += 1) {
+          await delay(100);
+          before = await api.getState();
+          existingTrack = (before.tracks || []).find(track => track.path === musicFile);
+        }
+        if (expectMarker && !existingTrack) throw new Error('missing persisted smoke music track');
+        if (expectMarker && expectMissingMusic) {
+          if (existingTrack?.available !== false) throw new Error('persisted smoke music track should be unavailable');
+          return { available: true, existing: true, saved: true, unavailable: true, unavailableReason: existingTrack.unavailableReason || '' };
+        }
+        const imported = existingTrack ? { added: [existingTrack] } : await api.addFiles([musicFile]);
+        const track = imported.added?.[0] || existingTrack;
+        if (!track?.id) throw new Error('failed to import smoke music track');
+        const playback = { queueTrackIds: [track.id], currentTrackId: track.id, playing: false, volume: 37, position: { trackId: track.id, seconds: 9 } };
+        await api.updatePlayback(playback);
+        await delay(250);
+        await api.updatePlayback(playback);
+        const after = await api.getState();
+        return { available: true, existing: Boolean(existingTrack), saved: (after.tracks || []).some(item => item.path === musicFile) && after.currentTrackId === track.id && after.volume === 37 && after.positions?.[track.id] === 9 };
+      };
+      const verifyAiData = async () => {
+        const api = window.kairosDesktop?.conversations;
+        if (!api) return { available: false };
+        const title = 'Kairos smoke AI ' + marker;
+        let rows = await api.list();
+        let existing = rows.some(item => item.title === title);
+        for (let attempt = 0; expectMarker && !existing && attempt < 8; attempt += 1) {
+          await delay(100);
+          rows = await api.list();
+          existing = rows.some(item => item.title === title);
+        }
+        if (expectMarker && !existing) throw new Error('missing persisted AI smoke conversation');
+        if (!marker) return { available: true, existing };
+        if (!existing) await api.create({ title, provider: 'openai', model: 'smoke' });
+        rows = await api.list();
+        return { available: true, existing, saved: rows.some(item => item.title === title) };
+      };
       try {
         await waitFor(() => Boolean(document.querySelector('.kairos-topbar')) && Boolean(document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.querySelector('main')) && Boolean(window.kairosDesktop?.appState?.get), 'initial Calendar shell');
         const initialFrame = document.querySelector('iframe.vue-legacy-frame');
         if (initialFrame?.contentDocument?.body?.dataset?.page !== 'calendar') throw new Error('Vue smoke did not begin on Calendar');
+        const originalState = await window.kairosDesktop.appState.get();
+        const originalLanguage = originalState?.settings?.general?.language || 'en';
+        const electronSystemLocale = ${JSON.stringify(nativeLocale())};
+        const expectedLanguage = ${JSON.stringify(smokeExpectedLanguage)};
+        const persistedLanguage = ${JSON.stringify(smokePersistLanguage)};
+        if (expectedLanguage && originalLanguage !== expectedLanguage) throw new Error('Vue smoke did not restore persisted language preference: ' + originalLanguage);
+        if (originalLanguage === 'system') {
+          await waitFor(() => document.documentElement.lang === electronSystemLocale
+            && initialFrame?.contentDocument?.documentElement?.lang === electronSystemLocale, 'system locale follows Electron');
+        }
+        const saveLanguage = async (language) => {
+          const current = await window.kairosDesktop.appState.get();
+          const settings = current?.settings || {};
+          await window.kairosDesktop.appState.save({
+            ...current,
+            settings: {
+              ...settings,
+              general: { ...(settings.general || {}), language }
+            }
+          });
+        };
+        await saveLanguage('en');
+        await waitFor(() => document.documentElement.lang === 'en' && initialFrame?.contentDocument?.documentElement?.lang === 'en' && document.title === 'Kairos | Intentional Dashboard', 'English locale sync');
+        assertNoHorizontalOverflow(document, 'English shell');
+        assertNoHorizontalOverflow(initialFrame?.contentDocument, 'English Calendar');
+        document.querySelectorAll('.kairos-nav-link, .kairos-create').forEach((node, index) => assertRendered(node, 'English navigation ' + index));
         await waitFor(() => Boolean(document.querySelector('#musicPlaylistToggle')) && Boolean(document.querySelector('#musicPlaylistPanel')), 'shared player queue controls');
+        const calendarPlayer = document.querySelector('#musicPlayer');
+        await window.kairosDesktop.windowControls.close();
+        await waitFor(() => Boolean(document.querySelector('.vue-close-choice-dialog')), 'Kairos close choice dialog');
+        const closeChoiceDialog = document.querySelector('.vue-close-choice-dialog');
+        if (closeChoiceDialog?.querySelectorAll('button').length !== 3) throw new Error('Kairos close choice dialog is missing actions');
+        const closeChoiceBackdrop = document.querySelector('.vue-close-choice-backdrop');
+        const closeChoiceRect = closeChoiceDialog?.getBoundingClientRect();
+        const closeChoiceBackdropStyle = closeChoiceBackdrop ? getComputedStyle(closeChoiceBackdrop) : null;
+        if (!closeChoiceRect || !closeChoiceBackdropStyle
+          || closeChoiceBackdropStyle.position !== 'fixed'
+          || Math.abs(closeChoiceRect.left + closeChoiceRect.width / 2 - window.innerWidth / 2) > 2
+          || Math.abs(closeChoiceRect.top + closeChoiceRect.height / 2 - window.innerHeight / 2) > 2) {
+          throw new Error('Kairos close choice dialog is not centered in the viewport');
+        }
+        closeChoiceDialog?.querySelector('.vue-close-choice-cancel')?.click();
+        await waitFor(() => !document.querySelector('.vue-close-choice-dialog'), 'Kairos close choice dialog cancel');
+        // The Calendar wallpaper applies a legacy direct-body-child rule. The
+        // Vue restore action is teleported to body, so exercise the real hide
+        // path here and ensure that rule cannot put it back in normal flow.
+        await window.kairosDesktop.pet.hide();
+        await waitFor(() => {
+          const restore = document.querySelector('.vue-pet-restore');
+          return restore instanceof HTMLElement && getComputedStyle(restore).display !== 'none';
+        }, 'Calendar desktop pet restore control');
+        const restoreControl = document.querySelector('.vue-pet-restore');
+        const restoreRect = restoreControl?.getBoundingClientRect?.();
+        const restoreStyle = restoreControl ? getComputedStyle(restoreControl) : null;
+        if (!restoreRect || !restoreStyle
+          || restoreStyle.position !== 'fixed'
+          || restoreRect.left < 0
+          || restoreRect.right > window.innerWidth
+          || restoreRect.bottom > window.innerHeight) {
+          throw new Error('Calendar pet restore control is not pinned inside the viewport');
+        }
+        assertNoHorizontalOverflow(document, 'Calendar pet restore control');
+        await window.kairosDesktop.pet.show();
+        await waitFor(() => getComputedStyle(document.querySelector('.vue-pet-restore')).display === 'none', 'Calendar desktop pet restore control close');
         document.querySelector('#musicPlaylistToggle')?.click();
         await waitFor(() => {
           const queuePanel = document.querySelector('#musicPlaylistPanel');
@@ -627,25 +876,79 @@ async function verifyVuePreviewRenderer(win) {
 
         document.querySelector('.kairos-create')?.click();
         await waitFor(() => Boolean(document.querySelector('iframe.vue-legacy-schedule-dialog-host')?.contentDocument?.querySelector('#scheduleFeatureDialog[open]')), 'Calendar Create New dialog');
+        await waitFor(() => document.querySelector('iframe.vue-legacy-schedule-dialog-host')?.contentDocument?.querySelector('#scheduleFeatureDialog [name="title"]')?.tagName === 'INPUT', 'Calendar Create New title input');
         const dialog = document.querySelector('iframe.vue-legacy-schedule-dialog-host')?.contentDocument?.querySelector('#scheduleFeatureDialog');
+        const draftTitle = dialog?.querySelector('[name="title"]');
+        if (draftTitle?.tagName !== 'INPUT') throw new Error('Calendar Create New title input is missing');
+        draftTitle.value = 'Locale smoke draft';
+        draftTitle.dispatchEvent(new Event('input', { bubbles: true }));
+        await saveLanguage('zh-CN');
+        const dialogFrame = document.querySelector('iframe.vue-legacy-schedule-dialog-host');
+        await waitFor(() => document.documentElement.lang === 'zh-CN'
+          && initialFrame?.contentDocument?.documentElement?.lang === 'zh-CN'
+          && dialogFrame?.contentDocument?.documentElement?.lang === 'zh-CN'
+          && dialog?.open === true
+          && draftTitle.value === 'Locale smoke draft'
+          && dialog?.querySelector('h2')?.textContent?.includes('添加日程')
+          && document.querySelector('#musicPlayer') === calendarPlayer, 'Chinese locale dialog and player preservation');
+        assertNoHorizontalOverflow(document, 'Chinese shell with dialog');
+        assertNoHorizontalOverflow(initialFrame?.contentDocument, 'Chinese Calendar');
+        assertNoHorizontalOverflow(dialogFrame?.contentDocument, 'Chinese Schedule dialog');
+        assertRendered(dialog?.querySelector('h2'), 'Chinese Schedule dialog title');
         dialog?.close();
         await waitFor(() => !document.querySelector('iframe.vue-legacy-schedule-dialog-host'), 'Calendar Create New dialog close');
+        document.querySelector('#musicPlaylistToggle')?.click();
+        await waitFor(() => {
+          const queuePanel = document.querySelector('#musicPlaylistPanel');
+          return queuePanel instanceof HTMLElement && !queuePanel.hidden
+            && queuePanel.textContent?.includes('队列');
+        }, 'Chinese Calendar player queue localization');
+        assertNoHorizontalOverflow(document, 'Chinese Calendar player queue');
+        document.querySelector('#musicPlaylistClose')?.click();
+        await waitFor(() => document.querySelector('#musicPlaylistPanel')?.hidden === true, 'Chinese Calendar player queue close');
 
         await changeRoute('music', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'music');
+        await waitFor(() => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.documentElement?.lang === 'zh-CN', 'Music locale sync');
+        assertNoHorizontalOverflow(document.querySelector('iframe.vue-legacy-frame')?.contentDocument, 'Chinese Music');
         const playerCount = document.querySelectorAll('#musicPlayer').length;
         const player = document.querySelector('#musicPlayer');
         if (playerCount !== 1 || player?.hidden || getComputedStyle(player).display === 'none') throw new Error('Music route did not retain exactly one visible shared player');
 
         await changeRoute('schedule', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'schedule');
+        await waitFor(() => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.documentElement?.lang === 'zh-CN', 'Schedule locale sync');
+        assertNoHorizontalOverflow(document.querySelector('iframe.vue-legacy-frame')?.contentDocument, 'Chinese Schedule');
         if (!document.querySelector('#musicPlayer')?.hidden) throw new Error('Schedule route left the Calendar/Music player visible');
 
         await changeRoute('habits', () => Boolean(document.querySelector('.vue-habits-page')));
+        assertNoHorizontalOverflow(document, 'Chinese Habits');
         if (!document.querySelector('#musicPlayer')?.hidden) throw new Error('Habits route left the Calendar/Music player visible');
+        document.querySelector('.kairos-reminder-button')?.click();
+        await waitFor(() => document.querySelector('#kairosReminderPanel')?.textContent?.includes('提醒'), 'Chinese reminder panel localization');
+        assertNoHorizontalOverflow(document, 'Chinese reminder panel');
+        document.querySelector('#kairosReminderPanel .kairos-reminder-head button')?.click();
+        await waitFor(() => !document.querySelector('#kairosReminderPanel'), 'Chinese reminder panel close');
 
         document.querySelector('.kairos-settings-button')?.click();
         await waitFor(() => Boolean(document.querySelector('dialog.kairos-settings-dialog[open]')), 'settings dialog');
         const settings = document.querySelector('dialog.kairos-settings-dialog');
-        if (settings?.querySelectorAll('.kairos-settings-panel').length !== 1 || settings?.querySelectorAll('[data-settings-tab]').length !== 7) throw new Error('Vue settings host did not retain the original settings dialog DOM');
+        if (settings?.querySelectorAll('.kairos-settings-panel').length !== 1 || settings?.querySelectorAll('[data-settings-tab]').length !== 6) throw new Error('Vue settings host did not retain the original settings dialog DOM');
+        assertNoHorizontalOverflow(document, 'Chinese Settings');
+        assertRendered(settings, 'Chinese Settings dialog');
+        const languageControl = settings?.querySelector('[data-setting-path="general.language"]');
+        if (languageControl?.tagName !== 'SELECT') throw new Error('original settings language control is missing');
+        languageControl.value = 'en';
+        languageControl.dispatchEvent(new Event('change', { bubbles: true }));
+        await waitFor(() => document.documentElement.lang === 'en'
+          && document.querySelector('dialog.kairos-settings-dialog[open]')?.textContent?.includes('Settings')
+          && document.querySelector('[data-setting-path="general.language"]')?.value === 'en', 'settings English language change');
+        assertNoHorizontalOverflow(document, 'English Settings after control change');
+        const chineseLanguageControl = document.querySelector('[data-setting-path="general.language"]');
+        if (chineseLanguageControl?.tagName !== 'SELECT') throw new Error('rerendered settings language control is missing');
+        chineseLanguageControl.value = 'zh-CN';
+        chineseLanguageControl.dispatchEvent(new Event('change', { bubbles: true }));
+        await waitFor(() => document.documentElement.lang === 'zh-CN'
+          && document.querySelector('dialog.kairos-settings-dialog[open]')?.textContent?.includes('设置')
+          && document.querySelector('[data-setting-path="general.language"]')?.value === 'zh-CN', 'settings Chinese language change');
         settings?.querySelector('[data-settings-tab="appearance"]')?.click();
         await waitFor(() => settings?.querySelector('[data-settings-tab="appearance"]')?.classList.contains('active') && settings?.querySelector('[data-settings-panel="appearance"]')?.hidden === false, 'original settings tab switch');
         const reduceMotion = settings?.querySelector('[data-setting-path="accessibility.reduceMotion"]');
@@ -662,8 +965,20 @@ async function verifyVuePreviewRenderer(win) {
         await waitFor(() => !document.querySelector('dialog.kairos-settings-dialog')?.open, 'original settings close');
 
         await changeRoute('calendar', () => document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'calendar');
+        const restoreLanguage = persistedLanguage || originalLanguage;
+        const restoreLocale = restoreLanguage === 'system'
+          ? (window.KairosI18n?.resolveLocale?.('system') || navigator.language || 'en')
+          : restoreLanguage;
+        await saveLanguage(restoreLanguage);
+        await waitFor(() => document.documentElement.lang === restoreLocale && document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.documentElement?.lang === restoreLocale, 'restore original locale preference');
+        const persistence = await verifyPersistence();
+        const music = await verifyMusic();
+        const aiData = await verifyAiData();
+        if (marker && !persistence.saved) throw new Error('failed to save persisted smoke marker');
+        if (musicFile && !music.saved) throw new Error('failed to save smoke music state');
+        if (marker && !aiData.saved) throw new Error('failed to save smoke AI data');
         const state = await window.kairosDesktop.appState.get();
-        resolve({ ok: true, title: document.title, bridge: 'Electron interface ready', checks: { calendar: true, calendarQueue: true, createNew: true, musicSourceDocument: true, sharedPlayer: true, schedule: true, habits: true, settingsOriginalDom: true, settingsTabs: true, neteaseSettings: true, neteaseSettingsIcon: true, settingsClose: true }, schedules: (state.schedules || []).length, habits: (state.habits || []).length });
+        resolve({ ok: true, title: document.title, bridge: 'Electron interface ready', checks: { calendar: true, calendarQueue: true, calendarPetRestoreLayout: true, createNew: true, closeChoiceDialog: true, systemLocale: true, localeEnglish: true, localeChinese: true, localeDialogPreserved: true, localeFrames: true, localeLayout: true, playerSurvivedLocaleChange: true, musicSourceDocument: true, sharedPlayer: true, schedule: true, habits: true, reminderPanel: true, settingsOriginalDom: true, settingsTabs: true, settingsLanguageControl: true, settingsLocaleLayout: true, neteaseSettings: true, neteaseSettingsIcon: true, settingsClose: true }, persistence, music, aiData, schedules: (state.schedules || []).length, habits: (state.habits || []).length });
       } catch (error) {
         reject(error);
       }
@@ -688,6 +1003,43 @@ async function captureOverlayRenderer(win, label) {
   // native transparency is validated from an actual desktop capture.
   return { size, screenshotPath };
 }
+async function captureSmokeRenderer(win, label) {
+  if (!smokeCaptureVisuals) return null;
+  // Hidden Electron windows can return a blank compositor image.  This path
+  // runs only after all assertions pass and only for an isolated smoke run,
+  // so briefly making the window visible cannot affect user interaction or
+  // the assertions that protect dialogs and player state.
+  const wasVisible = win.isVisible();
+  if (!wasVisible) win.showInactive();
+  await win.webContents.executeJavaScript(`new Promise(resolve => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(resolve)), 750))`);
+  const capture = await captureOverlayRenderer(win, label);
+  return { ...capture, wasVisible };
+}
+async function captureVueRouteVisuals(win, locale) {
+  const routeReady = {
+    calendar: "document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'calendar'",
+    habits: "Boolean(document.querySelector('.vue-habits-page'))",
+    schedule: "document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'schedule'",
+    music: "document.querySelector('iframe.vue-legacy-frame')?.contentDocument?.body?.dataset?.page === 'music'"
+  };
+  const captures = [];
+  for (const [page, ready] of Object.entries(routeReady)) {
+    await win.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+      window.location.hash = '#/${page}';
+      const started = Date.now();
+      const tick = () => {
+        try {
+          if (document.documentElement.lang === ${JSON.stringify(locale)} && (${ready})) return resolve();
+        } catch {}
+        if (Date.now() - started > 8000) return reject(new Error('visual capture route timed out: ${page}'));
+        setTimeout(tick, 60);
+      };
+      tick();
+    })`);
+    captures.push({ page, ...(await captureSmokeRenderer(win, `vue-${locale}-${page}`)) });
+  }
+  return captures;
+}
 async function waitForMainFrame(win) {
   if (!win.webContents.isLoadingMainFrame()) return;
   await new Promise((resolve, reject) => {
@@ -708,13 +1060,21 @@ async function waitForMainFrame(win) {
 async function finishPetSmokeTest(win) {
   const page = await win.webContents.executeJavaScript(`(() => {
     const image = document.getElementById("pet-img");
+    const menuText = document.getElementById("ctx-menu")?.textContent?.replace(/\\s+/g, " ").trim() || "";
+    const scriptText = [...document.scripts].map(script => script.textContent || "").join("\\n");
     return {
       readyState: document.readyState,
       imageComplete: Boolean(image?.complete),
       imageNaturalWidth: Number(image?.naturalWidth || 0),
       imageNaturalHeight: Number(image?.naturalHeight || 0),
       htmlBackgroundColor: getComputedStyle(document.documentElement).backgroundColor,
-      bodyBackgroundColor: getComputedStyle(document.body).backgroundColor
+      bodyBackgroundColor: getComputedStyle(document.body).backgroundColor,
+      menuText,
+      fixedChineseCopy: menuText.includes("与Ta对话")
+        && menuText.includes("隐藏桌宠")
+        && menuText.includes("关闭")
+        && scriptText.includes("我还在呢，放心吧。")
+        && !/KairosI18n/.test(scriptText)
     };
   })()`);
   const capture = await captureOverlayRenderer(win, "pet");
@@ -746,6 +1106,7 @@ async function finishPetSmokeTest(win) {
       && page.imageNaturalWidth > 0
       && page.htmlBackgroundColor === "rgba(0, 0, 0, 0)"
       && page.bodyBackgroundColor === "rgba(0, 0, 0, 0)"
+      && page.fixedChineseCopy
       && chatPage.readyState === "complete"
       && chatPage.htmlBackgroundColor === "rgba(0, 0, 0, 0)"
       && chatPage.bodyBackgroundColor === "rgba(0, 0, 0, 0)"
@@ -916,11 +1277,86 @@ function showAiChatWindow() {
   else reveal();
 }
 
+async function verifyWindowMaximizeControl(win) {
+  const captures = {};
+  const captureState = async state => {
+    if (!smokeCaptureVisuals || !smokeResultPath) return;
+    const image = await win.webContents.capturePage();
+    const screenshotPath = `${smokeResultPath.replace(/\.json$/i, "")}.window-${state}.png`;
+    await fs.writeFile(screenshotPath, image.toPNG());
+    captures[state] = screenshotPath;
+  };
+  const waitForState = async (maximized, glyphClass) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 5000) {
+      const rendererReady = await win.webContents.executeJavaScript(`(() => {
+        const button = document.querySelector('.kairos-window-maximize');
+        const glyph = button?.querySelector('.kairos-window-glyph');
+        return Boolean(button?.classList.contains('is-window-maximized') === ${maximized} && glyph?.classList.contains('${glyphClass}'));
+      })()`);
+      if (win.isMaximized() === maximized && rendererReady) return true;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error(`window maximize control did not reach ${maximized ? "maximized" : "restored"} state`);
+  };
+  const clickControl = () => win.webContents.executeJavaScript("document.querySelector('.kairos-window-maximize')?.click()");
+  if (win.isMaximized()) {
+    await clickControl();
+    await waitForState(false, "kairos-window-glyph--maximize");
+  }
+  await clickControl();
+  await waitForState(true, "kairos-window-glyph--restore");
+  await captureState("maximized-restore-icon");
+  await clickControl();
+  await waitForState(false, "kairos-window-glyph--maximize");
+  await captureState("restored-maximize-icon");
+  const verifyHover = async (selector, captureName) => {
+    // Reset Chromium's synthetic pointer first. In a packaged launch it can
+    // inherit the position of the native cursor, making the initial colour
+    // sample incorrectly read the control's already-hovered state.
+    win.webContents.sendInputEvent({ type: "mouseMove", x: 1, y: 100 });
+    await new Promise(resolve => setTimeout(resolve, 120));
+    const before = await win.webContents.executeJavaScript(`(() => {
+      const button = document.querySelector('${selector}');
+      const rect = button?.getBoundingClientRect();
+      const style = button ? getComputedStyle(button) : null;
+      return rect && style ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, color: style.color } : null;
+    })()`);
+    if (!before) throw new Error(`missing window control hover target: ${selector}`);
+    win.webContents.sendInputEvent({ type: "mouseMove", x: Math.round(before.x), y: Math.round(before.y) });
+    await new Promise(resolve => setTimeout(resolve, 180));
+    const hovered = await win.webContents.executeJavaScript(`(() => {
+      const style = getComputedStyle(document.querySelector('${selector}'));
+      return { backgroundColor: style.backgroundColor, color: style.color };
+    })()`);
+    if (!/rgba?\(0, 0, 0(?:, 0)?\)|transparent/.test(hovered.backgroundColor)) throw new Error(`${selector} hover added a background: ${hovered.backgroundColor}`);
+    if (hovered.color === before.color) throw new Error(`${selector} hover did not change glyph colour`);
+    await captureState(captureName);
+  };
+  if (smokeCaptureVisuals) {
+    await verifyHover(".kairos-window-minimize", "minimize-hover-lines-only");
+    await verifyHover(".kairos-window-maximize", "maximize-hover-lines-only");
+    await verifyHover(".kairos-window-close", "close-hover-lines-only");
+  }
+  win.webContents.sendInputEvent({ type: "mouseMove", x: 1, y: 100 });
+  return { ok: true, captures };
+}
+
 async function createWindow() {
   const savedBounds = restoreWindowBounds(await readWindowState());
-  mainWindow = new BrowserWindow({ ...savedBounds, minWidth: 900, minHeight: 650, show: false, backgroundColor: "#f5f4f1", webPreferences: { preload: path.join(root, "electron", "preload", "index.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  mainWindow = new BrowserWindow({ ...savedBounds, minWidth: 900, minHeight: 650, frame: false, show: false, backgroundColor: "#f5f4f1", icon: appIconPath, webPreferences: { preload: path.join(root, "electron", "preload", "index.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   protectAppNavigation(mainWindow);
   attachWindowStatePersistence(mainWindow);
+  const sendMaximizedState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("window:maximized-changed", mainWindow.isMaximized());
+  };
+  mainWindow.on("maximize", sendMaximizedState);
+  mainWindow.on("unmaximize", sendMaximizedState);
+  mainWindow.on("close", event => {
+    if (smokeTest || isQuitting) return;
+    event.preventDefault();
+    void requestMainWindowClose();
+  });
   mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
     // Vue route changes intentionally destroy legacy child iframes. Chromium
     // reports their cancelled navigation as -3; only a main-frame failure can
@@ -935,6 +1371,15 @@ async function createWindow() {
         const result = rendererMode === "vue"
           ? await verifyVuePreviewRenderer(mainWindow)
           : await verifySmokeRenderer(mainWindow);
+        result.renderer = rendererMode;
+        result.checks ||= {};
+        const windowMaximizeControl = await verifyWindowMaximizeControl(mainWindow);
+        result.checks.windowMaximizeControl = windowMaximizeControl.ok;
+        result.windowControlCaptures = windowMaximizeControl.captures;
+        if (rendererMode === "vue" && smokeCaptureVisuals) {
+          const locale = await mainWindow.webContents.executeJavaScript("document.documentElement.lang");
+          result.visualCaptures = await captureVueRouteVisuals(mainWindow, locale || "unknown");
+        }
         await writeSmokeResult(result);
         console.log(`Kairos smoke test loaded ${rendererMode} renderer. ${JSON.stringify(result.checks || result.bridge)}`);
         app.exit(0);
@@ -948,7 +1393,16 @@ async function createWindow() {
     if (!overlayVisualTest) mainWindow?.show();
     sendPetVisibility();
   });
-  mainWindow.on("closed", () => { aiChatWindow?.close(); petWindow?.close(); aiChatWindow = null; petWindow = null; mainWindow = null; });
+  mainWindow.on("closed", () => {
+    const closingAiChatWindow = aiChatWindow;
+    const closingPetWindow = petWindow;
+    closePromptOpen = false;
+    aiChatWindow = null;
+    petWindow = null;
+    mainWindow = null;
+    closeWindowSafely(closingAiChatWindow);
+    closeWindowSafely(closingPetWindow);
+  });
   if (rendererMode === "vue") {
     if (vueDevServerUrl) await mainWindow.loadURL(vueDevServerUrl);
     else await mainWindow.loadFile(path.join(root, "app", "vue-preview", "index.html"));
@@ -1029,6 +1483,41 @@ ipcMain.handle("reminder:notify", (event, input = {}) => {
   return showNativeReminder(input);
 });
 ipcMain.handle("ai-window:close", event => { const win = BrowserWindow.fromWebContents(event.sender); if (win === aiChatWindow) return hideAiChatWindowSmooth(); return false; });
+ipcMain.handle("window:minimize", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed()) return false;
+  win.minimize();
+  return true;
+});
+ipcMain.handle("window:toggle-maximize", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed()) return false;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+  return true;
+});
+ipcMain.handle("window:is-maximized", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed()) return false;
+  return win.isMaximized();
+});
+ipcMain.handle("window:close", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed()) return false;
+  return requestMainWindowClose();
+});
+ipcMain.handle("window:close-action", (event, action) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed() || !closePromptOpen) return false;
+  closePromptOpen = false;
+  if (action === "tray") return minimizeToTray();
+  if (action === "exit") {
+    isQuitting = true;
+    app.quit();
+    return true;
+  }
+  return true;
+});
 ipcMain.on("ai-window:set-mouse-passthrough", (event, ignore) => {
   if (!aiChatWindow || event.sender !== aiChatWindow.webContents) return;
   aiChatWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: Boolean(ignore) });
@@ -1052,17 +1541,17 @@ ipcMain.handle("ai:save-assistant-profile", async (_event, input = {}) => {
 });
 ipcMain.handle("ai:save-settings", async (_event, input) => {
   const current = await readSettings(); const provider = input.provider;
-  if (!PROVIDERS[provider]) throw new ProviderError("unknown_provider", "未知模型提供商");
+  if (!PROVIDERS[provider]) throw new ProviderError("unknown_provider", nativeT("errors.unknownProvider", {}, "Unknown AI provider."));
   const previous = current.providers[provider] || {};
   const hasEnabledModels = Object.prototype.hasOwnProperty.call(input || {}, "enabledModels");
   const selection = resolveSelectableModels(PROVIDERS[provider], {
     ...previous,
     model: String(input.model || previous.model || PROVIDERS[provider].defaultModel),
     ...(hasEnabledModels ? { enabledModels: input.enabledModels } : {}),
-  });
+  }, { t: nativeT });
   const next = structuredClone(current); next.defaultProvider = input.defaultProvider || current.defaultProvider; next.providers[provider] = { ...previous, model: selection.defaultModel || String(input.model || previous.model || PROVIDERS[provider].defaultModel), enabledModels: selection.enabledModels, credentialMode: input.credentialMode === "saved" ? "saved" : "session", encryptedKey: previous.encryptedKey || "", environmentDisabled: Boolean(previous.environmentDisabled) };
   if (input.clearKey) { next.providers[provider].encryptedKey = ""; next.providers[provider].createdAt = ""; next.providers[provider].keyHint = ""; next.providers[provider].environmentDisabled = true; sessionKeys.delete(provider); }
-  if (input.apiKey) { next.providers[provider].environmentDisabled = false; if (next.providers[provider].credentialMode === "saved") { if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", "系统安全存储当前不可用"); next.providers[provider].encryptedKey = safeStorage.encryptString(input.apiKey).toString("base64"); next.providers[provider].createdAt = new Date().toISOString(); next.providers[provider].keyHint = keyHint(input.apiKey); sessionKeys.delete(provider); } else { sessionKeys.set(provider, input.apiKey); next.providers[provider].encryptedKey = ""; next.providers[provider].keyHint = keyHint(input.apiKey); } }
+  if (input.apiKey) { next.providers[provider].environmentDisabled = false; if (next.providers[provider].credentialMode === "saved") { if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", nativeT("errors.secureStorageUnavailable", {}, "Secure storage is unavailable on this system.")); next.providers[provider].encryptedKey = safeStorage.encryptString(input.apiKey).toString("base64"); next.providers[provider].createdAt = new Date().toISOString(); next.providers[provider].keyHint = keyHint(input.apiKey); sessionKeys.delete(provider); } else { sessionKeys.set(provider, input.apiKey); next.providers[provider].encryptedKey = ""; next.providers[provider].keyHint = keyHint(input.apiKey); } }
   await writeSettings(next); const result = publicSettings(next); broadcastProviderSettings(result); return result;
 });
 ipcMain.handle("ai:save-firecrawl-settings", async (_event, input = {}) => {
@@ -1071,7 +1560,7 @@ ipcMain.handle("ai:save-firecrawl-settings", async (_event, input = {}) => {
   next.firecrawl ||= { encryptedKey: "", createdAt: "", keyHint: "", environmentDisabled: false };
   if (input.clear) { next.firecrawl.encryptedKey = ""; next.firecrawl.createdAt = ""; next.firecrawl.keyHint = ""; next.firecrawl.environmentDisabled = true; }
   if (input.apiKey) {
-    if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", "系统安全存储当前不可用");
+    if (!safeStorage.isEncryptionAvailable()) throw new ProviderError("secure_storage_unavailable", nativeT("errors.secureStorageUnavailable", {}, "Secure storage is unavailable on this system."));
     next.firecrawl.environmentDisabled = false;
     next.firecrawl.encryptedKey = safeStorage.encryptString(String(input.apiKey)).toString("base64");
     next.firecrawl.createdAt = new Date().toISOString();
@@ -1081,22 +1570,22 @@ ipcMain.handle("ai:save-firecrawl-settings", async (_event, input = {}) => {
   const result = publicSettings(next); broadcastProviderSettings(result);
   return result;
 });
-ipcMain.handle("ai:test-provider", async (_event, { provider, sessionKey }) => { const settings = await readSettings(); const entry=settings.providers[provider]||{}; return testProvider({ provider, apiKey: sessionKey || resolveProviderKey(settings, entry, provider), model: entry.model || PROVIDERS[provider]?.defaultModel }); });
+ipcMain.handle("ai:test-provider", async (_event, { provider, sessionKey }) => { const settings = await readSettings(); const entry=settings.providers[provider]||{}; return testProvider({ provider, apiKey: sessionKey || resolveProviderKey(settings, entry, provider), model: entry.model || PROVIDERS[provider]?.defaultModel, t: nativeT }); });
 ipcMain.handle("ai:refresh-provider-models", async (_event, { provider, sessionKey } = {}) => {
   const settings = await readSettings(); const entry = settings.providers?.[provider] || {};
-  const models = await listProviderModels(provider, { apiKey: sessionKey || resolveProviderKey(settings, entry, provider) });
+  const models = await listProviderModels(provider, { apiKey: sessionKey || resolveProviderKey(settings, entry, provider), t: nativeT });
   const next = structuredClone(settings); next.providers ||= {}; next.providers[provider] = { ...entry, discoveredModels: models, modelCatalogUpdatedAt: new Date().toISOString() };
   await writeSettings(next); const result = publicSettings(next); broadcastProviderSettings(result); return { models, refreshedAt: next.providers[provider].modelCatalogUpdatedAt, settings: result };
 });
 ipcMain.handle("ai:send", async (_event, payload) => {
   const requestId = crypto.randomUUID(); const settings = await readSettings(); const provider = payload.provider || settings.defaultProvider;
-  if (!PROVIDERS[provider]) throw new ProviderError("unknown_provider", "未知模型提供商");
-  const controller = new AbortController(); controllers.set(requestId, controller); const entry = settings.providers[provider] || {}; const selection = resolveSelectableModels(PROVIDERS[provider], entry); const requestedModel = String(payload.model || "").trim(); const model = selection.enabledModels.includes(requestedModel) ? requestedModel : selection.defaultModel; if (!model) { controllers.delete(requestId); throw new ProviderError("no_enabled_model", "请先在设置中勾选一个聊天模型"); } const conversationId=payload.conversationId; if(conversationId)await aiStore.updateConversation(conversationId,{provider,model}); const lastUser=[...(payload.messages||[])].reverse().find(x=>x.role==="user"); if(conversationId&&lastUser&&!payload.isRetry)await aiStore.addMessage({conversationId,role:"user",content:lastUser.content,provider,model,attachmentIds:payload.attachmentIds,attachmentNames:payload.attachmentNames});
-  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { if(!["openai","doubao"].includes(provider))throw new ProviderError("agent_model_unsupported","当前提供商尚未接入 LangChain 工具调用适配器。"); const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`附件提取内容：\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?` · 第 ${x.part} 段`:""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const result=await runKairosAgent({provider,apiKey:resolveProviderKey(settings,entry,provider),model,messages:requestMessages,conversationTitle:conversation?.title||"新对话",replyStyle:aiPreferences.replyStyle,memoryEnabled:aiPreferences.memoryEnabled!==false,signal:controller.signal,store:aiStore,memoryService:agentMemoryService,toolRuntime,appAdapters,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:["允许联网搜索","取消"],defaultId:0,cancelId:1,title:"允许 Kairos 联网搜索？",message:"Kairos 想查询外部网页以回答当前问题。只会发送模型选择的搜索词。"});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;usage=result.usage;broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { if(controller.signal.aborted){status="stopped";broadcastAiStream({requestId,type:"stopped"});}else{status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue });} } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
+  if (!PROVIDERS[provider]) throw new ProviderError("unknown_provider", nativeT("errors.unknownProvider", {}, "Unknown AI provider."));
+  const controller = new AbortController(); controllers.set(requestId, controller); const entry = settings.providers[provider] || {}; const selection = resolveSelectableModels(PROVIDERS[provider], entry, { t: nativeT }); const requestedModel = String(payload.model || "").trim(); const model = selection.enabledModels.includes(requestedModel) ? requestedModel : selection.defaultModel; if (!model) { controllers.delete(requestId); throw new ProviderError("no_enabled_model", nativeT("errors.noEnabledModel", {}, "Select at least one chat model in Settings first.")); } const conversationId=payload.conversationId; if(conversationId)await aiStore.updateConversation(conversationId,{provider,model}); const lastUser=[...(payload.messages||[])].reverse().find(x=>x.role==="user"); if(conversationId&&lastUser&&!payload.isRetry)await aiStore.addMessage({conversationId,role:"user",content:lastUser.content,provider,model,attachmentIds:payload.attachmentIds,attachmentNames:payload.attachmentNames});
+  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { if(!["openai","doubao"].includes(provider))throw new ProviderError("agent_model_unsupported",nativeT("errors.agentModelUnsupported",{},"The selected provider does not yet support AI tools.")); const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`${nativeT("assistant.attachmentExtractedContent",{},"Extracted attachment content:")}\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?nativeT("assistant.attachmentPart",{part:x.part}," · Part {part}"):""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const result=await runKairosAgent({provider,apiKey:resolveProviderKey(settings,entry,provider),model,messages:requestMessages,conversationTitle:conversation?.title||nativeT("assistant.newConversation",{},"New conversation"),replyStyle:aiPreferences.replyStyle,memoryEnabled:aiPreferences.memoryEnabled!==false,signal:controller.signal,store:aiStore,memoryService:agentMemoryService,toolRuntime,appAdapters,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:[nativeT("electron.allowWebSearch",{},"Allow web search"),nativeT("common.cancel",{},"Cancel")],defaultId:0,cancelId:1,title:nativeT("electron.webSearchPermissionTitle",{},"Allow Kairos to search the web?"),message:nativeT("electron.webSearchPermissionMessage",{},"Kairos wants to search external web pages to answer the current question. Only model-selected search terms will be sent.")});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;usage=result.usage;broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { if(controller.signal.aborted){status="stopped";broadcastAiStream({requestId,type:"stopped"});}else{status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue });} } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
 });
 ipcMain.handle("ai:stop", (_event, requestId) => { controllers.get(requestId)?.abort(); return { ok: true }; });
 ipcMain.handle("ai:conversations:list",()=>aiStore.listConversations());
-ipcMain.handle("ai:conversations:create",(_event,input)=>aiStore.createConversation(input));
+ipcMain.handle("ai:conversations:create",(_event,input={})=>aiStore.createConversation({...input,title:input.title||nativeT("assistant.newConversation",{},"New conversation")}));
 ipcMain.handle("ai:conversations:get",(_event,id)=>aiStore.getConversation(id));
 ipcMain.handle("ai:conversations:update",(_event,{id,patch})=>aiStore.updateConversation(id,patch));
 ipcMain.handle("ai:conversations:delete",async(_event,id)=>{const files=await aiStore.deleteConversation(id);await attachments.removeConversationFiles(files);return{ok:true};});
@@ -1115,21 +1604,21 @@ ipcMain.handle("ai:attachments:save",(_event,input)=>attachments.save(input));
 ipcMain.handle("ai:attachments:remove",(_event,id)=>attachments.remove(id));
 ipcMain.handle("ai:attachments:prepare",(_event,{id,provider})=>attachments.prepare(id,PROVIDERS[provider]?.capabilities||[]).then(result=>({...result,localPath:undefined})));
 ipcMain.handle("ai:context:assess",async(_event,{conversationId,provider,limit})=>{const conversation=await aiStore.getConversation(conversationId);if(!conversation)throw new Error("conversation_not_found");const parsed=(conversation.attachments||[]).flatMap(item=>item.parsed?.chunks||[]);return contextManager.assess({provider:provider||conversation.provider,messages:conversation.messages,attachments:parsed,limit});});
-ipcMain.handle("ai:context:resolve",async(_event,{conversationId,action,carrySummary=false})=>{const conversation=await aiStore.getConversation(conversationId);if(!conversation)throw new Error("conversation_not_found");if(action==="new_conversation")return{action,conversation:await contextManager.createContinuation(conversationId,{carrySummary})};if(action!=="summarize")throw new Error("invalid_context_action");const settings=await readSettings();const provider=conversation.provider||settings.defaultProvider;const entry=settings.providers[provider]||{};let summary="";for await(const event of streamProviderRequest({provider,model:conversation.model||entry.model||PROVIDERS[provider].defaultModel,apiKey:resolveProviderKey(settings,entry,provider),messages:contextManager.buildSummaryPrompt(conversation.messages),signal:new AbortController().signal})){if(event.type==="text_delta")summary+=event.delta;}await contextManager.saveSummary(conversationId,summary);return{action,summary};});
+ipcMain.handle("ai:context:resolve",async(_event,{conversationId,action,carrySummary=false})=>{const conversation=await aiStore.getConversation(conversationId);if(!conversation)throw new Error("conversation_not_found");if(action==="new_conversation")return{action,conversation:await contextManager.createContinuation(conversationId,{carrySummary,titleSuffix:nativeT("assistant.continuationSuffix",{}," · Continue")})};if(action!=="summarize")throw new Error("invalid_context_action");const settings=await readSettings();const provider=conversation.provider||settings.defaultProvider;const entry=settings.providers[provider]||{};let summary="";for await(const event of streamProviderRequest({provider,model:conversation.model||entry.model||PROVIDERS[provider].defaultModel,apiKey:resolveProviderKey(settings,entry,provider),messages:contextManager.buildSummaryPrompt(conversation.messages,{locale:nativeLocale()}),signal:new AbortController().signal,t:nativeT})){if(event.type==="text_delta")summary+=event.delta;}await contextManager.saveSummary(conversationId,summary);return{action,summary};});
 ipcMain.handle("ai:permissions:get",()=>toolRuntime.getPermissions());
 ipcMain.handle("ai:permissions:set",(_event,input)=>toolRuntime.setPermissions(input));
 ipcMain.handle("app:initialize",(_event,legacy)=>appStateStore.initialize(legacy));
-ipcMain.handle("app:save",(_event,state)=>appStateStore.write(state));
+ipcMain.handle("app:save", async (_event, state) => { const saved = await appStateStore.write(state); broadcastAppState(saved); return saved; });
 ipcMain.handle("app:get",()=>appStateStore.read());
 ipcMain.handle("app:audit",async()=>auditAppState(await appStateStore.read()));
 ipcMain.handle("app:list-backups",()=>appStateStore.listBackups());
 ipcMain.handle("app:read-backup",(_event,name)=>appStateStore.readBackup(name));
-ipcMain.handle("app:restore-backup",async(_event,name)=>{const state=await appStateStore.restoreBackup(name);mainWindow?.webContents.send("app:state-changed",state);return state;});
-ipcMain.handle("app:export-current",async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:"Export Kairos app data",defaultPath:`kairos-app-state-${new Date().toISOString().slice(0,10)}.json`,filters:[{name:"JSON",extensions:["json"]}]});if(result.canceled||!result.filePath)return{canceled:true};const state=await appStateStore.read();await fs.writeFile(result.filePath,JSON.stringify(state,null,2),"utf8");return{canceled:false,filePath:result.filePath};});
-ipcMain.handle("app:import-json",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:"Import Kairos app data",properties:["openFile"],filters:[{name:"JSON",extensions:["json"]}]});if(result.canceled||!result.filePaths[0])return{canceled:true};const raw=JSON.parse(await fs.readFile(result.filePaths[0],"utf8"));const backupPath=await appStateStore.backupCurrent("before-import");const state=await appStateStore.write({...raw,imported_from:result.filePaths[0],imported_at:new Date().toISOString(),last_import_backup:backupPath});mainWindow?.webContents.send("app:state-changed",state);return{canceled:false,state,filePath:result.filePaths[0],backupPath};});
+ipcMain.handle("app:restore-backup",async(_event,name)=>{const state=await appStateStore.restoreBackup(name);broadcastAppState(state);return state;});
+ipcMain.handle("app:export-current",async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:nativeT("electron.exportAppData",{},"Export Kairos app data"),defaultPath:`kairos-app-state-${new Date().toISOString().slice(0,10)}.json`,filters:[{name:nativeT("electron.jsonFiles",{},"JSON files"),extensions:["json"]}]});if(result.canceled||!result.filePath)return{canceled:true};const state=await appStateStore.read();await fs.writeFile(result.filePath,JSON.stringify(state,null,2),"utf8");return{canceled:false,filePath:result.filePath};});
+ipcMain.handle("app:import-json",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:nativeT("electron.importAppData",{},"Import Kairos app data"),properties:["openFile"],filters:[{name:nativeT("electron.jsonFiles",{},"JSON files"),extensions:["json"]}]});if(result.canceled||!result.filePaths[0])return{canceled:true};const raw=JSON.parse(await fs.readFile(result.filePaths[0],"utf8"));const backupPath=await appStateStore.backupCurrent("before-import");const state=await appStateStore.write({...raw,imported_from:result.filePaths[0],imported_at:new Date().toISOString(),last_import_backup:backupPath});broadcastAppState(state);return{canceled:false,state,filePath:result.filePaths[0],backupPath};});
 ipcMain.handle("calendar-background:list-builtins", () => calendarBackgroundService().listBuiltins());
 ipcMain.handle("calendar-background:choose-import", async () => {
-  const result = await dialog.showOpenDialog(mainWindow, { title: "Import calendar background", properties: ["openFile"], filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp"] }] });
+  const result = await dialog.showOpenDialog(mainWindow, { title: nativeT("electron.importCalendarBackground", {}, "Import calendar background"), properties: ["openFile"], filters: [{ name: nativeT("electron.images", {}, "Images"), extensions: ["jpg", "jpeg", "png", "webp"] }] });
   if (result.canceled || !result.filePaths[0]) return { canceled: true };
   const filePath = result.filePaths[0];
   const token = crypto.randomUUID();
@@ -1149,8 +1638,8 @@ ipcMain.handle("ai:tools:query",(_event,{domain,query})=>toolRuntime.query(domai
 ipcMain.handle("ai:tools:propose",(_event,input)=>toolRuntime.propose(input));
 ipcMain.handle("ai:tools:decide",(_event,input)=>toolRuntime.decide(input,appAdapters));
 ipcMain.handle("music:get-state",()=>musicLibrary.publicState());
-ipcMain.handle("music:choose-files",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:"选择本地音乐",properties:["openFile","multiSelections"],filters:[{name:"Audio",extensions:["mp3","flac","wav","m4a","mp4","aac"]}]});if(result.canceled)return{state:await musicLibrary.publicState(),added:[],rejected:[]};return musicLibrary.addFiles(result.filePaths);});
-ipcMain.handle("music:choose-folder",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:"选择本地歌单文件夹",properties:["openDirectory"]});if(result.canceled||!result.filePaths[0])return{state:await musicLibrary.publicState(),imported:[],rejected:[]};return musicLibrary.addFolder(result.filePaths[0]);});
+ipcMain.handle("music:choose-files",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:nativeT("electron.chooseLocalMusic",{},"Choose local music"),properties:["openFile","multiSelections"],filters:[{name:nativeT("electron.audioFiles",{},"Audio files"),extensions:["mp3","flac","wav","m4a","mp4","aac"]}]});if(result.canceled)return{state:await musicLibrary.publicState(),added:[],rejected:[]};return musicLibrary.addFiles(result.filePaths);});
+ipcMain.handle("music:choose-folder",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:nativeT("electron.choosePlaylistFolder",{},"Choose local playlist folder"),properties:["openDirectory"]});if(result.canceled||!result.filePaths[0])return{state:await musicLibrary.publicState(),imported:[],rejected:[]};return musicLibrary.addFolder(result.filePaths[0]);});
 ipcMain.handle("music:add-files",(_event,filePaths)=>musicLibrary.addFiles(filePaths));
 ipcMain.handle("music:sync-folders",()=>musicLibrary.syncFolders());
 ipcMain.handle("music:update-playback",(_event,patch)=>musicLibrary.updatePlayback(patch));
@@ -1191,7 +1680,7 @@ ipcMain.handle("netease:get-history",(_event,input)=>neteaseService.getHistory(i
 
 if (hasSingleInstanceLock) {
   app.on("second-instance", () => { focusMainWindow(); });
-  app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase});await neteaseService.initialize();await neteaseService.save();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,state=>mainWindow?.webContents.send("app:state-changed",state));petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);Menu.setApplicationMenu(buildApplicationMenu());await createWindow();if(!smokeTest)await createPetWindow();});
+  app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);setNativeLocale(await appStateStore.read());await createWindow();if(!smokeTest)await createPetWindow();});
   app.on("activate", () => { if (!focusMainWindow()) createWindow().catch(error => console.error("Failed to recreate main window:", error)); });
-  app.on("window-all-closed", () => { petWindow?.close(); if (process.platform !== "darwin") app.quit(); });
+  app.on("window-all-closed", () => { closeWindowSafely(petWindow); if (process.platform !== "darwin") app.quit(); });
 }

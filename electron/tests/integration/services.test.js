@@ -47,7 +47,7 @@ test("confirmed task proposal writes into real schedule state",async()=>{const{d
 
 test("context limit requires an explicit decision",async()=>{const{dir,store}=await fixture();const manager=new ContextManager(store);const result=manager.assess({provider:"openai",limit:100,messages:[{role:"user",content:"很长的上下文".repeat(100)}]});assert.equal(result.requiresDecision,true);assert.deepEqual(result.options,["summarize","new_conversation"]);await fs.rm(dir,{recursive:true,force:true});});
 
-test("new conversation can carry confirmed summary",async()=>{const{dir,store}=await fixture();const source=await store.createConversation({title:"原会话",provider:"openai",summary:"已确认摘要"});const next=await new ContextManager(store).createContinuation(source.id,{carrySummary:true});assert.equal(next.summary,"已确认摘要");assert.match(next.title,/继续/);await fs.rm(dir,{recursive:true,force:true});});
+test("new conversation can carry confirmed summary",async()=>{const{dir,store}=await fixture();const source=await store.createConversation({title:"原会话",provider:"openai",summary:"已确认摘要"});const next=await new ContextManager(store).createContinuation(source.id,{carrySummary:true});assert.equal(next.summary,"已确认摘要");assert.match(next.title,/Continue/);await fs.rm(dir,{recursive:true,force:true});});
 
 test("plain text attachment keeps source location",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-doc-"));const file=path.join(dir,"note.txt");await fs.writeFile(file,"第一行\n第二行","utf8");const parsed=await parseDocument(file,"note.txt","text/plain");assert.equal(parsed.sections[0].location,"全文");assert.match(parsed.text,/第二行/);await fs.rm(dir,{recursive:true,force:true});});
 

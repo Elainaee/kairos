@@ -26,7 +26,7 @@ function asWebResults(payload) {
   return [];
 }
 
-export function createWebSearch({ fetchImpl = fetch, apiKey, apiUrl = "https://api.firecrawl.dev/v2/search" } = {}) {
+export function createWebSearch({ fetchImpl = fetch, apiKey, apiUrl = "https://api.firecrawl.dev/v2/search", t } = {}) {
   return async function searchWeb(input = {}) {
     const query = String(input.query || "").trim();
     if (!query) throw new Error("empty_query");
@@ -47,7 +47,7 @@ export function createWebSearch({ fetchImpl = fetch, apiKey, apiUrl = "https://a
         const results = asWebResults(await response.json());
         const items = results.slice(0, limit).map(result => {
           const content = readContent ? String(result.markdown || "").trim() : "";
-          return { title: String(result.title || result.url || "未命名来源"), url: String(result.url || ""), snippet: String(result.description || ""), content: content.slice(0, maxChars), contentSource: content ? "firecrawl_markdown" : "search_snippet", readerAttempts: attempt, readerError: readContent && !content ? "firecrawl_markdown_empty" : undefined };
+          return { title: String(result.title || result.url || t?.("assistant.untitledSource", {}, "Untitled source") || "Untitled source"), url: String(result.url || ""), snippet: String(result.description || ""), content: content.slice(0, maxChars), contentSource: content ? "firecrawl_markdown" : "search_snippet", readerAttempts: attempt, readerError: readContent && !content ? "firecrawl_markdown_empty" : undefined };
         }).filter(item => item.url);
         const readable = items.filter(item => item.contentSource === "firecrawl_markdown");
         return { query, searchedAt: new Date().toISOString(), reader: { provider: "firecrawl", attempted: items.length, successful: readable.length, failures: items.filter(item => item.contentSource !== "firecrawl_markdown").map(item => ({ url: item.url, error: item.readerError })) }, items };

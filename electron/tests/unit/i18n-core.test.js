@@ -18,6 +18,7 @@ async function createI18n(languages) {
     dispatchEvent: event => listeners.get(event.type)?.(event)
   };
   const context = { window, document, navigator: window.navigator, CustomEvent: class { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } } };
+  vm.runInNewContext(await fs.readFile(path.join(root, "app/i18n/i18n-messages.js"), "utf8"), context);
   vm.runInNewContext(await fs.readFile(path.join(root, "app/i18n/i18n-core.js"), "utf8"), context);
   return { api: window.KairosI18n, document };
 }
@@ -41,6 +42,16 @@ test("i18n falls back to English for unsupported language preferences and missin
   assert.equal(api.t("unknown.key"), "unknown.key");
 });
 
+test("i18n selects plural forms and exposes locale-aware date helpers", async () => {
+  const { api } = await createI18n(["en-US"]);
+  assert.equal(api.plural("habits.dayCount", 1), "1 day");
+  assert.equal(api.plural("habits.dayCount", 2), "2 days");
+  api.setLocale("zh-CN");
+  assert.equal(api.plural("habits.dayCount", 2), "2 天");
+  assert.match(api.formatDateRange("2026-08-13", "2026-08-14", { year: "numeric", month: "short", day: "numeric" }), /2026/);
+  assert.equal(api.formatRelativeTime(-1, "day"), "昨天");
+});
+
 test("i18n applies the selected clock format without changing stored time values", async () => {
   const { api } = await createI18n(["en-US"]);
   assert.equal(api.setTimeFormat("12h"), "12h");
@@ -48,4 +59,13 @@ test("i18n applies the selected clock format without changing stored time values
   assert.equal(api.setTimeFormat("24h"), "24h");
   assert.match(api.formatTime("13:05"), /13:05/);
   assert.equal(api.getTimeFormat(), "24h");
+});
+
+test("i18n formats Date instances through the same language and clock pipeline", async () => {
+  const { api } = await createI18n(["en-US"]);
+  api.setTimeFormat("12h");
+  assert.match(api.formatTime(new Date(2026, 7, 13, 13, 5)), /1:05/);
+  api.setLocale("zh-CN");
+  api.setTimeFormat("24h");
+  assert.match(api.formatTime(new Date(2026, 7, 13, 13, 5)), /13:05/);
 });

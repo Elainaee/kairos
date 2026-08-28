@@ -3,43 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kairos Assistant</title>
+  <title data-i18n="app.title.assistant">Kairos Assistant</title>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=block" rel="stylesheet">
   <link href="../../shared/styles/tweakcn-theme.css?v=9" rel="stylesheet">
   <link href="../../features/assistant/ai-chat.css?v=12" rel="stylesheet">
   <script src="../../themes/theme-core.js"></script>
 </head>
 <body>
-  <section aria-label="AI assistant" data-window-mode="true" id="aiPanel">
+  <section aria-label="AI assistant" data-i18n-aria-label="assistant.workspace" data-window-mode="true" id="aiPanel">
     <header class="ai-chat-header">
       <div class="ai-chat-contact">
-        <button aria-label="Change AI avatar" class="ai-avatar ai-avatar-editor" id="aiAvatarButton" type="button"></button>
+        <button aria-label="Change AI avatar" data-i18n-aria-label="assistant.changeAvatar" class="ai-avatar ai-avatar-editor" id="aiAvatarButton" type="button"></button>
         <input accept="image/*" hidden id="aiAvatarInput" type="file">
-        <div><strong id="aiAssistantName">Kairos Assistant</strong><span><i></i> Online</span></div>
+        <div><strong id="aiAssistantName">Kairos Assistant</strong><span><i></i> <span data-i18n="assistant.online">Online</span></span></div>
       </div>
       <div class="ai-chat-header-actions">
-        <button aria-label="Rename AI assistant" id="renameAiAssistant" type="button"><span class="material-symbols-outlined">edit</span></button>
-        <button aria-label="New AI session" id="newAiSession" type="button"><span class="material-symbols-outlined">add_comment</span></button>
-        <button aria-label="Delete AI session" id="deleteAiSession" type="button"><span class="material-symbols-outlined">delete</span></button>
-        <button aria-label="Close AI panel" id="closeAiPanel" type="button"><span class="material-symbols-outlined">close</span></button>
+        <button aria-label="Rename AI assistant" data-i18n-aria-label="assistant.rename" id="renameAiAssistant" type="button"><span class="material-symbols-outlined">edit</span></button>
+        <button aria-label="New AI session" data-i18n-aria-label="assistant.newConversation" id="newAiSession" type="button"><span class="material-symbols-outlined">add_comment</span></button>
+        <button aria-label="Delete AI session" data-i18n-aria-label="assistant.deleteConversation" id="deleteAiSession" type="button"><span class="material-symbols-outlined">delete</span></button>
+        <button aria-label="Close AI panel" data-i18n-aria-label="assistant.closePanel" id="closeAiPanel" type="button"><span class="material-symbols-outlined">close</span></button>
       </div>
       <div class="ai-chat-controls">
-        <label><span>Session</span><select aria-label="Switch session" id="aiSessionSelect"><option>Loading...</option></select></label>
-        <label><span>Provider</span><select aria-label="Model provider" id="aiProviderSelect"><option>Loading...</option></select></label>
-        <label><span>Model</span><select aria-label="Select model" id="aiModelInput"><option>Loading...</option></select></label>
+        <label><span data-i18n="assistant.session">Session</span><select aria-label="Switch session" data-i18n-aria-label="assistant.switchSession" id="aiSessionSelect"><option data-i18n="common.loading">Loading…</option></select></label>
+        <label><span data-i18n="assistant.provider">Provider</span><select aria-label="Model provider" data-i18n-aria-label="assistant.provider" id="aiProviderSelect"><option data-i18n="common.loading">Loading…</option></select></label>
+        <label><span data-i18n="assistant.model">Model</span><select aria-label="Select model" data-i18n-aria-label="assistant.model" id="aiModelInput"><option data-i18n="common.loading">Loading…</option></select></label>
         <span id="aiUsageSummary">0 requests</span>
       </div>
     </header>
-    <main aria-live="polite" id="aiMessages"><div class="ai-chat-date">Today</div></main>
+    <main aria-live="polite" id="aiMessages"><div class="ai-chat-date" data-i18n="assistant.today">Today</div></main>
     <div aria-live="polite" class="ai-attachment-tray" id="aiAttachmentTray"></div>
     <footer class="ai-chat-composer">
-      <button aria-label="Add attachment" class="ai-attach-button" id="aiAttachButton" type="button"><span class="material-symbols-outlined">add</span></button>
+      <button aria-label="Add attachment" data-i18n-aria-label="assistant.addAttachment" class="ai-attach-button" id="aiAttachButton" type="button"><span class="material-symbols-outlined">add</span></button>
       <input accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.txt,.md" hidden id="aiAttachmentInput" multiple type="file">
-      <label class="ai-retain-option"><input id="aiRetainAttachments" type="checkbox"><span id="aiRetainLabel">Attachments</span></label>
-      <textarea aria-label="Message AI" id="aiInput" placeholder="Type your message..." rows="1"></textarea>
-      <button aria-label="Send" id="sendAiMessage" type="button"><span class="material-symbols-outlined">arrow_upward</span></button>
+      <label class="ai-retain-option"><input id="aiRetainAttachments" type="checkbox"><span data-i18n="assistant.attachments" id="aiRetainLabel">Attachments</span></label>
+      <textarea aria-label="Message AI" data-i18n-aria-label="assistant.messagePlaceholder" data-i18n-placeholder="assistant.messagePlaceholder" id="aiInput" placeholder="Type your message…" rows="1"></textarea>
+      <button aria-label="Send" data-i18n-aria-label="assistant.send" id="sendAiMessage" type="button"><span class="material-symbols-outlined">arrow_upward</span></button>
     </footer>
   </section>
+<script src="../../i18n/i18n-messages.js"></script>
 <script src="../../i18n/i18n-core.js"></script>
 <script src="../../features/assistant/ai-chat.js?v=16"></script>
 </body>

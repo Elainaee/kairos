@@ -8,14 +8,16 @@
 // buildContext() 输出可直接插入 LLM system prompt 的结构化文本
 
 const PROFILE_CATEGORY_NAMES = {
-  identity: "身份",
-  preference: "偏好",
-  relationship: "关系",
-  work: "工作/学习",
-  health: "健康",
-  knowledge: "知识",
-  other: "其他",
+  "zh-CN": {
+    identity: "身份", preference: "偏好", relationship: "关系", work: "工作/学习", health: "健康", knowledge: "知识", other: "其他",
+  },
+  en: {
+    identity: "Identity", preference: "Preferences", relationship: "Relationships", work: "Work / study", health: "Health", knowledge: "Knowledge", other: "Other",
+  },
 };
+
+const isChinese = locale => locale === "zh-CN";
+const text = (locale, chinese, english) => isChinese(locale) ? chinese : english;
 
 export class MemoryLayers {
   constructor({ views, policy, options = {} } = {}) {
@@ -28,34 +30,34 @@ export class MemoryLayers {
   }
 
   // 组装完整上下文，返回可直接注入 system prompt 的字符串
-  buildContext({ sessionId, conversationId, query, provider, tokenBudget } = {}) {
+  buildContext({ sessionId, conversationId, query, provider, tokenBudget, locale = "zh-CN" } = {}) {
     const parts = [];
 
     // Layer 1: Metadata
-    const metadata = this.getMetadata(sessionId);
+    const metadata = this.getMetadata(sessionId, locale);
     if (metadata) {
-      parts.push(`[会话元数据]\n${metadata}`);
+      parts.push(`[${text(locale, "会话元数据", "Session metadata")}]\n${metadata}`);
     }
 
     // Layer 2: Profile
-    const profile = this.getProfileSnapshot();
+    const profile = this.getProfileSnapshot(null, { locale });
     if (profile) {
-      parts.push(`[用户画像]\n${profile}`);
+      parts.push(`[${text(locale, "用户画像", "User profile")}]\n${profile}`);
     }
 
     // Layer 3: Summary + Goals
     if (conversationId) {
-      const summary = this.getConversationSummary(conversationId);
+      const summary = this.getConversationSummary(conversationId, { locale });
       if (summary) {
-        parts.push(`[对话摘要与目标]\n${summary}`);
+        parts.push(`[${text(locale, "对话摘要与目标", "Conversation summary and goals")}]\n${summary}`);
       }
     }
 
     // Layer 4: Sliding window
     if (query && conversationId) {
-      const window = this.getSlidingWindowText(conversationId);
+      const window = this.getSlidingWindowText(conversationId, null, { locale });
       if (window) {
-        parts.push(`[近期对话]\n${window}`);
+        parts.push(`[${text(locale, "近期对话", "Recent conversation")}]\n${window}`);
       }
     }
 
@@ -73,22 +75,22 @@ export class MemoryLayers {
   }
 
   // Layer 1: 会话元数据
-  getMetadata(sessionId) {
+  getMetadata(sessionId, locale = "zh-CN") {
     if (!sessionId) return null;
     const meta = this.views.getSessionMetadata(sessionId);
     if (!meta) return null;
 
     const lines = [];
-    if (meta.timezone) lines.push(`  时区: ${meta.timezone}`);
-    if (meta.language) lines.push(`  语言: ${meta.language}`);
-    if (meta.model) lines.push(`  模型: ${meta.model}`);
-    if (meta.device) lines.push(`  设备: ${meta.device}`);
+    if (meta.timezone) lines.push(`  ${text(locale, "时区", "Time zone")}: ${meta.timezone}`);
+    if (meta.language) lines.push(`  ${text(locale, "语言", "Language")}: ${meta.language}`);
+    if (meta.model) lines.push(`  ${text(locale, "模型", "Model")}: ${meta.model}`);
+    if (meta.device) lines.push(`  ${text(locale, "设备", "Device")}: ${meta.device}`);
     if (!lines.length) return null;
     return lines.join("\n");
   }
 
   // Layer 2: 用户结构化画像
-  getProfileSnapshot(asOf = null) {
+  getProfileSnapshot(asOf = null, { locale = "zh-CN" } = {}) {
     const profile = this.views.getProfile({ asOf });
     if (!profile || !profile.length) return null;
 
@@ -102,11 +104,11 @@ export class MemoryLayers {
 
     const lines = [];
     for (const [cat, fields] of Object.entries(byCategory)) {
-      const label = PROFILE_CATEGORY_NAMES[cat] || cat;
+      const label = (PROFILE_CATEGORY_NAMES[isChinese(locale) ? "zh-CN" : "en"] || {})[cat] || cat;
       const fieldTexts = fields.slice(0, 10).map(f => {
         const keyParts = f.fieldKey.split(".");
         const shortKey = keyParts[keyParts.length - 1];
-        return `  ${shortKey}: ${f.value}${f.confidence < 0.7 ? " (推测)" : ""}`;
+        return `  ${shortKey}: ${f.value}${f.confidence < 0.7 ? text(locale, " (推测)", " (inferred)") : ""}`;
       });
       lines.push(`  ${label}:\n${fieldTexts.join("\n")}`);
     }
@@ -115,7 +117,7 @@ export class MemoryLayers {
   }
 
   // Layer 3: 对话摘要 + 目标
-  getConversationSummary(conversationId) {
+  getConversationSummary(conversationId, { locale = "zh-CN" } = {}) {
     if (!conversationId) return null;
     const profile = this.views.getProfile();
     const timeline = this.views.getTimeline({ limit: 20 });
@@ -131,7 +133,7 @@ export class MemoryLayers {
       }
     }
     if (keywords.size > 0) {
-      lines.push("  已知: " + [...keywords].slice(0, 8).join("; "));
+      lines.push(`  ${text(locale, "已知", "Known")}: ` + [...keywords].slice(0, 8).join("; "));
     }
 
     // 近期主题
@@ -140,7 +142,7 @@ export class MemoryLayers {
       .slice(0, 5)
       .map(t => t.title);
     if (recentTopics.length > 0) {
-      lines.push("  近期话题: " + recentTopics.join("、"));
+      lines.push(`  ${text(locale, "近期话题", "Recent topics")}: ` + recentTopics.join(isChinese(locale) ? "、" : "; "));
     }
 
     if (!lines.length) return null;
@@ -148,7 +150,7 @@ export class MemoryLayers {
   }
 
   // Layer 4: 滑动窗口消息文本
-  getSlidingWindowText(conversationId, limit = null) {
+  getSlidingWindowText(conversationId, limit = null, { locale = "zh-CN" } = {}) {
     if (!conversationId) return null;
     const size = limit || this.slidingWindowSize;
     const window = this.views.getSlidingWindow(conversationId, { limit: size });
@@ -161,7 +163,7 @@ export class MemoryLayers {
     // 从旧到新遍历，从新到旧取最相关
     const recent = window.slice(-size);
     for (const msg of recent.reverse()) {
-      const prefix = msg.role === "user" ? "用户" : msg.role === "assistant" ? "Kairos" : msg.role;
+      const prefix = msg.role === "user" ? text(locale, "用户", "User") : msg.role === "assistant" ? "Kairos" : msg.role;
       const line = `  [${prefix}] ${msg.content?.slice(0, 200) || ""}`;
       if (charCount + line.length > maxChars) break;
       lines.unshift(line); // 保持从旧到新的顺序

@@ -8,7 +8,6 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 let loader: Promise<void> | undefined;
-let observer: MutationObserver | undefined;
 let boundDialog: HTMLDialogElement | undefined;
 
 function originalDialog() {
@@ -67,13 +66,10 @@ watch(() => props.open, value => {
 });
 
 onMounted(() => {
-  observer = new MutationObserver(bindOriginalDialog);
-  observer.observe(document.body, { childList: true, subtree: true });
   if (props.open) void openOriginalDialog().catch(() => emit("close"));
 });
 
 onBeforeUnmount(() => {
-  observer?.disconnect();
   boundDialog?.removeEventListener("close", onOriginalClose);
   closeOriginalDialog();
 });

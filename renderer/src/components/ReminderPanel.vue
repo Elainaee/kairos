@@ -2,7 +2,7 @@
 import { onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useRemindersStore } from "../stores/reminders";
-import { formatDate } from "../i18n";
+import { formatDate, t } from "../i18n";
 defineProps<{open:boolean}>();
 const emit=defineEmits<{close:[]}>();
 const store=useRemindersStore();
@@ -12,11 +12,11 @@ const timeText=(item:any)=>{const due=store.dueAt(item);return due?formatDate(du
 function details(id:string){emit("close");router.push({path:"/schedule",hash:`#schedule-${encodeURIComponent(id)}`});}
 </script>
 <template>
-  <section v-if="open" id="kairosReminderPanel" class="kairos-reminder-panel" aria-label="Reminders panel">
-    <div class="kairos-reminder-head"><h2>Reminders</h2><button type="button" aria-label="Close" @click="emit('close')">×</button></div>
+  <section v-if="open" id="kairosReminderPanel" class="kairos-reminder-panel" :aria-label="t('reminders.panel')">
+    <div class="kairos-reminder-head"><h2>{{ t("common.reminders") }}</h2><button type="button" :aria-label="t('common.close')" @click="emit('close')">×</button></div>
     <div class="kairos-reminder-list">
-      <article v-for="item in store.items" :key="item.id" class="kairos-reminder-item"><button class="kairos-reminder-dismiss" type="button" aria-label="Dismiss reminder" @click="store.dismiss(item.id)">×</button><strong>{{item.title}}</strong><p>Scheduled · {{timeText(item)}}</p><div class="kairos-reminder-actions"><button type="button" @click="store.complete(item.id)">Complete</button><button type="button" @click="store.snooze(item.id)">10 minutes</button><button type="button" @click="details(item.id)">Details</button></div></article>
-      <div v-if="!store.items.length" class="kairos-reminder-empty">No reminders<br><small>Upcoming reminders will appear here.</small></div>
+      <article v-for="item in store.items" :key="item.id" class="kairos-reminder-item"><button class="kairos-reminder-dismiss" type="button" :aria-label="t('reminders.dismiss')" @click="store.dismiss(item.id)">×</button><strong>{{item.title}}</strong><p>{{ t("reminders.scheduled") }} · {{timeText(item)}}</p><div class="kairos-reminder-actions"><button type="button" @click="store.complete(item.id)">{{ t("common.complete") }}</button><button type="button" @click="store.snooze(item.id)">{{ t("reminders.snooze") }}</button><button type="button" @click="details(item.id)">{{ t("common.details") }}</button></div></article>
+      <div v-if="!store.items.length" class="kairos-reminder-empty">{{ t("reminders.none") }}<br><small>{{ t("reminders.noneHint") }}</small></div>
     </div>
   </section>
 </template>

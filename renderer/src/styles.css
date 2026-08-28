@@ -36,6 +36,26 @@ body.kairos-calendar-background-active .vue-shell .kairos-topbar { background: r
 .vue-settings-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; background: rgba(48,49,44,.42); backdrop-filter: blur(5px); }
 .vue-settings-backdrop .kairos-settings-dialog { display: block; margin: 0; }
 .vue-settings-backdrop .kairos-settings-save-status.is-visible { opacity: 1; transform: none; }
+/* Calendar's legacy wallpaper makes every direct body child relative. The
+   close dialog is teleported to body, so explicitly restore its viewport
+   layer before the legacy rule can push it below the scrolling content. */
+body.kairos-calendar-background-active > .vue-close-choice-backdrop,
+body > .vue-close-choice-backdrop { position: fixed!important; z-index: 6000!important; inset: 0!important; width: 100vw!important; height: 100dvh!important; margin: 0!important; display: grid!important; place-items: center!important; padding: 24px!important; background: rgb(48 49 44 / .42); backdrop-filter: blur(5px); }
+.vue-close-choice-dialog { width: min(460px, calc(100vw - 48px)); padding: 26px; border: 1px solid color-mix(in oklch, var(--border) 76%, transparent); border-radius: 22px; background: color-mix(in oklch, var(--popover) 94%, transparent); color: var(--popover-foreground); box-shadow: 0 24px 70px rgb(48 44 37 / .24), inset 0 1px 0 rgb(255 255 255 / .7); backdrop-filter: blur(20px) saturate(1.08); outline: 0; }
+.vue-close-choice-icon { display: grid; width: 42px; height: 42px; margin-bottom: 14px; place-items: center; border-radius: 14px; background: color-mix(in oklch, var(--primary) 14%, transparent); color: var(--primary); }
+.vue-close-choice-icon .material-symbols-outlined { font-size: 24px; }
+.vue-close-choice-copy h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+.vue-close-choice-copy p { margin: 8px 0 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
+.vue-close-choice-dialog footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.vue-close-choice-dialog footer button { min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.vue-close-choice-cancel { background: transparent; color: var(--muted-foreground); }
+.vue-close-choice-tray { background: var(--secondary); color: var(--secondary-foreground); }
+.vue-close-choice-exit { border-color: color-mix(in oklch, #b3261e 38%, var(--border))!important; background: #b3261e; color: #fff; }
+.vue-close-choice-dialog footer button:hover { transform: translateY(-1px); filter: brightness(.98); }
+.vue-close-choice-enter-active,.vue-close-choice-leave-active { transition: opacity .18s ease; }
+.vue-close-choice-enter-active .vue-close-choice-dialog,.vue-close-choice-leave-active .vue-close-choice-dialog { transition: opacity .18s ease; }
+.vue-close-choice-enter-from,.vue-close-choice-leave-to { opacity: 0; }
+.vue-close-choice-enter-from .vue-close-choice-dialog,.vue-close-choice-leave-to .vue-close-choice-dialog { opacity: 0; }
 .kairos-settings-panel-view:not([hidden]) { display: grid; }
 .vue-shell-content:has(.vue-habits-page) { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
 .vue-shell-content:has(.vue-habits-page)::-webkit-scrollbar { display: none; width: 0; height: 0; }
@@ -106,7 +126,11 @@ body.vue-calendar-fullscreen .vue-calendar-frame-fullscreen { visibility:visible
 .vue-toast-enter-active,.vue-toast-leave-active { transition: opacity .22s ease, transform .28s cubic-bezier(.2,.8,.2,1); }
 .vue-toast-enter-from,.vue-toast-leave-to { opacity: 0; transform: translateX(18px) scale(.97); }
 .vue-toast-move { transition: transform .24s ease; }
-.vue-pet-restore { position:fixed; z-index:4000; right:20px; bottom:112px; display:grid; width:42px; height:42px; padding:0; place-items:center; border:1px solid var(--border); border-radius:50%!important; background:color-mix(in oklch,var(--popover) 92%,transparent); color:var(--primary); box-shadow:0 2px 8px rgb(0 0 0 / .1); backdrop-filter:blur(12px); cursor:pointer; }
+/* This control is teleported to `body`.  The legacy Calendar wallpaper styles
+   also target every direct body child and would otherwise turn it back into a
+   normal-flow element, which moves it to the left and creates a page scrollbar. */
+body.kairos-calendar-background-active > .vue-pet-restore,
+.vue-pet-restore { position:fixed!important; z-index:5000!important; inset:auto 20px 112px auto!important; display:grid; width:42px; height:42px; margin:0!important; padding:0; place-items:center; pointer-events:auto; flex:none!important; border:1px solid var(--border); border-radius:50%!important; background:color-mix(in oklch,var(--popover) 96%,transparent); color:var(--primary); box-shadow:0 2px 8px rgb(0 0 0 / .1); backdrop-filter:blur(12px); cursor:pointer; }
 .vue-pet-restore:hover { background:var(--popover); color:var(--primary); box-shadow:0 4px 14px rgb(0 0 0 / .14); transform:translateY(-1px); }
 .vue-pet-restore:focus-visible { outline:2px solid var(--ring); outline-offset:3px; }
 .vue-pet-restore .material-symbols-outlined { font-size:21px; }

@@ -3,6 +3,8 @@ import { ChatOpenAI } from "@langchain/openai";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_RETRIES = 2;
+const fallbackTranslate = (_key, _params, fallback = "") => fallback;
+const providerText = (translate, key, fallback, params = {}) => (typeof translate === "function" ? translate(key, params, fallback) : fallbackTranslate(key, params, fallback));
 
 export const PROVIDERS = Object.freeze({
   openai: Object.freeze({
@@ -31,10 +33,11 @@ export class ProviderError extends Error {
   constructor(code, message, details = {}) { super(message); this.name = "ProviderError"; this.code = code; this.details = details; }
 }
 
-export function resolveProviderConfig(provider, { apiKey, model } = {}) {
+export function resolveProviderConfig(provider, options = {}) {
+  const { apiKey, model, t: translate } = options;
   const definition = PROVIDERS[provider];
-  if (!definition) throw new ProviderError("unknown_provider", "未知模型提供商");
-  if (definition.protocol !== "openai-compatible") throw new ProviderError("not_implemented", `${definition.name} 尚未接入 OpenAI 兼容传输层`);
+  if (!definition) throw new ProviderError("unknown_provider", providerText(translate, "errors.unknownProvider", "Unknown AI provider."));
+  if (definition.protocol !== "openai-compatible") throw new ProviderError("not_implemented", providerText(translate, "errors.providerNotImplemented", "{provider} is not connected through the OpenAI-compatible transport.", { provider: definition.name }));
   return { ...definition, apiKey, model: model || definition.defaultModel };
 }
 
@@ -49,13 +52,13 @@ function openAIOptions(config) {
 
 export function createProviderClient(provider, options = {}) {
   const config = resolveProviderConfig(provider, options);
-  if (!config.apiKey) throw new ProviderError("missing_key", "请先配置 API Key");
+  if (!config.apiKey) throw new ProviderError("missing_key", providerText(options.t, "errors.missingApiKey", "Please configure an API key first."));
   return new OpenAI(openAIOptions(config));
 }
 
 export function createProviderChatModel(provider, options = {}) {
   const config = resolveProviderConfig(provider, options);
-  if (!config.apiKey) throw new ProviderError("missing_key", "请先配置 API Key");
+  if (!config.apiKey) throw new ProviderError("missing_key", providerText(options.t, "errors.missingApiKey", "Please configure an API key first."));
   return new ChatOpenAI({
     model: config.model,
     temperature: options.temperature ?? 0.35,
@@ -81,9 +84,9 @@ function modelIds(values) {
  * user's model selection. A missing or empty `enabledModels` list means that
  * the account has not enabled a chat model yet.
  */
-export function resolveSelectableModels(provider, settings = {}) {
+export function resolveSelectableModels(provider, settings = {}, options = {}) {
   const definition = typeof provider === "string" ? PROVIDERS[provider] : provider;
-  if (!definition) throw new ProviderError("unknown_provider", "未知模型提供商");
+  if (!definition) throw new ProviderError("unknown_provider", providerText(options.t, "errors.unknownProvider", "Unknown AI provider."));
   const requested = modelIds(settings.enabledModels);
   const availableModels = modelIds([
     ...(definition.models || []),
@@ -103,18 +106,19 @@ export async function listProviderModels(provider, options = {}) {
     const page = await client.models.list();
     return filterAccountModels(page?.data || []);
   } catch (error) {
-    throw normalizeProviderError(provider, error);
+    throw normalizeProviderError(provider, error, options.t);
   }
 }
 
-export function normalizeProviderError(provider, error) {
+export function normalizeProviderError(provider, error, translate) {
   if (error instanceof ProviderError) return error;
   const definition = PROVIDERS[provider];
+  const providerName = definition?.name || providerText(translate, "errors.providerFallbackName", "provider");
   const status = error?.status ?? error?.statusCode ?? error?.httpStatusCode;
   const details = { status, requestId: error?.request_id || error?.requestId, providerCode: error?.code };
-  if (status === 401 || status === 403) return new ProviderError("authentication", `${definition?.name || "提供商"} API Key 无效或当前项目无访问权限`, details);
-  if (status === 429) return new ProviderError("rate_limit", `${definition?.name || "提供商"} 请求频率过高或账户额度不足`, details);
-  if (status === 404) return new ProviderError("model_not_found", "模型不存在或当前项目无访问权限", details);
-  if (error?.name === "APIConnectionError" || error?.code === "ECONNRESET" || error?.code === "ETIMEDOUT") return new ProviderError("network", `无法连接${definition?.name || "模型提供商"}服务`, details);
-  return new ProviderError("provider_error", error?.message || `${definition?.name || "模型提供商"}请求失败`, details);
+  if (status === 401 || status === 403) return new ProviderError("authentication", providerText(translate, "errors.providerAuthentication", "{provider} API key is invalid or the current project has no access.", { provider: providerName }), details);
+  if (status === 429) return new ProviderError("rate_limit", providerText(translate, "errors.providerRateLimit", "{provider} request rate is too high or the account quota is exhausted.", { provider: providerName }), details);
+  if (status === 404) return new ProviderError("model_not_found", providerText(translate, "errors.providerModelNotFound", "The selected model does not exist or this project has no access."), details);
+  if (error?.name === "APIConnectionError" || error?.code === "ECONNRESET" || error?.code === "ETIMEDOUT") return new ProviderError("network", providerText(translate, "errors.providerNetwork", "Unable to connect to {provider}.", { provider: providerName }), details);
+  return new ProviderError("provider_error", error?.message || providerText(translate, "errors.providerRequestFailed", "{provider} request failed.", { provider: providerName }), details);
 }

@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAppStateStore } from "../stores/app-state";
 import { useToastsStore } from "../stores/toasts";
-import { formatTime } from "../i18n";
+import { formatTime, t } from "../i18n";
 
 const CHECK_MS = 30_000;
 const GRACE_MS = 24 * 60 * 60 * 1000;
@@ -43,18 +43,18 @@ async function updateReminder(id: string, transform: (item: any, meta: any) => {
 
 async function notify(item: any, missed: boolean) {
   const minutes = snoozeMinutes();
-  const title = missed ? "Missed reminder" : "Reminder";
+  const title = t(missed ? "reminders.missed" : "reminders.reminder");
   const note = item.notes || `${item.date} ${formatTime(item.start_time || "09:00")}`;
   toasts.show({
     id: `reminder-${item.id}`,
-    title: `${title}: ${item.title || "Untitled schedule"}`,
+    title: `${title}: ${item.title || t("reminders.untitledSchedule")}`,
     message: note,
     tone: "reminder",
     duration: 15_000,
     actions: [
-      { label: "Complete", run: () => updateReminder(item.id, (schedule, meta) => ({ item: { ...schedule, status: "done", updated_at: new Date().toISOString() }, meta: { ...meta, dismissedAt: Date.now(), snoozedUntil: null } })) },
-      { label: `Snooze ${minutes} min`, run: () => updateReminder(item.id, (schedule, meta) => ({ item: schedule, meta: { ...meta, snoozedUntil: Date.now() + minutes * 60_000, dismissedAt: null } })) },
-      { label: "Details", run: async () => { await updateReminder(item.id, (schedule, meta) => ({ item: schedule, meta: { ...meta, dismissedAt: Date.now() } })); await router.push({ path: "/schedule", hash: `#schedule-${encodeURIComponent(item.id)}` }); } }
+      { label: t("common.complete"), run: () => updateReminder(item.id, (schedule, meta) => ({ item: { ...schedule, status: "done", updated_at: new Date().toISOString() }, meta: { ...meta, dismissedAt: Date.now(), snoozedUntil: null } })) },
+      { label: t("reminders.snoozeMinutes", { count: minutes }), run: () => updateReminder(item.id, (schedule, meta) => ({ item: schedule, meta: { ...meta, snoozedUntil: Date.now() + minutes * 60_000, dismissedAt: null } })) },
+      { label: t("common.details"), run: async () => { await updateReminder(item.id, (schedule, meta) => ({ item: schedule, meta: { ...meta, dismissedAt: Date.now() } })); await router.push({ path: "/schedule", hash: `#schedule-${encodeURIComponent(item.id)}` }); } }
     ]
   });
   if (appState.state.settings?.reminders?.desktopNotifications !== false) {

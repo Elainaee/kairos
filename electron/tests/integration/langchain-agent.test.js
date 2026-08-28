@@ -94,6 +94,17 @@ test("Agent reply style is included in the runtime system prompt", async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
+test("English agent sessions use the English base prompt", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-langchain-en-prompt-"));
+  const store = new AiDataStore(path.join(dir, "ai.json"));
+  const model = fakeModel().respond(new AIMessage("Done."));
+  await runKairosAgent({ chatModel: model, model: "test", locale: "en", messages: [{ role: "user", content: "Please help." }], store, toolRuntime: new ToolRuntime(store), appAdapters: {}, searchWeb: async () => ({ items: [] }), ensureExternalSearch: async () => {}, now: new Date(2026, 6, 11) });
+  const prompt = callText(model.calls[0]);
+  assert.match(prompt, /You are Kairos, a gentle, honest personal companion/);
+  assert.doesNotMatch(prompt, /你是 Kairos/);
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
 test("Agent memory setting removes memory tools when disabled", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-langchain-no-memory-"));
   const store = new AiDataStore(path.join(dir, "ai.json"));
