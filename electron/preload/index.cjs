@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   getProviderSettings: () => ipcRenderer.invoke("ai:get-settings"),
   initializeAssistantProfile: (legacy) => ipcRenderer.invoke("ai:initialize-assistant-profile", legacy),
   saveAssistantProfile: (profile) => ipcRenderer.invoke("ai:save-assistant-profile", profile),
+  createProvider: (input) => ipcRenderer.invoke("ai:create-provider", input),
+  updateProvider: (input) => ipcRenderer.invoke("ai:update-provider", input),
+  deleteProvider: (provider) => ipcRenderer.invoke("ai:delete-provider", { provider }),
   saveProviderSettings: (settings) => ipcRenderer.invoke("ai:save-settings", settings),
   saveFirecrawlSettings: (settings) => ipcRenderer.invoke("ai:save-firecrawl-settings", settings),
   testProvider: (provider, sessionKey = "") => ipcRenderer.invoke("ai:test-provider", { provider, sessionKey }),
@@ -93,6 +96,12 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     refreshPlaylist: (id) => ipcRenderer.invoke("music:refresh-playlist", id),
     removeTracksFromPlaylist: (id, trackIds) => ipcRenderer.invoke("music:remove-tracks-from-playlist", { id, trackIds }),
     restoreHiddenTracks: (id, trackPaths) => ipcRenderer.invoke("music:restore-hidden-tracks", { id, trackPaths }),
+    onCommand: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("music:command-request", listener);
+      return () => ipcRenderer.removeListener("music:command-request", listener);
+    },
+    completeCommand: (payload) => ipcRenderer.send("music:command-result", payload),
     pathForFile: (file) => webUtils.getPathForFile(file)
   }),
   netease: Object.freeze({
@@ -112,7 +121,18 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
     getLikedSongs: () => ipcRenderer.invoke("netease:get-liked-songs"),
     getLikedSongIds: () => ipcRenderer.invoke("netease:get-liked-song-ids"),
     setSongLiked: (input) => ipcRenderer.invoke("netease:set-song-liked", input),
-    getHistory: (input) => ipcRenderer.invoke("netease:get-history", input)
+    getHistory: (input) => ipcRenderer.invoke("netease:get-history", input),
+    startDownload: (input) => ipcRenderer.invoke("netease:download-start", input),
+    getDownloadState: () => ipcRenderer.invoke("netease:download-get-state"),
+    retryDownload: (input) => ipcRenderer.invoke("netease:download-retry", input),
+    removeDownloadTask: (input) => ipcRenderer.invoke("netease:download-remove-task", input),
+    removeCompletedDownload: (input) => ipcRenderer.invoke("netease:download-remove-completed", input),
+    openDownloadDirectory: () => ipcRenderer.invoke("netease:open-download-directory"),
+    onDownloadProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("netease:download-progress", listener);
+      return () => ipcRenderer.removeListener("netease:download-progress", listener);
+    }
   }),
   onStreamEvent: (handler) => {
     const listener = (_event, payload) => handler(payload);

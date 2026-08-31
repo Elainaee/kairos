@@ -3,7 +3,7 @@
 
   const html = `
 <section aria-label="Music player" data-i18n-aria-label="player.workspace" id="musicPlayer">
-<div><div class="music-player-track"><button aria-label="Album cover" data-i18n-aria-label="player.albumCover" id="musicCoverButton" type="button" tabindex="-1"><span class="music-icon material-symbols-outlined" id="musicCoverIcon">music_note</span><img alt="Album cover" data-i18n-alt="player.albumCover" class="hidden" id="musicCover"></button><div class="min-w-0"><h3 class="music-player-title" data-i18n="player.chooseSong" id="musicTitle">Choose a song</h3><p class="music-player-artist" data-i18n="player.localAmbience" id="musicArtist">Local ambience</p></div></div>
+<div><div class="music-player-track"><button aria-label="Album cover" data-i18n-aria-label="player.albumCover" id="musicCoverButton" type="button" tabindex="-1"><span class="music-icon material-symbols-outlined" id="musicCoverIcon">music_note</span><img alt="Album cover" data-i18n-alt="player.albumCover" class="hidden" id="musicCover"></button><div class="min-w-0"><h3 class="music-player-title" id="musicTitle">Choose a song</h3><p class="music-player-artist" id="musicArtist">Local ambience</p></div></div>
 <div class="music-transport"><div class="music-transport-controls"><button aria-label="Add current song to liked" data-i18n-aria-label="player.addCurrentToLiked" aria-pressed="false" class="music-like-button" id="musicLike" type="button"><span class="music-icon material-symbols-outlined">favorite</span></button><button aria-label="Previous" data-i18n-aria-label="player.previous" id="musicPrevious" type="button"><svg aria-hidden="true" class="transport-skip-icon" viewBox="0 0 24 24"><path d="M5 5.5a1.2 1.2 0 0 1 2.4 0v13a1.2 1.2 0 0 1-2.4 0v-13Z" fill="currentColor"/><path d="M19.1 5.8c.82-.52 1.9.06 1.9 1.04v10.32c0 .98-1.08 1.56-1.9 1.04l-8.1-5.16a1.23 1.23 0 0 1 0-2.08l8.1-5.16Z" fill="currentColor"/></svg></button><button aria-label="Play" data-i18n-aria-label="player.play" id="musicToggle" type="button"><span class="music-icon material-symbols-outlined" id="musicToggleIcon">play_arrow</span></button><button aria-label="Next" data-i18n-aria-label="player.next" id="musicNext" type="button"><svg aria-hidden="true" class="transport-skip-icon" viewBox="0 0 24 24"><path d="M4.9 5.8C4.08 5.28 3 5.86 3 6.84v10.32c0 .98 1.08 1.56 1.9 1.04l8.1-5.16a1.23 1.23 0 0 0 0-2.08L4.9 5.8Z" fill="currentColor"/><path d="M16.6 5.5a1.2 1.2 0 0 1 2.4 0v13a1.2 1.2 0 0 1-2.4 0v-13Z" fill="currentColor"/></svg></button><button aria-label="Playback mode" data-i18n-aria-label="player.playbackMode" aria-pressed="false" class="music-shuffle" id="musicMode" title="Sequence" data-i18n-title="player.sequence" type="button"><span class="music-icon material-symbols-outlined" id="musicModeIcon">format_list_numbered</span></button></div><div class="music-timeline"><time id="musicCurrent">0:00</time><div class="elastic-progress"><div aria-label="Playback position" data-i18n-aria-label="player.position" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="elastic-progress-root" id="elasticProgressRoot" role="slider" tabindex="0"><div class="elastic-progress-track-wrap"><div class="elastic-progress-track"><i id="elasticProgressRange"></i></div></div><input class="music-range" id="musicProgress" max="100" min="0" tabindex="-1" type="range" value="0"></div></div><time id="musicDuration">0:00</time></div></div>
 <div class="music-player-right"><div class="elastic-volume" id="elasticVolume"><span class="music-icon material-symbols-outlined elastic-volume-icon" id="volumeIcon">volume_down</span><div aria-label="Volume" data-i18n-aria-label="player.volume" aria-valuemax="100" aria-valuemin="0" aria-valuenow="70" class="elastic-volume-root" id="elasticVolumeRoot" role="slider" tabindex="0"><div class="elastic-volume-track-wrap"><div class="elastic-volume-track"><i id="elasticVolumeRange"></i></div></div><input id="musicVolume" max="100" min="0" tabindex="-1" type="range" value="70"></div><span class="music-icon material-symbols-outlined elastic-volume-icon">volume_up</span><output id="elasticVolumeValue">70</output></div><button aria-label="Queue" data-i18n-aria-label="player.toggleQueue" class="music-playlist-button" id="musicPlaylistToggle" type="button"><span class="music-icon material-symbols-outlined">queue_music</span></button></div></div>
 <audio id="musicAudio"></audio>
@@ -151,6 +151,10 @@
         : tr('player.remainingHours',{hours:Math.floor(minutes/60),minutes:minutes%60},` · ${Math.floor(minutes/60)}h ${String(minutes%60).padStart(2,'0')}m remaining`);
     };
     const artistFallback = track => isNeteaseId(track?.id) ? tr('music.neteaseCloud',{},'NetEase Cloud') : tr('music.localMusic',{},'Local music');
+    const syncTrackCopy = track => {
+      els.title.textContent = track ? clean(track.title)||clean(track.fileName)||tr('player.untitled',{},'Untitled') : tr('player.chooseSong',{},'Choose a song');
+      els.artist.textContent = track ? clean(track.artist)||artistFallback(track) : tr('player.localAmbience',{},'Local ambience');
+    };
     // The legacy window is file:-backed and keeps its original URL.  The Vue
     // development shell is http:-backed, so route local audio through the
     // Electron-owned protocol rather than creating a second audio element.
@@ -398,7 +402,7 @@
     }
     function loadTrack(restore=true){
       const t=currentTrack();
-      if (!t) { els.audio.removeAttribute('src'); els.title.textContent=tr('player.chooseSong',{},'Choose a song'); els.artist.textContent=tr('player.localAmbience',{},'Local ambience'); els.current.textContent=els.duration.textContent='0:00'; els.progress.value=0; els.progressRange.style.width='0%'; setCover(null); syncLikeButton(); syncPlayButton(); renderQueue(); return; }
+      if (!t) { els.audio.removeAttribute('src'); syncTrackCopy(null); els.current.textContent=els.duration.textContent='0:00'; els.progress.value=0; els.progressRange.style.width='0%'; setCover(null); syncLikeButton(); syncPlayButton(); renderQueue(); return; }
       state.currentTrackId=t.id;
       const sourceUrl = playableUrl(t);
       if (sourceUrl) {
@@ -409,7 +413,7 @@
       }
       const knownDuration = Number.isFinite(t.duration) && t.duration > 0 ? t.duration : durationCache.get(t.id) || (sourceUrl && els.audio.src === sourceUrl && Number.isFinite(els.audio.duration) ? els.audio.duration : 0);
       if (knownDuration) durationCache.set(t.id, knownDuration);
-      els.title.textContent=clean(t.title)||clean(t.fileName)||tr('player.untitled',{},'Untitled'); els.artist.textContent=clean(t.artist)||artistFallback(t); els.duration.textContent=knownDuration?fmt(knownDuration):'0:00'; setCover(t); syncLikeButton(); pendingSeek=restore?state.positions?.[t.id]||0:null; syncPlayButton(); renderQueue();
+      syncTrackCopy(t); els.duration.textContent=knownDuration?fmt(knownDuration):'0:00'; setCover(t); syncLikeButton(); pendingSeek=restore?state.positions?.[t.id]||0:null; syncPlayButton(); renderQueue();
     }
     function waitForPlayable(timeout=4500){
       if(!els.audio.src || els.audio.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA) return Promise.resolve();
@@ -692,8 +696,8 @@
       if (detail?.playing !== undefined) {
         state.playing = detail.playing === true;
       }
-      if (detail?.currentTrackId) {
-        state.currentTrackId = detail.currentTrackId;
+      if (Object.prototype.hasOwnProperty.call(detail || {}, 'currentTrackId')) {
+        state.currentTrackId = detail.currentTrackId || null;
         loadTrack(false);
       } else if (Array.isArray(detail?.queueTrackIds)) {
         loadTrack(false);
@@ -705,16 +709,38 @@
     }
     window.KairosMusicPlayer.applyRefresh = applyMusicRefresh;
     window.KairosMusicPlayer.getState = () => ({ ...state, queueTrackIds: [...(state.queueTrackIds || [])], tracks: [...(state.tracks || [])] });
+    window.KairosMusicPlayer.executeCommand = async command => {
+      if (command?.type === 'get_state') return window.KairosMusicPlayer.getState();
+      if (command?.type === 'apply_patch') await applyMusicRefresh({ ...(command.patch || {}), at: Date.now() });
+      else if (command?.type === 'play' && els.audio.paused) await playLoadedAudio();
+      else if (command?.type === 'pause' && !els.audio.paused) els.audio.pause();
+      else if (command?.type === 'next') await playAdjacentTrack(1);
+      else if (command?.type === 'previous') {
+        if (els.audio.currentTime > 4) els.audio.currentTime = 0;
+        else await playAdjacentTrack(-1);
+      }
+      else if (command?.type === 'volume') {
+        if (command.muted !== undefined) state.muted = command.muted === true;
+        if (command.value !== undefined) state.volume = Math.max(0, Math.min(100, Number(command.value) || 0));
+        if (command.relative !== undefined) state.volume = Math.max(0, Math.min(100, (Number(state.volume) || 0) + Number(command.relative || 0)));
+        applyVolume(); persistNow({ volume: state.volume, muted: state.muted }); emitState();
+      }
+      return window.KairosMusicPlayer.getState();
+    };
+    if (!window.__kairosAiMusicCommandBound && window.kairosDesktop?.music?.onCommand) {
+      window.__kairosAiMusicCommandBound = true;
+      window.kairosDesktop.music.onCommand(async ({ requestId, command }) => {
+        try { const result = await window.KairosMusicPlayer.executeCommand(command); window.kairosDesktop.music.completeCommand({ requestId, ok: true, result }); }
+        catch (error) { window.kairosDesktop.music.completeCommand({ requestId, ok: false, error: error?.message || String(error) }); }
+      });
+    }
     window.addEventListener('kairos:music-refresh', event => { applyMusicRefresh(event.detail); });
     window.addEventListener('kairos:locale-changed', () => {
       translatePlayer();
       modeButton();
       syncLikeButton();
       syncPlayButton();
-      if (!currentTrack()) {
-        els.title.textContent=tr('player.chooseSong',{},'Choose a song');
-        els.artist.textContent=tr('player.localAmbience',{},'Local ambience');
-      }
+      syncTrackCopy(currentTrack());
       renderQueue();
     });
     const initialRefreshVersion = externalRefreshVersion;

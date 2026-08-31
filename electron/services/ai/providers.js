@@ -1,6 +1,6 @@
-import { PROVIDERS, ProviderError, createProviderClient, listProviderModels, normalizeProviderError, resolveProviderConfig, resolveSelectableModels } from "./provider-registry.js";
+import { PROVIDERS, ProviderError, createProviderClient, listProviderModels, normalizeProviderError, providerDefinition, resolveProviderConfig, resolveSelectableModels } from "./provider-registry.js";
 
-export { PROVIDERS, ProviderError, listProviderModels, resolveSelectableModels };
+export { PROVIDERS, ProviderError, listProviderModels, providerDefinition, resolveSelectableModels };
 
 function completionMessages(messages, images = []) {
   return [
@@ -28,7 +28,7 @@ async function* streamOpenAICompatible(request) {
     yield { type: "completed", usage };
   } catch (error) {
     if (request.signal?.aborted) yield { type: "stopped" };
-    else throw normalizeProviderError(request.provider, error, request.t);
+    else throw normalizeProviderError(request.provider, error, request.t, request.definition);
   }
 }
 
@@ -37,9 +37,9 @@ export async function* streamProviderRequest(request) {
   yield* streamOpenAICompatible(request);
 }
 
-export async function testProvider({ provider, apiKey, model, t }) {
+export async function testProvider({ provider, apiKey, model, definition, t }) {
   const signal = new AbortController().signal;
-  for await (const event of streamProviderRequest({ provider, apiKey, model, messages: [{ role: "user", content: "Reply OK" }], signal, t })) {
+  for await (const event of streamProviderRequest({ provider, apiKey, model, definition, messages: [{ role: "user", content: "Reply OK" }], signal, t })) {
     if (event.type === "completed") return { ok: true };
   }
   return { ok: false, code: "connection_stopped" };

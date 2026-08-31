@@ -45,7 +45,6 @@ body > .vue-close-choice-backdrop { position: fixed!important; z-index: 6000!imp
 .vue-close-choice-icon { display: grid; width: 42px; height: 42px; margin-bottom: 14px; place-items: center; border-radius: 14px; background: color-mix(in oklch, var(--primary) 14%, transparent); color: var(--primary); }
 .vue-close-choice-icon .material-symbols-outlined { font-size: 24px; }
 .vue-close-choice-copy h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
-.vue-close-choice-copy p { margin: 8px 0 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
 .vue-close-choice-dialog footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 .vue-close-choice-dialog footer button { min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .vue-close-choice-cancel { background: transparent; color: var(--muted-foreground); }
@@ -98,6 +97,26 @@ body > .vue-close-choice-backdrop { position: fixed!important; z-index: 6000!imp
 .music-playlist-panel .music-queue-play-button,
 .music-playlist-panel header button {
   background: transparent !important;
+}
+.music-playlist-panel .music-queue-close:hover,
+.music-playlist-panel .music-track-remove:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--primary) !important;
+}
+.music-playlist-panel .music-queue-close:hover .music-icon,
+.music-playlist-panel .music-track-remove:hover .music-icon {
+  color: var(--primary) !important;
+}
+.music-playlist-panel .music-queue-close:focus-visible,
+.music-playlist-panel .music-track-remove:focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px !important;
+  color: var(--primary) !important;
+}
+.music-playlist-panel .music-queue-close:focus-visible .music-icon,
+.music-playlist-panel .music-track-remove:focus-visible .music-icon {
+  color: var(--primary) !important;
 }
 /* Modal dialogs are painted over the persistent calendar player. */
 body.vue-schedule-dialog-open .vue-shell { position:relative; z-index:1200; }

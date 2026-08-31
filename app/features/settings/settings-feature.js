@@ -75,10 +75,14 @@
   let previousFocus;
   let providerCatalog = [];
   let providerSettings;
+  let selectedProviderId = '';
+  let providerDetailOpen = false;
+  let providerModelSaveQueue = Promise.resolve();
+  let providerModelSaveRevision = 0;
+  let providerModelScrollSnapshot;
   let neteaseStatus;
   let calendarBackgrounds = [];
   let statusTimer;
-  const agentProviderIds = new Set(['openai', 'doubao']);
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const toast = (title, type = 'success', description = '') => window.dispatchEvent(new CustomEvent('kairos:toast', { detail: { type, title, description } }));
@@ -99,6 +103,26 @@
     node.classList.add('is-visible');
     clearTimeout(statusTimer);
     statusTimer = setTimeout(() => node.classList.remove('is-visible'), 1800);
+  };
+  const isModelPickerOpen = picker => picker?.classList.contains('is-open') === true;
+  const setModelPickerOpen = (picker, open) => {
+    if (!picker) return;
+    picker.classList.toggle('is-open', open);
+    const trigger = picker.querySelector('[data-model-picker-toggle]');
+    const drawer = picker.querySelector('[data-model-picker-drawer]');
+    trigger?.setAttribute('aria-expanded', String(open));
+    if (drawer) drawer.hidden = !open;
+  };
+  const readProviderModelScroll = () => ({
+    content: dialog?.querySelector('.kairos-settings-content')?.scrollTop || 0,
+    models: dialog?.querySelector('.kairos-provider-model-list')?.scrollTop || 0
+  });
+  const restoreProviderModelScroll = snapshot => {
+    if (!snapshot) return;
+    const content = dialog?.querySelector('.kairos-settings-content');
+    const models = dialog?.querySelector('.kairos-provider-model-list');
+    if (content) content.scrollTop = snapshot.content;
+    if (models) models.scrollTop = snapshot.models;
   };
   const select = (id, label, value, rows, path) => `
     <label class="kairos-setting-row" for="${id}">
@@ -167,32 +191,54 @@
       `);
   };
   const card = (title, body) => `<section class="kairos-ai-card"><header><h3>${title}</h3></header>${body}</section>`;
-  const credentialRow = (kind, label, configured, createdAt, keyHint = '', source = 'none') => `
+  const credentialRow = (kind, label, configured, createdAt, keyHint = '', source = 'none', allowClear = true) => `
     <div class="kairos-credential-row" data-credential="${kind}">
       <strong>${label}</strong>
       <span class="kairos-credential-mask ${configured ? '' : 'is-empty'}">${configured ? escapeHtml(keyHint || '********') : t('settings.notConfigured', 'Not configured')}</span>
       <time>${configured && createdAt ? (window.KairosI18n?.formatDate?.(new Date(createdAt), { year:'numeric', month:'short', day:'numeric' }) || new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric'}).format(new Date(createdAt))) : ''}</time>
-      <span class="kairos-credential-actions"><button type="button" data-edit-key="${kind}" aria-label="${t('common.edit', 'Edit')} ${label}" title="${t('common.edit', 'Edit')}"><span class="material-symbols-outlined">edit</span></button>${configured ? `<button type="button" data-clear-key="${kind}" aria-label="${t('common.delete', 'Delete')} ${label}" title="${t('common.delete', 'Delete')}"><span class="material-symbols-outlined">delete</span></button>` : ''}</span>
+      <span class="kairos-credential-actions"><button type="button" data-edit-key="${kind}" aria-label="${t('common.edit', 'Edit')} ${label}" title="${t('common.edit', 'Edit')}"><span class="material-symbols-outlined">edit</span></button>${configured && allowClear ? `<button type="button" data-clear-key="${kind}" aria-label="${t('common.delete', 'Delete')} ${label}" title="${t('common.delete', 'Delete')}"><span class="material-symbols-outlined">delete</span></button>` : ''}</span>
     </div>`;
   const providerMarkup = () => {
-    const availableProviders = providerCatalog.filter(item => agentProviderIds.has(item.id));
+    const availableProviders = providerCatalog;
     const savedProvider = providerSettings?.defaultProvider;
-    const provider = agentProviderIds.has(savedProvider) ? savedProvider : availableProviders[0]?.id || 'openai';
+    const provider = availableProviders.some(item => item.id === selectedProviderId) ? selectedProviderId : (availableProviders.some(item => item.id === savedProvider) ? savedProvider : availableProviders[0]?.id || '');
+    selectedProviderId = provider;
     const entry = providerSettings?.providers?.[provider] || {};
     const catalogEntry = availableProviders.find(item => item.id === provider);
-    const models = [...new Set([...(catalogEntry?.availableModels || catalogEntry?.models || []), ...(entry.discoveredModels || []), entry.model].filter(Boolean))];
+    const models = [...new Set([...(catalogEntry?.catalogModels || []), ...(catalogEntry?.configuredModels || []), entry.model].filter(Boolean))];
     const enabledModels = new Set(Array.isArray(entry.enabledModels) ? entry.enabledModels : []);
-    const defaultModel = enabledModels.has(entry.model) ? entry.model : models.find(model => enabledModels.has(model)) || '';
-    const modelPicker = `<div class="kairos-setting-row kairos-model-picker-row"><span class="kairos-setting-copy"><span class="kairos-setting-label">${t('settings.providerModel', 'Default model')}</span></span><details class="kairos-model-picker" data-model-picker><summary><span>${escapeHtml(defaultModel || t('settings.selectModels', 'Select models'))}</span><span class="material-symbols-outlined">expand_more</span></summary><div class="kairos-model-picker-menu"><small>${t('settings.providerModelsSelectedHint', 'Selected models appear in chat; select a checked model to make it the default.')}</small>${models.map(model => `<div class="kairos-model-picker-option"><label><input type="checkbox" data-provider-model-toggle value="${escapeHtml(model)}" ${enabledModels.has(model) ? 'checked' : ''}><span class="material-symbols-outlined">${enabledModels.has(model) ? 'check_box' : 'check_box_outline_blank'}</span></label><button type="button" data-set-default-model value="${escapeHtml(model)}" ${enabledModels.has(model) ? '' : 'disabled'}>${escapeHtml(model)}${model === defaultModel ? `<em>${t('settings.defaultBackground', 'Default')}</em>` : ''}</button></div>`).join('') || `<span class="kairos-setting-hint">${t('settings.providerModelsLoad', 'Refresh from account to load models.')}</span>`}</div></details></div>`;
-    const refreshedAt = entry.modelCatalogUpdatedAt ? `${t('legacy.settingsLastRefreshed', 'Last refreshed')} ${window.KairosI18n?.formatDate?.(new Date(entry.modelCatalogUpdatedAt), { year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) || new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(entry.modelCatalogUpdatedAt))}` : t('legacy.refreshModelsHint', 'Refresh lists the chat-capable models visible to this account.');
+    const unavailableModels = new Set(catalogEntry?.unavailableModels || []);
+    const defaultModel = enabledModels.has(entry.model) ? entry.model : '';
+    const providerRows = availableProviders.map(item => {
+      const itemEntry = providerSettings?.providers?.[item.id] || {};
+      const configured = itemEntry.configured;
+      const itemUnavailableModels = new Set(item.unavailableModels || []);
+      const itemEnabledModels = (itemEntry.enabledModels || []).filter(model => !itemUnavailableModels.has(model));
+      const count = itemEnabledModels.length;
+      const itemDefaultModel = itemEnabledModels.includes(itemEntry.model) ? itemEntry.model : '';
+      const status = !configured ? t('settings.notConfigured', 'Not configured') : count ? t('settings.providerReady', 'Ready') : t('settings.providerNoModelsSelected', 'No models selected');
+      return `<button class="kairos-provider-list-item${item.id === provider ? ' is-selected' : ''}" type="button" data-provider-profile-id="${escapeHtml(item.id)}" aria-current="${item.id === provider ? 'true' : 'false'}"><span class="kairos-provider-list-heading"><strong>${escapeHtml(item.name)}</strong><i class="${count ? 'is-ready' : ''}" aria-hidden="true"></i></span><small data-provider-list-status>${escapeHtml(status)}</small><span><span data-provider-list-model>${escapeHtml(itemDefaultModel || t('settings.noDefaultModel', 'No default model'))}</span><em data-provider-list-count>${count}</em></span></button>`;
+    }).join('');
+    const modelRows = models.map(model => {
+      const unavailable = unavailableModels.has(model);
+      const enabled = enabledModels.has(model) && !unavailable;
+      return `<label class="kairos-provider-model-choice${enabled ? ' is-selected' : ''}${unavailable ? ' is-unavailable' : ''}"><input type="checkbox" data-provider-model-toggle value="${escapeHtml(model)}" ${enabled ? 'checked' : ''} ${unavailable || !entry.configured ? 'disabled' : ''} aria-label="${t('settings.toggleModelVisibility', 'Show or hide {model} in chat', { model })}"><span class="material-symbols-outlined" aria-hidden="true">${enabled ? 'check_box' : 'check_box_outline_blank'}</span><strong>${escapeHtml(model)}</strong></label>`;
+    }).join('') || `<p class="kairos-provider-empty">${t('settings.providerModelsLoad', 'Refresh from account to load models.')}</p>`;
+    const defaultOptions = [...enabledModels].filter(model => !unavailableModels.has(model));
+    const visibleCount = defaultOptions.length;
+    const modelDrawer = `<section class="kairos-model-picker kairos-provider-models" data-model-picker><button class="kairos-provider-model-trigger" type="button" data-model-picker-toggle aria-expanded="false"><span><strong>${t('settings.models', 'Models')}</strong><small data-visible-model-count>${t('settings.visibleModelCount', '{visible} of {total} shown', { visible: visibleCount, total: models.length })}</small></span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button><div class="kairos-model-picker-menu kairos-provider-model-drawer" data-model-picker-drawer hidden><label class="kairos-provider-default-model"><span>${t('settings.providerModel', 'Default model')}</span><select data-provider-default-model ${defaultOptions.length ? '' : 'disabled'}>${defaultOptions.length ? defaultOptions.map(model => `<option value="${escapeHtml(model)}" ${model === defaultModel ? 'selected' : ''}>${escapeHtml(model)}</option>`).join('') : `<option>${t('settings.selectVisibleModelFirst', 'Select a visible model below')}</option>`}</select></label><div class="kairos-provider-model-list">${modelRows}</div></div></section>`;
+    if (!catalogEntry) return `<div class="kairos-provider-workspace"><p class="kairos-provider-empty">${t('settings.noProviders', 'No providers configured.')}</p></div>`;
     return `
-      <div class="kairos-settings-group">
-        ${select('kairosAgentProvider', t('settings.providerDefault', 'Default provider'), provider, availableProviders.map(item => [item.id, item.name]), 'provider')}
-        ${modelPicker}
-      </div>
-      ${credentialRow('provider', t('settings.modelApiKey', 'Model API Key'), entry.configured, entry.createdAt, entry.keyHint, entry.source)}
-      <div class="kairos-key-utility"><button type="button" data-test-provider><span class="material-symbols-outlined">network_check</span>${t('settings.providerTest', 'Test connection')}</button><button type="button" data-refresh-provider-models ${entry.configured ? '' : 'disabled'} title="${entry.configured ? t('settings.providerModelsRefreshTitle', 'Refresh models available to this account') : t('settings.configureApiKeyFirst', 'Configure an API key first')}"><span class="material-symbols-outlined">sync</span>${t('settings.providerModelsRefresh', 'Refresh from account')}</button><output data-test-result aria-live="polite"></output></div>
-      <small class="kairos-setting-hint" data-model-refresh-result>${refreshedAt}</small>`;
+      <div class="kairos-provider-workspace${providerDetailOpen ? ' is-detail-open' : ''}">
+        <aside class="kairos-provider-list"><header><strong>${t('settings.providers', 'Providers')}</strong><button type="button" data-add-provider aria-label="${t('settings.addProvider', 'Add provider')}" title="${t('settings.addProvider', 'Add provider')}"><span class="material-symbols-outlined" aria-hidden="true">add</span></button></header>${providerRows}</aside>
+        <section class="kairos-provider-detail"><header class="kairos-provider-detail-header"><button type="button" data-provider-detail-back aria-label="${t('common.back', 'Back')}"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span></button><span><strong>${escapeHtml(catalogEntry.name)}</strong><small>${catalogEntry.kind === 'custom' ? t('settings.customProvider', 'Custom OpenAI-compatible provider') : t('settings.builtinProvider', 'Built-in provider')}</small></span>${provider === savedProvider ? `<span class="kairos-provider-default-state"><span class="material-symbols-outlined" aria-hidden="true">check</span>${t('settings.defaultProvider', 'Default provider')}</span>` : `<button type="button" data-make-default-provider>${t('settings.makeDefaultProvider', 'Make default')}</button>`}</header>
+          ${catalogEntry.baseURL ? `<div class="kairos-provider-endpoint"><span>${t('settings.baseUrl', 'Base URL')}</span><code>${escapeHtml(catalogEntry.baseURL)}</code>${catalogEntry.kind === 'custom' ? `<button type="button" data-edit-provider><span class="material-symbols-outlined" aria-hidden="true">edit</span>${t('common.edit', 'Edit')}</button>` : ''}</div>` : ''}
+          ${credentialRow(`provider:${provider}`, t('settings.modelApiKey', 'Model API Key'), entry.configured, entry.createdAt, entry.keyHint, entry.source, catalogEntry.kind !== 'custom')}
+          <div class="kairos-key-utility"><button type="button" data-test-provider><span class="material-symbols-outlined">network_check</span>${t('settings.providerTest', 'Test connection')}</button><button type="button" data-refresh-provider-models ${entry.configured ? '' : 'disabled'}><span class="material-symbols-outlined">sync</span>${t('settings.providerModelsRefresh', 'Refresh from account')}</button><output data-test-result aria-live="polite"></output></div>
+          ${modelDrawer}
+          ${catalogEntry.kind === 'custom' ? `<div class="kairos-provider-delete"><button type="button" data-delete-provider><span class="material-symbols-outlined" aria-hidden="true">delete</span>${t('settings.deleteProvider', 'Delete provider')}</button></div>` : ''}
+        </section>
+      </div>`;
   };
   const dataMarkup = () => {
     return sectionView('data', t('settings.data', 'Data'), `
@@ -204,16 +250,15 @@
     `);
   };
   const sectionView = (id, title, body) => `
-    <section class="kairos-settings-section kairos-settings-panel-view" data-settings-panel="${id}" hidden>
+    <section class="kairos-settings-section kairos-settings-panel-view" data-settings-panel="${id}" ${id === activeSection ? '' : 'hidden'}>
       <header class="kairos-settings-section-header"><h3>${title}</h3></header>${body}
     </section>`;
   const agentMarkup = () => sectionView('agent', t('settings.agent', 'Agent'), `
-    ${card(t('settings.credentials', 'Model & Keys'), `
-      <div data-provider-settings>${providerMarkup()}</div>
+    ${card(t('settings.providerConfiguration', 'AI providers'), `<div data-provider-settings>${providerMarkup()}</div>`)}
+    ${card(t('settings.searchConfiguration', 'Search'), `
       ${credentialRow('firecrawl', 'FireCrawl API Key', providerSettings?.firecrawl?.configured, providerSettings?.firecrawl?.createdAt, providerSettings?.firecrawl?.keyHint, providerSettings?.firecrawl?.source)}
-      ${select('kairosWebSearchMode', t('settings.webSearch', 'Web search'), state.ai.webSearchMode, choices.webSearchMode, 'ai.webSearchMode')}
-      `)}
-    ${card(t('settings.agentResponse', 'Response'), `
+      <div class="kairos-settings-group">${select('kairosWebSearchMode', t('settings.webSearch', 'Web search'), state.ai.webSearchMode, choices.webSearchMode, 'ai.webSearchMode')}</div>`)}
+    ${card(t('settings.agentBehavior', 'Behavior'), `
       <div class="kairos-settings-group">
         ${select('kairosReplyStyle', t('settings.replyStyle', 'Reply style'), state.ai.replyStyle, choices.replyStyle, 'ai.replyStyle')}
         ${toggle('kairosMemoryEnabled', t('settings.longTermMemory', 'Long-term memory'), state.ai.memoryEnabled, 'ai.memoryEnabled')}
@@ -248,7 +293,8 @@
     return sectionView('music', t('settings.music', 'Music'), `${card(brand, `<div class="kairos-netease-account"><span class="kairos-netease-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : '<span class="material-symbols-outlined" aria-hidden="true">account_circle</span>'}</span><span class="kairos-netease-account-copy"><strong>${name}</strong>${userId}</span><button type="button" data-netease-logout>${t('settings.neteaseLogout', 'Log out')}</button></div>${controls}`)}`);
   };
   const render = () => {
-    dialog.innerHTML = `
+    const template = document.createElement('template');
+    template.innerHTML = `
       <form method="dialog" class="kairos-settings-panel">
         <aside class="kairos-settings-sidebar"><button class="kairos-settings-back" type="button" data-settings-back aria-label="${t('common.close', 'Close')}" title="${t('common.close', 'Close')}"><span class="material-symbols-outlined">arrow_back</span></button><span class="kairos-settings-kicker">${t('settings.preferences', 'Preferences')}</span><h2 id="kairosSettingsTitle">${t('settings.title', 'Settings')}</h2><nav class="kairos-settings-nav" aria-label="${t('settings.title', 'Settings')}">${sections.map(([id, icon, label]) => `<button class="${id === activeSection ? 'active' : ''}" data-settings-tab="${id}" type="button"><span class="material-symbols-outlined">${icon}</span><span>${label}</span></button>`).join('')}</nav></aside>
         <div class="kairos-settings-content">
@@ -262,6 +308,7 @@
         </div>
       </form>
       <section class="kairos-settings-confirm" data-confirm hidden role="alertdialog" aria-modal="true" aria-labelledby="kairosConfirmTitle"><div><h3 id="kairosConfirmTitle"></h3><p data-confirm-copy></p><footer><button type="button" data-confirm-cancel>${t('common.cancel', 'Cancel')}</button><button type="button" data-confirm-action></button></footer></div></section>`;
+    dialog.replaceChildren(template.content);
     bindDialog();
     showSection(activeSection);
   };
@@ -282,6 +329,8 @@
     accept.textContent = action;
     accept.classList.toggle('is-danger', dangerous);
     modal.querySelector('[data-confirm-input]')?.remove();
+    modal.querySelector('.kairos-provider-editor')?.remove();
+    modal.querySelector('.kairos-netease-login')?.remove();
     let inputNode;
     if (input) {
       inputNode = document.createElement('input');
@@ -300,6 +349,43 @@
     modal.querySelector('[data-confirm-cancel]').onclick = close;
     accept.onclick = async () => { const value = inputNode?.value.trim(); if (input && !value) { inputNode.focus(); return; } accept.disabled = true; try { await onConfirm(value); close(); } catch (error) { toast(t('common.actionNotCompleted', 'Action not completed'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.')); } finally { accept.disabled = false; } };
   };
+  const openProviderEditor = (definition = null) => {
+    const modal = dialog.querySelector('[data-confirm]');
+    const accept = modal.querySelector('[data-confirm-action]');
+    modal.querySelector('[data-confirm-input]')?.remove();
+    modal.querySelector('.kairos-provider-editor')?.remove();
+    modal.querySelector('.kairos-netease-login')?.remove();
+    modal.querySelector('#kairosConfirmTitle').textContent = definition ? t('settings.editProvider', 'Edit provider') : t('settings.addProvider', 'Add provider');
+    modal.querySelector('[data-confirm-copy]').textContent = t('settings.customProviderDescription', 'Connect an HTTPS OpenAI-compatible endpoint. Kairos discovers models from /models.');
+    accept.textContent = definition ? t('common.save', 'Save') : t('settings.addProvider', 'Add provider');
+    accept.classList.remove('is-danger');
+    const editor = document.createElement('div');
+    editor.className = 'kairos-provider-editor';
+    editor.innerHTML = `<label><span>${t('settings.providerName', 'Provider name')}</span><input data-provider-editor-name type="text" maxlength="60" autocomplete="off" value="${escapeHtml(definition?.name || '')}" placeholder="${t('settings.providerNameExample', 'e.g. Team gateway')}"></label><label><span>${t('settings.baseUrl', 'Base URL')}</span><input data-provider-editor-url type="url" autocomplete="off" value="${escapeHtml(definition?.baseURL || '')}" placeholder="https://api.example.com/v1"></label><label><span>${definition ? t('settings.newApiKeyOptional', 'New API key (optional)') : t('settings.modelApiKey', 'Model API Key')}</span><input data-provider-editor-key type="password" autocomplete="off" placeholder="${t('settings.enterApiKey', 'Enter API key')}"></label>`;
+    modal.querySelector('footer').before(editor);
+    const close = () => { modal.hidden = true; accept.onclick = null; };
+    modal.querySelector('[data-confirm-cancel]').onclick = close;
+    accept.onclick = async () => {
+      const name = editor.querySelector('[data-provider-editor-name]').value.trim();
+      const baseURL = editor.querySelector('[data-provider-editor-url]').value.trim();
+      const apiKey = editor.querySelector('[data-provider-editor-key]').value.trim();
+      if (!name || !baseURL || (!definition && !apiKey)) { editor.querySelector(!name ? '[data-provider-editor-name]' : !baseURL ? '[data-provider-editor-url]' : '[data-provider-editor-key]').focus(); return; }
+      accept.disabled = true;
+      try {
+        if (definition) providerSettings = await window.kairosDesktop.updateProvider({ provider: definition.id, name, baseURL, apiKey });
+        else {
+          const result = await window.kairosDesktop.createProvider({ name, baseURL, apiKey });
+          providerSettings = result.settings;
+          selectedProviderId = result.provider.id;
+        }
+        providerCatalog = await window.kairosDesktop.listProviders();
+        close(); render(); flashSaved(t('settings.providerSaved', 'Provider saved'));
+      } catch (error) { toast(t('common.actionNotCompleted', 'Action not completed'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.')); }
+      finally { accept.disabled = false; }
+    };
+    modal.hidden = false;
+    editor.querySelector('[data-provider-editor-name]').focus();
+  };
   const openNeteaseLogin = () => {
     const api = window.kairosDesktop?.netease;
     if (!api?.startLogin || !api?.loginCheck) return;
@@ -309,6 +395,7 @@
     const cancel = modal.querySelector('[data-confirm-cancel]');
     const refresh = modal.querySelector('[data-confirm-action]');
     modal.querySelector('[data-confirm-input]')?.remove();
+    modal.querySelector('.kairos-provider-editor')?.remove();
     modal.querySelector('.kairos-netease-login')?.remove();
     title.textContent = t('settings.neteaseLoginTitle', 'Log in to Netease Music');
     copy.textContent = t('settings.neteaseLoginDescription', 'Scan with your own Netease Music account to continue.');
@@ -388,6 +475,7 @@
       window.kairosDesktop.netease?.getStatus ? window.kairosDesktop.netease.getStatus().catch(() => null) : Promise.resolve(null),
       window.kairosDesktop.calendarBackgrounds?.listBuiltins ? window.kairosDesktop.calendarBackgrounds.listBuiltins().catch(() => []) : Promise.resolve([])
     ]);
+    if (!providerCatalog.some(item => item.id === selectedProviderId)) selectedProviderId = providerSettings?.defaultProvider || providerCatalog[0]?.id || '';
   };
   const refreshCalendarBackgroundData = async () => {
     const api = window.kairosDesktop?.calendarBackgrounds;
@@ -398,26 +486,87 @@
     persist({ appearance: { ...state.appearance, calendarBackground } });
     return calendarBackground;
   };
-  const saveProvider = async input => {
-    const keepModelPickerOpen = dialog.querySelector('[data-model-picker]')?.open;
+  const saveProvider = async (input, { rerender = true } = {}) => {
+    const keepModelPickerOpen = isModelPickerOpen(dialog.querySelector('[data-model-picker]'));
     const scrollTop = dialog.querySelector('.kairos-settings-content')?.scrollTop || 0;
     providerSettings = await window.kairosDesktop.saveProviderSettings(input);
+    if (!rerender) {
+      const catalogEntry = providerCatalog.find(item => item.id === input.provider);
+      const savedEntry = providerSettings?.providers?.[input.provider] || {};
+      if (catalogEntry) {
+        const unavailable = new Set(catalogEntry.unavailableModels || []);
+        catalogEntry.configuredModels = [...(savedEntry.enabledModels || [])];
+        catalogEntry.enabledModels = catalogEntry.configuredModels.filter(model => !unavailable.has(model));
+        catalogEntry.models = [...catalogEntry.enabledModels];
+        catalogEntry.defaultModel = catalogEntry.enabledModels.includes(savedEntry.model) ? savedEntry.model : '';
+      }
+      flashSaved(t('settings.providerModelsSaved', 'Model settings saved'));
+      return providerSettings;
+    }
+    providerCatalog = await window.kairosDesktop.listProviders();
     render();
     requestAnimationFrame(() => {
-      if (keepModelPickerOpen) dialog.querySelector('[data-model-picker]')?.setAttribute('open', '');
+      if (keepModelPickerOpen) setModelPickerOpen(dialog.querySelector('[data-model-picker]'), true);
       const content = dialog.querySelector('.kairos-settings-content');
       if (content) content.scrollTop = scrollTop;
     });
     flashSaved(t('settings.providerModelsSaved', 'Model settings saved'));
+    return providerSettings;
+  };
+  const syncModelPickerUi = (changedInput, scrollSnapshot = readProviderModelScroll()) => {
+    const inputs = [...dialog.querySelectorAll('[data-provider-model-toggle]')];
+    const selected = inputs.filter(input => input.checked).map(input => input.value);
+    if (changedInput) {
+      const icon = changedInput.nextElementSibling;
+      const iconName = changedInput.checked ? 'check_box' : 'check_box_outline_blank';
+      if (icon && icon.textContent !== iconName) icon.textContent = iconName;
+      changedInput.closest('.kairos-provider-model-choice')?.classList.toggle('is-selected', changedInput.checked);
+    }
+    const count = dialog.querySelector('[data-visible-model-count]');
+    if (count) count.textContent = t('settings.visibleModelCount', '{visible} of {total} shown', { visible: selected.length, total: inputs.length });
+    const select = dialog.querySelector('[data-provider-default-model]');
+    if (select) {
+      const current = selected.includes(select.value) ? select.value : selected[0] || '';
+      const selectedSet = new Set(selected);
+      [...select.options].forEach(option => { if (!selectedSet.has(option.value)) option.remove(); });
+      selected.forEach(model => {
+        if ([...select.options].some(option => option.value === model)) return;
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        select.append(option);
+      });
+      if (!selected.length) {
+        const option = document.createElement('option');
+        option.textContent = t('settings.selectVisibleModelFirst', 'Select a visible model below');
+        select.append(option);
+      }
+      select.disabled = selected.length === 0;
+      select.value = current;
+    }
+    const providerItem = dialog.querySelector(`[data-provider-profile-id="${CSS.escape(selectedProviderId)}"]`);
+    if (providerItem) {
+      const model = selected.includes(select?.value) ? select.value : selected[0] || '';
+      const modelNode = providerItem.querySelector('[data-provider-list-model]');
+      const countNode = providerItem.querySelector('[data-provider-list-count]');
+      const statusNode = providerItem.querySelector('[data-provider-list-status]');
+      const readyNode = providerItem.querySelector('.kairos-provider-list-heading i');
+      if (modelNode) modelNode.textContent = model || t('settings.noDefaultModel', 'No default model');
+      if (countNode) countNode.textContent = String(selected.length);
+      if (statusNode) statusNode.textContent = selected.length ? t('settings.providerReady', 'Ready') : t('settings.providerNoModelsSelected', 'No models selected');
+      readyNode?.classList.toggle('is-ready', selected.length > 0);
+    }
+    restoreProviderModelScroll(scrollSnapshot);
+    return selected;
   };
   const saveKey = async (kind, apiKey) => {
     const label = kind === 'firecrawl' ? 'FireCrawl API Key' : t('settings.modelApiKey', 'Model API Key');
     if (kind === 'firecrawl') providerSettings = await window.kairosDesktop.saveFirecrawlSettings({ apiKey });
     else {
-      const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-      const model = providerSettings?.providers?.[provider]?.model || providerCatalog.find(item => item.id === provider)?.defaultModel;
-      providerSettings = await window.kairosDesktop.saveProviderSettings({ provider, defaultProvider: provider, model, credentialMode: 'saved', apiKey });
+      const provider = kind.split(':')[1] || selectedProviderId;
+      providerSettings = await window.kairosDesktop.saveProviderSettings({ provider, apiKey });
     }
+    providerCatalog = await window.kairosDesktop.listProviders();
     render();
     flashSaved(t('settings.apiKeySaved', '{label} saved', { label }));
   };
@@ -425,10 +574,10 @@
   const clearKey = kind => confirmAction({ title: t('settings.clearApiKey', 'Clear API key'), copy: t('settings.clearApiKeyDescription', 'This service will remain unavailable until a new key is configured.'), action: t('settings.clearApiKey', 'Clear API key'), dangerous: true, onConfirm: async () => {
     if (kind === 'firecrawl') providerSettings = await window.kairosDesktop.saveFirecrawlSettings({ clear: true });
     else {
-      const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-      const model = providerSettings?.providers?.[provider]?.model || providerCatalog.find(item => item.id === provider)?.defaultModel;
-      providerSettings = await window.kairosDesktop.saveProviderSettings({ provider, defaultProvider: provider, model, credentialMode: 'saved', clearKey: true });
+      const provider = kind.split(':')[1] || selectedProviderId;
+      providerSettings = await window.kairosDesktop.saveProviderSettings({ provider, clearKey: true });
     }
+    providerCatalog = await window.kairosDesktop.listProviders();
     render();
     flashSaved(t('settings.apiKeyCleared', 'API key cleared'));
   }});
@@ -441,8 +590,8 @@
     if (!dialog.dataset.modelPickerDismissBound) {
       document.addEventListener('pointerdown', event => {
         if (!dialog.open) return;
-        const picker = dialog.querySelector('[data-model-picker][open]');
-        if (picker && !picker.contains(event.target)) picker.removeAttribute('open');
+        const picker = dialog.querySelector('[data-model-picker].is-open');
+        if (picker && !picker.contains(event.target)) setModelPickerOpen(picker, false);
       }, true);
       dialog.dataset.modelPickerDismissBound = 'true';
     }
@@ -450,27 +599,82 @@
     dialog.querySelectorAll('[data-settings-tab]').forEach(tab => tab.addEventListener('click', () => showSection(tab.dataset.settingsTab)));
     dialog.querySelectorAll('[data-setting-path]').forEach(input => input.addEventListener('change', async event => {
       const path = event.target.dataset.settingPath;
-      if (path === 'provider') {
-        const provider = event.target.value;
-        const model = providerCatalog.find(item => item.id === provider)?.defaultModel || '';
-        await saveProvider({ provider, defaultProvider: provider, model, credentialMode: providerSettings?.providers?.[provider]?.credentialMode || 'session' });
-        return;
-      }
       setByPath(path, event.target.type === 'checkbox' ? event.target.checked : event.target.value);
     }));
-    dialog.querySelectorAll('[data-provider-model-toggle]').forEach(input => input.addEventListener('change', async event => {
-      const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-      const checkedModels = [...dialog.querySelectorAll('[data-provider-model-toggle]:checked')].map(item => item.value);
-      const entry = providerSettings?.providers?.[provider] || {};
-      const model = checkedModels.includes(entry.model) ? entry.model : checkedModels[0] || entry.model || providerCatalog.find(item => item.id === provider)?.defaultModel || '';
-      await saveProvider({ provider, defaultProvider: provider, model, enabledModels: checkedModels, credentialMode: entry.credentialMode || 'session' });
-    }));
-    dialog.querySelectorAll('[data-set-default-model]').forEach(button => button.addEventListener('click', async event => {
-      const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-      const entry = providerSettings?.providers?.[provider] || {};
+    dialog.querySelector('[data-model-picker-toggle]')?.addEventListener('click', event => {
+      const picker = event.currentTarget.closest('[data-model-picker]');
+      setModelPickerOpen(picker, !isModelPickerOpen(picker));
+    });
+    dialog.querySelectorAll('[data-provider-model-toggle]').forEach(input => {
+      input.closest('.kairos-provider-model-choice')?.addEventListener('pointerdown', () => {
+        providerModelScrollSnapshot = readProviderModelScroll();
+      }, { passive: true });
+      input.addEventListener('change', async event => {
+        const provider = selectedProviderId;
+        const changedInput = event.currentTarget;
+        const previousChecked = !changedInput.checked;
+        const scrollSnapshot = providerModelScrollSnapshot || readProviderModelScroll();
+        const checkedModels = syncModelPickerUi(changedInput, scrollSnapshot);
+        const entry = providerSettings?.providers?.[provider] || {};
+        const model = checkedModels.includes(entry.model) ? entry.model : checkedModels[0] || '';
+        const revision = ++providerModelSaveRevision;
+        const operation = providerModelSaveQueue.then(() => saveProvider({ provider, model, enabledModels: checkedModels }, { rerender: false }));
+        providerModelSaveQueue = operation.catch(() => {});
+        try {
+          await operation;
+        } catch (error) {
+          if (revision === providerModelSaveRevision && provider === selectedProviderId && changedInput.isConnected) {
+            changedInput.checked = previousChecked;
+            syncModelPickerUi(changedInput, scrollSnapshot);
+          }
+          toast(t('common.actionNotCompleted', 'Action not completed'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+        } finally {
+          if (revision === providerModelSaveRevision && provider === selectedProviderId && changedInput.isConnected) {
+            restoreProviderModelScroll(scrollSnapshot);
+            requestAnimationFrame(() => restoreProviderModelScroll(scrollSnapshot));
+            providerModelScrollSnapshot = undefined;
+          }
+        }
+      });
+    });
+    dialog.querySelector('[data-provider-default-model]')?.addEventListener('change', async event => {
+      const provider = selectedProviderId;
+      const previousModel = providerSettings?.providers?.[provider]?.model || '';
       const enabledModels = [...dialog.querySelectorAll('[data-provider-model-toggle]:checked')].map(input => input.value);
-      await saveProvider({ provider, defaultProvider: provider, model: event.currentTarget.value, enabledModels, credentialMode: entry.credentialMode || 'session' });
-    }));
+      try {
+        await saveProvider({ provider, model: event.currentTarget.value, enabledModels }, { rerender: false });
+        syncModelPickerUi();
+      } catch (error) {
+        event.currentTarget.value = previousModel;
+        toast(t('common.actionNotCompleted', 'Action not completed'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+      }
+    });
+    dialog.querySelectorAll('[data-provider-profile-id]').forEach(button => button.addEventListener('click', () => { selectedProviderId = button.dataset.providerProfileId; providerDetailOpen = true; render(); }));
+    dialog.querySelector('[data-provider-detail-back]')?.addEventListener('click', () => { providerDetailOpen = false; render(); });
+    dialog.querySelector('[data-add-provider]')?.addEventListener('click', () => openProviderEditor());
+    dialog.querySelector('[data-edit-provider]')?.addEventListener('click', () => openProviderEditor(providerCatalog.find(item => item.id === selectedProviderId)));
+    dialog.querySelector('[data-make-default-provider]')?.addEventListener('click', async () => {
+      const entry = providerSettings?.providers?.[selectedProviderId] || {};
+      const catalog = providerCatalog.find(item => item.id === selectedProviderId);
+      if (!entry.configured || !catalog?.enabledModels?.includes(entry.model)) {
+        const drawer = dialog.querySelector('[data-model-picker]');
+        setModelPickerOpen(drawer, true);
+        toast(t('common.actionNotCompleted', 'Action not completed'), 'error', !entry.configured ? t('settings.configureApiKeyBeforeDefault', 'Configure an API key before making this provider the default.') : t('settings.selectDefaultModelBeforeProvider', 'Select a visible default model before making this provider the default.'));
+        drawer?.querySelector('[data-model-picker-toggle]')?.focus();
+        return;
+      }
+      await saveProvider({ provider: selectedProviderId, defaultProvider: selectedProviderId, model: entry.model, enabledModels: entry.enabledModels || [] });
+    });
+    dialog.querySelector('[data-delete-provider]')?.addEventListener('click', () => {
+      const definition = providerCatalog.find(item => item.id === selectedProviderId);
+      confirmAction({ title: t('settings.deleteProviderTitle', 'Delete {name}?', { name: definition?.name || '' }), copy: t('settings.deleteProviderDescription', 'Existing conversations keep the provider name but become unavailable. This cannot be undone.'), action: t('settings.deleteProvider', 'Delete provider'), dangerous: true, onConfirm: async () => {
+        providerSettings = await window.kairosDesktop.deleteProvider(selectedProviderId);
+        providerCatalog = await window.kairosDesktop.listProviders();
+        selectedProviderId = providerSettings.defaultProvider || providerCatalog[0]?.id || '';
+        providerDetailOpen = false;
+        render(); flashSaved(t('settings.providerDeleted', 'Provider deleted'));
+      }});
+    });
     dialog.querySelectorAll('[data-calendar-background-card-select]').forEach(button => button.addEventListener('click', () => {
       const card = button.closest('[data-calendar-background-card]');
       saveCalendarBackground({ source: card.dataset.calendarBackgroundSource, id: card.dataset.calendarBackgroundId });
@@ -576,27 +780,22 @@
       event.currentTarget.disabled = true;
       result.textContent = t('settings.providerTesting', 'Testing connection...');
       try {
-        const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-        const outcome = await window.kairosDesktop.testProvider(provider);
+        const outcome = await window.kairosDesktop.testProvider(selectedProviderId);
         result.textContent = outcome?.ok === false ? (outcome.message || t('settings.connectionFailed', 'Connection failed. Check your key and network.')) : t('settings.connectionSuccessful', 'Connection successful');
         result.className = outcome?.ok === false ? 'is-error' : 'is-success';
       } catch (error) { result.textContent = error?.message || t('settings.connectionFailed', 'Connection failed. Check your key and network.'); result.className = 'is-error'; }
       finally { event.currentTarget.disabled = false; }
     });
     dialog.querySelector('[data-refresh-provider-models]')?.addEventListener('click', async event => {
-      const result = dialog.querySelector('[data-model-refresh-result]');
       event.currentTarget.disabled = true;
-      result.textContent = t('settings.providerModelsRefreshing', 'Refreshing models from this account...');
       try {
-        const provider = providerSettings?.defaultProvider || providerCatalog[0]?.id;
-        const outcome = await window.kairosDesktop.refreshProviderModels(provider);
+        const outcome = await window.kairosDesktop.refreshProviderModels(selectedProviderId);
         providerSettings = outcome?.settings || await window.kairosDesktop.getProviderSettings();
         providerCatalog = await window.kairosDesktop.listProviders();
         render();
         flashSaved(outcome?.models?.length ? t('settings.providerModelsRefreshed', '{count} account models refreshed', { count: outcome.models.length }) : t('settings.noModels', 'No chat-capable models returned by this account'));
       } catch (error) {
-        result.textContent = error?.message || t('settings.providerModelsRefreshFailed', 'Unable to refresh models. Check your key and account permissions.');
-        result.className = 'is-error';
+        toast(t('common.actionNotCompleted', 'Action not completed'), 'error', error?.message || t('settings.providerModelsRefreshFailed', 'Unable to refresh models. Check your key and account permissions.'));
       } finally {
         if (event.currentTarget.isConnected) event.currentTarget.disabled = false;
       }
@@ -669,10 +868,10 @@
     if (dialog?.open) {
       const content = dialog.querySelector('.kairos-settings-content');
       const scrollTop = content?.scrollTop || 0;
-      const modelPickerOpen = dialog.querySelector('[data-model-picker]')?.open;
+      const modelPickerOpen = isModelPickerOpen(dialog.querySelector('[data-model-picker]'));
       render();
       requestAnimationFrame(() => {
-        if (modelPickerOpen) dialog.querySelector('[data-model-picker]')?.setAttribute('open', '');
+        if (modelPickerOpen) setModelPickerOpen(dialog.querySelector('[data-model-picker]'), true);
         const refreshedContent = dialog.querySelector('.kairos-settings-content');
         if (refreshedContent) refreshedContent.scrollTop = scrollTop;
       });

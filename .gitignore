@@ -27,6 +27,7 @@ out/
 release/
 app/vue-preview/
 coverage/
+vendor/ffmpeg/
 
 # Electron / app runtime data
 *.asar

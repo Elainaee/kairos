@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PROVIDERS, createProviderChatModel, listProviderModels, normalizeProviderError, resolveProviderConfig, resolveSelectableModels } from "../../services/ai/provider-registry.js";
 
+test("the fixed built-in provider list keeps MiMo API and MiMo Token Plan separate", () => {
+  assert.deepEqual(Object.keys(PROVIDERS), ["openai", "doubao", "deepseek", "mimo-api", "mimo-token-plan"]);
+  assert.notEqual(PROVIDERS["mimo-api"].baseURL, PROVIDERS["mimo-token-plan"].baseURL);
+});
+
 test("Doubao uses the central OpenAI-compatible provider definition", () => {
   const config = resolveProviderConfig("doubao", { apiKey: "test-key" });
   assert.equal(config.protocol, "openai-compatible");
@@ -35,23 +40,32 @@ test("enabled models are the only models exposed to the chat selector", () => {
   const selection = resolveSelectableModels(PROVIDERS.doubao, {
     model: "deepseek-v3",
     discoveredModels: ["deepseek-v3", "doubao-seed-2-0-lite-260428"],
+    modelCatalogUpdatedAt: "2026-08-31T00:00:00.000Z",
     enabledModels: ["deepseek-v3"],
   });
   assert.deepEqual(selection.availableModels, [
-    "doubao-seed-2-0-mini-260428",
-    "doubao-seed-2-0-lite-260428",
-    "doubao-seed-2-0-pro-260215",
     "deepseek-v3",
+    "doubao-seed-2-0-lite-260428",
   ]);
   assert.deepEqual(selection.enabledModels, ["deepseek-v3"]);
   assert.equal(selection.defaultModel, "deepseek-v3");
 });
 
-test("an unavailable default falls back to an enabled model", () => {
+test("an unavailable default never silently falls back", () => {
   const selection = resolveSelectableModels(PROVIDERS.openai, {
     model: "gpt-4.1",
     enabledModels: ["gpt-4.1-mini"],
   });
+  assert.equal(selection.defaultModel, "");
+});
+
+test("legacy verification metadata does not block a selected model", () => {
+  const selection = resolveSelectableModels(PROVIDERS.openai, {
+    discoveredModels: ["gpt-4.1-mini"], modelCatalogUpdatedAt: "2026-08-31T00:00:00.000Z",
+    enabledModels: ["gpt-4.1-mini"], model: "gpt-4.1-mini",
+    verifiedModels: { "gpt-4.1-mini": { verified: false, fingerprint: "same" } },
+  });
+  assert.deepEqual(selection.enabledModels, ["gpt-4.1-mini"]);
   assert.equal(selection.defaultModel, "gpt-4.1-mini");
 });
 

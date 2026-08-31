@@ -747,7 +747,7 @@
     box-shadow: none !important;
     filter: none !important;
     transform: none !important;
-    color: #C95F3D !important
+    color: var(--primary) !important
 }
 
 body > .music-playlist-panel .music-track-main:hover,
@@ -771,6 +771,31 @@ body > .music-playlist-panel .music-track-remove:focus-visible {
 body > .music-playlist-panel .music-queue-cover:hover > .music-queue-play-button,
 body > .music-playlist-panel .music-queue-play-button:focus-visible {
     opacity: 1 !important
+}
+
+body > .music-playlist-panel .music-queue-close:hover,
+body > .music-playlist-panel .music-track-remove:hover {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    color: var(--primary) !important
+}
+
+body > .music-playlist-panel .music-queue-close:hover .music-icon,
+body > .music-playlist-panel .music-track-remove:hover .music-icon {
+    color: var(--primary) !important
+}
+
+body > .music-playlist-panel .music-queue-close:focus-visible,
+body > .music-playlist-panel .music-track-remove:focus-visible {
+    outline: 2px solid var(--ring) !important;
+    outline-offset: 2px !important;
+    color: var(--primary) !important
+}
+
+body > .music-playlist-panel .music-queue-close:focus-visible .music-icon,
+body > .music-playlist-panel .music-track-remove:focus-visible .music-icon {
+    color: var(--primary) !important
 }
 
 .music-playlist-empty {

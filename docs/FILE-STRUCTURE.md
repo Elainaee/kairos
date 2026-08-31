@@ -46,9 +46,7 @@ Kairos/
 ├── package.json                 # npm 脚本、依赖、electron-builder 配置
 ├── pnpm-lock.yaml               # 锁定依赖版本
 ├── pnpm-workspace.yaml          # pnpm 工作区配置
-├── tailwind.config.cjs          # Tailwind 配置
-├── start-kairos.cmd             # Windows 启动入口
-└── start-*.ps1                  # PowerShell 启动入口
+└── tailwind.config.cjs          # Tailwind 配置
 ```
 
 ## 边界说明

@@ -8,21 +8,26 @@
   "packageManager": "pnpm@10.17.1",
   "type": "module",
   "main": "electron/main/index.js",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "ffmpeg-static"
+    ]
+  },
   "scripts": {
     "verify:version": "node scripts/verify-release-version.cjs",
     "check:signing:win": "node scripts/verify-windows-signing.cjs",
     "validate:i18n": "node scripts/validate-i18n.cjs",
     "build:i18n": "node scripts/build-i18n.cjs",
-    "start": "node scripts/kairos-dev.cjs",
+    "prepare:ffmpeg": "node scripts/prepare-ffmpeg.cjs",
     "dev": "node scripts/kairos-dev.cjs",
-    "dev:vue": "node scripts/kairos-vue-dev.cjs",
     "sync:music-native-controller": "node scripts/sync-music-native-controller.cjs",
     "renderer:build": "pnpm build:i18n && pnpm sync:music-native-controller && vite build --config renderer/vite.config.ts",
     "build:renderer": "pnpm renderer:build",
     "typecheck": "vue-tsc --noEmit -p renderer/tsconfig.json",
     "doctor": "node scripts/kairos-doctor.cjs",
     "build:styles": "tailwindcss --config tailwind.config.cjs --input app/assets/styles/tailwind.input.css --output app/assets/styles/tailwind.css --minify",
-    "check": "pnpm verify:version && pnpm validate:i18n && pnpm typecheck && node --check scripts/kairos-dev.cjs && node --check scripts/kairos-vue-dev.cjs && node --check scripts/kairos-doctor.cjs && node --check scripts/verify-release-version.cjs && node --check scripts/verify-windows-signing.cjs && node --check scripts/verify-windows-signatures.cjs && node --check electron/scripts/release/verify-pack-dir.js && node --check app/features/assistant/ai-chat.js && node --check app/features/calendar/calendar-core.cjs && node --check app/features/calendar/schedule-feature.js && node --check app/features/habits/habit-core.cjs && node --check app/features/habits/habits-feature.js && node --check app/features/reminders/reminder-core.cjs && node --check app/features/reminders/reminder-feature.js && node --check app/features/settings/settings-feature.js && node --check app/shell/navigation/stitch-shell.js && node --check app/shell/player/music-player.js && node --check electron/data/sqlite/index.js && node --check electron/data/app-state/index.js && node --check electron/scripts/audit/app-state-audit.js && node --check electron/scripts/audit/desktop-data-audit.js && node --check electron/main/index.js && node --check electron/preload/index.cjs && node --check electron/services/ai/provider-registry.js && node --check electron/services/ai/providers.js && node --check electron/services/ai/langchain-agent.js && node --check electron/services/calendar/calendar-backgrounds.js && node --check electron/services/music/netease-api-service.js && node --check electron/services/web/web-search.js && node --test electron/tests/unit/**/*.test.js electron/tests/integration/**/*.test.js",
+    "check": "pnpm verify:version && pnpm validate:i18n && pnpm typecheck && node --check scripts/kairos-dev.cjs && node --check scripts/kairos-doctor.cjs && node --check scripts/verify-release-version.cjs && node --check scripts/verify-windows-signing.cjs && node --check scripts/verify-windows-signatures.cjs && node --check electron/scripts/release/verify-pack-dir.js && node --check app/features/assistant/ai-chat.js && node --check app/features/calendar/calendar-core.cjs && node --check app/features/calendar/schedule-feature.js && node --check app/features/habits/habit-core.cjs && node --check app/features/habits/habits-feature.js && node --check app/features/reminders/reminder-core.cjs && node --check app/features/reminders/reminder-feature.js && node --check app/features/settings/settings-feature.js && node --check app/shell/navigation/stitch-shell.js && node --check app/shell/player/music-player.js && node --check electron/data/sqlite/index.js && node --check electron/data/app-state/index.js && node --check electron/scripts/audit/app-state-audit.js && node --check electron/scripts/audit/desktop-data-audit.js && node --check electron/main/index.js && node --check electron/preload/index.cjs && node --check electron/services/ai/provider-registry.js && node --check electron/services/ai/provider-settings.js && node --check electron/services/ai/providers.js && node --check electron/services/ai/langchain-agent.js && node --check electron/services/calendar/calendar-backgrounds.js && node --check electron/services/music/ai-music-controller.js && node --check electron/services/music/netease-api-service.js && node --check electron/services/web/web-search.js && node --test electron/tests/unit/**/*.test.js electron/tests/integration/**/*.test.js",
     "audit:app-state": "node electron/scripts/audit/app-state-audit.js",
     "audit:desktop-data": "node electron/scripts/audit/desktop-data-audit.js",
     "verify:dist": "node --test electron/tests/distribution/dist-artifacts.test.js",
@@ -32,9 +37,9 @@
     "release:manifest": "node electron/scripts/release/release-manifest.js",
     "verify:release": "pnpm check && pnpm dist:win && pnpm release:manifest && pnpm verify:dist && pnpm verify:signatures:win",
     "verify:release:full": "pnpm verify:release && pnpm verify:installer",
-    "pack:dir": "pnpm verify:version && pnpm build:styles && pnpm build:renderer && electron-builder --dir",
-    "dist": "pnpm verify:version && pnpm check:signing:win && pnpm build:styles && pnpm build:renderer && electron-builder --win",
-    "dist:win": "pnpm verify:version && pnpm check:signing:win && pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable"
+    "pack:dir": "pnpm verify:version && pnpm prepare:ffmpeg && pnpm build:styles && pnpm build:renderer && electron-builder --dir",
+    "dist": "pnpm verify:version && pnpm check:signing:win && pnpm prepare:ffmpeg && pnpm build:styles && pnpm build:renderer && electron-builder --win",
+    "dist:win": "pnpm verify:version && pnpm check:signing:win && pnpm prepare:ffmpeg && pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable"
   },
   "build": {
     "appId": "app.kairos.desktop",
@@ -52,14 +57,30 @@
       "!references{,/**}",
       "!Brainstorm{,/**}",
       "!node_modules/.cache{,/**}",
+      "!node_modules/ffmpeg-static{,/**}",
       "!.env*",
-      "!start-kairos.*",
       "!electron/tests{,/**}",
       "!electron/scripts{,/**}"
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/NeteaseCloudMusicApi/**/*"
+      "node_modules/@neteasecloudmusicapienhanced/api/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "third_party/ffmpeg",
+        "to": "third_party/ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "icon": "app/assets/icons/kairos.ico",
@@ -100,7 +121,8 @@
   "dependencies": {
     "@langchain/core": "^1.2.2",
     "@langchain/openai": "^1.5.5",
-    "NeteaseCloudMusicApi": "^4.32.0",
+    "@neteasecloudmusicapienhanced/api": "^4.40.1",
+    "NeteaseCloudMusicApi": "4.32.0",
     "dotenv": "^16.4.7",
     "jszip": "^3.10.1",
     "langchain": "^1.5.3",
@@ -118,6 +140,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "electron": "36.9.5",
     "electron-builder": "^26.15.3",
+    "ffmpeg-static": "5.3.0",
     "tailwindcss": "3.4.17",
     "typescript": "~5.7.3",
     "vite": "^8.1.5",

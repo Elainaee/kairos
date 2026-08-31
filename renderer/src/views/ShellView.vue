@@ -17,7 +17,7 @@ async function checkBridge() {
 <template>
   <section class="vue-preview-notice" aria-labelledby="preview-title">
       <h1 id="preview-title">{{ t("shellPreview.title") }}</h1>
-      <p>{{ t("shellPreview.description", { command: "npm start" }) }}</p>
+      <p>{{ t("shellPreview.description", { command: "pnpm dev" }) }}</p>
       <p class="vue-bridge-status" data-testid="bridge-status" aria-live="polite">{{ bridgeStatus }}</p>
       <div><button class="kairos-create" data-testid="bridge-check" type="button" @click="checkBridge">{{ t("shellPreview.checkBridge") }}</button></div>
   </section>

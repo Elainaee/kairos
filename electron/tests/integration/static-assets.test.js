@@ -545,7 +545,7 @@ test("Electron AI errors and web-search permission dialog use the shared catalog
 
   assert.match(main, /new ProviderError\("unknown_provider", nativeT\("errors\.unknownProvider", \{\}, "Unknown AI provider\."\)\)/, "unknown-provider errors should follow the selected application language");
   assert.match(main, /new ProviderError\("no_enabled_model", nativeT\("errors\.noEnabledModel", \{\}, "Select at least one chat model in Settings first\."\)\)/, "missing-model errors should follow the selected application language");
-  assert.match(main, /new ProviderError\("agent_model_unsupported",nativeT\("errors\.agentModelUnsupported",\{\},"The selected provider does not yet support AI tools\."\)\)/, "agent capability errors should follow the selected application language");
+  assert.match(main, /new ProviderError\("model_unavailable", nativeT\("errors\.noEnabledModel", \{\}, "The selected model is unavailable or hidden\."\)\)/, "unavailable-model errors should follow the selected application language");
   assert.match(main, /buttons:\[nativeT\("electron\.allowWebSearch",\{\},"Allow web search"\),nativeT\("common\.cancel",\{\},"Cancel"\)\][\s\S]*?title:nativeT\("electron\.webSearchPermissionTitle"[\s\S]*?message:nativeT\("electron\.webSearchPermissionMessage"/, "the native web-search permission dialog should use the shared catalog");
 });
 
@@ -724,21 +724,22 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.equal(pkg.build.appId, "app.kairos.desktop");
   assert.match(main, /if \(process\.platform === "win32"\) app\.setAppUserModelId\("app\.kairos\.desktop"\);/, "Windows notifications and shortcuts should use the packaged Kairos app identity");
   assert.equal(pkg.main, "electron/main/index.js");
-  assert.equal(pkg.scripts.start, "node scripts/kairos-dev.cjs");
+  assert.equal(pkg.scripts.start, undefined);
   assert.equal(pkg.scripts.dev, "node scripts/kairos-dev.cjs");
-  assert.equal(pkg.scripts["dev:vue"], "node scripts/kairos-vue-dev.cjs");
+  assert.equal(pkg.scripts["dev:vue"], undefined);
   assert.equal(pkg.scripts["build:renderer"], "pnpm renderer:build");
   assert.equal(pkg.scripts.doctor, "node scripts/kairos-doctor.cjs");
   assert.equal(pkg.scripts.pack, undefined, "pnpm's built-in pack command must remain available");
-  assert.equal(pkg.scripts["pack:dir"], "pnpm verify:version && pnpm build:styles && pnpm build:renderer && electron-builder --dir");
-  assert.equal(pkg.scripts.dist, "pnpm verify:version && pnpm check:signing:win && pnpm build:styles && pnpm build:renderer && electron-builder --win");
-  assert.equal(pkg.scripts["dist:win"], "pnpm verify:version && pnpm check:signing:win && pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable");
+  assert.equal(pkg.scripts["pack:dir"], "pnpm verify:version && pnpm prepare:ffmpeg && pnpm build:styles && pnpm build:renderer && electron-builder --dir");
+  assert.equal(pkg.scripts.dist, "pnpm verify:version && pnpm check:signing:win && pnpm prepare:ffmpeg && pnpm build:styles && pnpm build:renderer && electron-builder --win");
+  assert.equal(pkg.scripts["dist:win"], "pnpm verify:version && pnpm check:signing:win && pnpm prepare:ffmpeg && pnpm build:styles && pnpm build:renderer && electron-builder --win nsis portable");
+  assert.equal(pkg.scripts["prepare:ffmpeg"], "node scripts/prepare-ffmpeg.cjs");
   assert.equal(pkg.scripts["audit:app-state"], "node electron/scripts/audit/app-state-audit.js");
   assert.equal(pkg.scripts["audit:desktop-data"], "node electron/scripts/audit/desktop-data-audit.js");
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-dev\.cjs/);
   assert.match(pkg.scripts.check, /pnpm typecheck/);
   assert.match(pkg.scripts.check, /pnpm verify:version/);
-  assert.match(pkg.scripts.check, /node --check scripts\/kairos-vue-dev\.cjs/);
+  assert.doesNotMatch(pkg.scripts.check, /kairos-vue-dev/);
   assert.match(pkg.scripts.check, /node --check scripts\/kairos-doctor\.cjs/);
   assert.match(pkg.scripts.check, /node --check electron\/data\/sqlite\/index\.js/);
   assert.match(pkg.scripts.check, /node --check electron\/scripts\/audit\/app-state-audit\.js/);
@@ -770,6 +771,7 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.ok(pkg.build.files.includes("!electron/scripts{,/**}"), "developer scripts should stay out of the runtime package");
   assert.ok(pkg.build.files.includes("!.env*"), "local secret files must not be packaged");
   assert.ok(pkg.build.files.includes("!docs{,/**}"), "project docs should stay out of the runtime package");
+  assert.ok(pkg.build.extraResources.some(item => item.from === "vendor/ffmpeg" && item.to === "ffmpeg"), "FFmpeg must be delivered outside ASAR as an extra resource");
   assert.ok(pkg.devDependencies["electron-builder"], "electron-builder should be available for distribution builds");
   assert.ok(pkg.dependencies.vue, "Vue should be available for the released renderer");
   assert.ok(pkg.devDependencies.vite, "Vite should be available to build the released renderer");
@@ -778,21 +780,17 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.match(checklist, /pnpm audit:app-state[\s\S]*?退出码为 `0`[\s\S]*?退出码为 `2`[\s\S]*?退出码为 `1`/, "release checklist should document app-state audit usage and exit codes");
 });
 
-test("development launch scripts provide local runtime diagnostics", async () => {
-  const cmd = await fs.readFile(path.join(root, "start-kairos.cmd"), "utf8");
-  const ps1 = await fs.readFile(path.join(root, "start-kairos.ps1"), "utf8");
+test("development uses one pnpm launcher with local runtime diagnostics", async () => {
   const devScript = await fs.readFile(path.join(root, "scripts/kairos-dev.cjs"), "utf8");
   const doctorScript = await fs.readFile(path.join(root, "scripts/kairos-doctor.cjs"), "utf8");
 
-  assert.match(cmd, /scripts\\kairos-dev\.cjs/, "cmd launcher should delegate to the shared dev launcher");
-  assert.match(cmd, /D:\\nodejs\\node\.exe/, "cmd launcher should use the known local Node install when PATH is missing");
-  assert.match(cmd, /scripts\\kairos-doctor\.cjs/, "cmd launcher should suggest the doctor script after failures");
-  assert.match(ps1, /scripts\\kairos-dev\.cjs/, "PowerShell launcher should delegate to the shared dev launcher");
-  assert.match(ps1, /D:\\nodejs\\node\.exe/, "PowerShell launcher should use the known local Node install when PATH is missing");
-  assert.match(ps1, /scripts\\kairos-doctor\.cjs/, "PowerShell launcher should suggest the doctor script after failures");
   assert.match(devScript, /node_modules", "\.bin"[\s\S]*?electron\.cmd/, "dev launcher should prefer the local package binary");
   assert.match(devScript, /node_modules", "electron", "dist"[\s\S]*?electron\.exe/, "dev launcher should still support the Electron executable fallback");
-  assert.match(devScript, /Kairos could not find the local Electron runtime[\s\S]*?pnpm install[\s\S]*?npm install/, "dev launcher should print install guidance instead of a raw spawn failure");
+  assert.match(devScript, /build-i18n\.cjs[\s\S]*?sync-music-native-controller\.cjs[\s\S]*?viteEntry[\s\S]*?KAIROS_VITE_DEV_SERVER_URL/, "pnpm dev should prepare generated resources and launch Vite plus Electron");
+  assert.match(devScript, /Kairos could not find the local Electron runtime[\s\S]*?pnpm install/, "dev launcher should print pnpm install guidance instead of a raw spawn failure");
+  for (const obsolete of ["start-kairos.cmd", "start-kairos.ps1", "start-dev.ps1", "scripts/kairos-vue-dev.cjs"]) {
+    assert.equal(await fs.access(path.join(root, obsolete)).then(() => true, () => false), false, `${obsolete} should be removed after launcher consolidation`);
+  }
   assert.match(doctorScript, /Kairos desktop environment[\s\S]*?npm[\s\S]*?pnpm[\s\S]*?Electron/, "doctor should report Node package manager and Electron paths");
 });
 
@@ -868,8 +866,8 @@ test("main process restores auxiliary settings from SQLite snapshots", async () 
   );
   assert.match(
     neteaseService,
-    /this\.stateRepository = statePath \? new SettingsRepository\(\{[\s\S]*?storeKey: "netease-api-state"[\s\S]*?async initialize\(\) \{[\s\S]*?this\.cookie = \(await this\.stateRepository\.read\(\)\)\.cookie;/,
-    "NetEase login cookie should use the atomic SQLite-restorable state repository"
+    /this\.stateRepository = statePath \? new SettingsRepository\(\{[\s\S]*?storeKey: "netease-api-state"[\s\S]*?async initialize\(\) \{[\s\S]*?const state = await this\.stateRepository\.read\(\);[\s\S]*?this\.cookie = state\.cookie;[\s\S]*?this\.profile = state\.profile;/,
+    "NetEase login session and sidebar profile should use the atomic SQLite-restorable state repository"
   );
   assert.match(
     neteaseService,
@@ -1404,13 +1402,13 @@ test("local and NetEase liked menu copy stays aligned", async () => {
 
   assert.match(
     musicHtml,
-    /\$\{likedAriaLabel\(track\.liked\)\}/,
-    "local playlist row menus should use the shared state-aware liked label"
+    /\$\{likedMenuLabel\(track\.liked\)\}/,
+    "local playlist row menus should use the compact state-aware liked label"
   );
   assert.match(
     musicHtml,
-    /\$\{likedAriaLabel\(isNeteaseSongLiked\(song\)\)\}/,
-    "NetEase row menus should use the shared state-aware liked label"
+    /\$\{likedMenuLabel\(isNeteaseSongLiked\(song\)\)\}/,
+    "NetEase row menus should use the compact state-aware liked label"
   );
   assert.doesNotMatch(
     musicHtml,
@@ -1565,8 +1563,8 @@ test("NetEase liked view updates its in-memory list when a song is removed", asy
   );
   assert.match(
     musicHtml,
-    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccountWrap\.hidden = false;[\s\S]*?if \(!hasProfile\) \{[\s\S]*?neteaseSidebarName\.textContent = tr\('music\.notSignedIn', \{\}, 'Not signed in'\);[\s\S]*?neteaseSidebarAvatar\.hidden = true;[\s\S]*?neteaseSidebarAvatarFallback\.hidden = false;[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| tr\('music\.neteaseCloud', \{\}, 'NetEase Cloud'\);[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
-    "NetEase status refresh should keep signed-out placeholder visible and update avatar/nickname when logged in"
+    /const renderNeteaseSidebarProfile = profile => \{[\s\S]*?neteaseSidebarAccountWrap\.hidden = false;[\s\S]*?if \(!hasProfile\) \{[\s\S]*?neteaseSidebarName\.setAttribute\('data-i18n', 'music\.notSignedIn'\);[\s\S]*?neteaseSidebarName\.textContent = tr\('music\.notSignedIn', \{\}, 'Not signed in'\);[\s\S]*?neteaseSidebarAvatar\.hidden = true;[\s\S]*?neteaseSidebarAvatarFallback\.hidden = false;[\s\S]*?neteaseSidebarName\.removeAttribute\('data-i18n'\);[\s\S]*?neteaseSidebarName\.textContent = profile\.nickname \|\| tr\('music\.neteaseCloud', \{\}, 'NetEase Cloud'\);[\s\S]*?neteaseSidebarAvatar\.src = avatarUrl;/,
+    "NetEase status refresh should restore signed-out i18n and protect a logged-in nickname from locale sync"
   );
   assert.match(
     musicHtml,
@@ -1800,13 +1798,13 @@ test("NetEase history row menu follows history layout", async () => {
   );
   assert.match(
     musicHtml,
-    /\.netease-history-tabs\{position:relative;display:inline-flex[\s\S]*?border:0;background:transparent/,
+    /\.netease-history-tabs,\.netease-download-tabs\{position:relative;display:inline-flex[\s\S]*?border:0;background:transparent/,
     "NetEase history range tabs should sit on the table border without a pill container"
   );
   assert.match(
     musicHtml,
-    /body\[data-page="music"\] \.netease-history-tabs button\.netease-history-tab:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color:transparent!important[\s\S]*?box-shadow:none!important/,
-    "NetEase history range tabs should override the global button hover background"
+    /\.netease-history-tab:hover,\.netease-download-tab:hover\{background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var\(--primary\)!important;transform:none!important\}/,
+    "NetEase history range tabs should change foreground only on hover"
   );
   assert.match(
     musicHtml,
@@ -1843,8 +1841,8 @@ test("music controls suppress global hover backgrounds", async () => {
   );
   assert.match(
     musicHtml,
-    /body\[data-page="music"\] \.playlist-detail-table button\.track-play-button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\),[\s\S]*?button\.track-play-button:focus-visible:not[\s\S]*?transform:translate\(-50%,-50%\) scale\(1\)!important/,
-    "track play buttons should preserve their centered transform while suppressing hover effects"
+    /body\[data-page="music"\] \.playlist-detail-table button\.track-play-button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\),[\s\S]*?button\.track-play-button:focus-visible:not[\s\S]*?transform:translate\(-50%,-50%\)!important/,
+    "track play buttons should preserve their centered position without scaling on hover"
   );
   assert.match(
     musicHtml,
@@ -1853,8 +1851,18 @@ test("music controls suppress global hover backgrounds", async () => {
   );
   assert.match(
     musicHtml,
+    /\.track-like-button:hover\{color:var\(--primary\)!important\}[\s\S]*?\.track-like-button:focus-visible,[\s\S]*?outline:2px solid var\(--ring\)!important/,
+    "like buttons should change only their foreground on hover and retain a keyboard focus ring"
+  );
+  assert.match(
+    musicHtml,
     /body\[data-page="music"\] button\.track-row-menu-trigger:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\)[\s\S]*?background-color:transparent!important[\s\S]*?box-shadow:none!important/,
     "row more buttons should override the global button hover background"
+  );
+  assert.match(
+    musicHtml,
+    /\.playlist-detail-table tbody tr:hover \.track-play-cell button\.track-play-button,[\s\S]*?color:var\(--primary\)!important[\s\S]*?\.playlist-detail-table tbody tr:hover \.track-row-menu-trigger,[\s\S]*?color:var\(--primary\)!important/,
+    "row hover should reveal the play and more controls using foreground color only"
   );
   assert.match(
     playerCss,
@@ -1867,14 +1875,19 @@ test("music controls suppress global hover backgrounds", async () => {
     "body-mounted queue controls should suppress hover background and shadow"
   );
   assert.match(
+    playerCss,
+    /\.music-queue-close:hover \.music-icon,[\s\S]*?color: var\(--primary\) !important[\s\S]*?\.music-queue-close:focus-visible,[\s\S]*?outline: 2px solid var\(--ring\) !important/,
+    "queue close and row action icons should visibly change foreground and retain keyboard focus"
+  );
+  assert.match(
     playerScript,
     /class="music-queue-clear" data-i18n="player\.clearAll" type="button" id="musicClearButton">Clear All<\/button>/,
     "queue Clear All control should retain its source layout while taking its label from the language catalog"
   );
   assert.match(
     themeCss,
-    /button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\):not\(\.music-track-main\):not\(\.music-queue-play-button\):not\(\.music-track-remove\):not\(\.music-queue-close\):not\(\.music-queue-clear\)/,
-    "global button hover styling should not paint queue controls"
+    /button:hover:not\(\.kairos-create\):not\(\.habit-primary\):not\(\.play\):not\(\.send\):not\(\.track-play-button\):not\(\.track-like-button\):not\(\.track-row-menu-trigger\):not\(\.netease-history-tab\):not\(\.netease-download-tab\):not\(\.music-track-main\):not\(\.music-queue-play-button\):not\(\.music-track-remove\):not\(\.music-queue-close\):not\(\.music-queue-clear\)/,
+    "global button hover styling should not paint song-row, History/Download tabs, or queue controls"
   );
   assert.match(
     playerCss,
@@ -1900,6 +1913,21 @@ test("music controls suppress global hover backgrounds", async () => {
     playerScript,
     /neteaseThumbnailUrl[\s\S]*?param=160y160[\s\S]*?neteaseThumbnailUrl\(secureCoverUrl\)/,
     "queue artwork should request bounded NetEase thumbnails instead of multi-megabyte originals"
+  );
+});
+
+test("historical NetEase download state does not replay completion notifications on startup", async () => {
+  const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
+
+  assert.match(
+    musicHtml,
+    /const handleNeteaseDownloadProgress = \(task, \{ notify = true \} = \{\}\) => \{[\s\S]*?const previousStatus = neteaseDownloadTasks\.get\(String\(task\.songId\)\)\?\.status \|\| '';[\s\S]*?notify && previousStatus !== task\.status && task\.status === 'completed'/,
+    "live download completion notifications should only fire on a real status transition"
+  );
+  assert.match(
+    musicHtml,
+    /api\.getDownloadState\?\.\(\)\.then\(state => \{[\s\S]*?neteaseDownloadTaskList\.forEach\(task => handleNeteaseDownloadProgress\(task, \{ notify: false \}\)\);/,
+    "startup hydration should restore historical downloads without replaying their toasts"
   );
 });
 
@@ -1951,7 +1979,7 @@ test("NetEase sidebar account menu can log out", async () => {
   assert.match(main, /ipcMain\.handle\("netease:send-captcha",\(_event,input\)=>neteaseService\.sendCaptcha\(input\)\);/, "main should register NetEase captcha sending");
   assert.match(main, /ipcMain\.handle\("netease:login-with-phone",\(_event,input\)=>neteaseService\.loginWithPhone\(input\)\);/, "main should register NetEase phone login");
   assert.match(main, /ipcMain\.handle\("netease:open-verification"[\s\S]*?shell\.openExternal\(target\)/, "main should open NetEase verification links through Electron shell");
-  assert.match(service, /function neteaseFailure\(error, fallback, translateFn = fallbackTranslate\) \{[\s\S]*?readableNeteaseMessage\(code,[\s\S]*?translateFn\)[\s\S]*?needsVerification: Number\(code\) === 10004 \|\| Number\(code\) === 10003,[\s\S]*?retryAfter: Number\(code\) === 406 \? 60000 : 0/, "service should convert NetEase failures into localized normal UI responses");
+  assert.match(service, /function neteaseFailure\(error, fallback, translateFn = fallbackTranslate\) \{[\s\S]*?readableNeteaseMessage\(code,[\s\S]*?translateFn\)[\s\S]*?needsVerification: Number\(code\) === 10004 \|\| Number\(code\) === 10003,[\s\S]*?retryAfter: PLAYLIST_SUBSCRIPTION_RATE_LIMIT_CODES\.has\(Number\(code\)\) \? PLAYLIST_SUBSCRIPTION_COOLDOWN_MS : 0/, "service should convert NetEase failures into localized normal UI responses");
   assert.match(service, /export function readableNeteasePlaybackMessage\(data = \{\}, fallback = "", translateFn = fallbackTranslate\)[\s\S]*?music\.neteaseMembershipRequired[\s\S]*?music\.neteaseRightsRestricted[\s\S]*?music\.neteaseSongUnavailable/, "service should route readable playback failure messages through the shared catalog");
   assert.match(service, /async playSong\(\{ id, neteaseId, level = DEFAULT_LEVEL \} = \{\}\) \{[\s\S]*?try \{[\s\S]*?readableNeteasePlaybackMessage\(urlData, this\.message\("music\.neteaseNoPlayableUrlReturned"[\s\S]*?this\.t\)[\s\S]*?catch \(error\) \{[\s\S]*?return neteaseFailure\(error, this\.message\("music\.unableToLoadPlayableNeteaseUrl"[\s\S]*?this\.t\);/, "service should return localized NetEase playback failures instead of throwing raw API errors");
   assert.match(service, /async function withSuppressedNeteaseErrors\(task\)[\s\S]*?if \(args\[0\] === "\[ERR\]"\) return;/, "service should suppress noisy NetEase API internal error logs");
@@ -2005,8 +2033,9 @@ test("NetEase search page renders daily recommendations and hot playlists", asyn
   assert.doesNotMatch(service, /savedPlaylistIds/, "search home should not infer playlist collection by comparing saved playlist ids");
   assert.match(service, /function playlistSubscribedState\(body = \{\}\) \{[\s\S]*?source\.subscribed === true[\s\S]*?source\.isSubscribed === true[\s\S]*?source\.subscribedPlaylist === true[\s\S]*?source\.playlist\?\.subscribed === true/, "playlist detail should read subscribed state from NetEase dynamic playlist API fields");
   assert.match(service, /playlist_detail_dynamic\(this\.withCookie\(\{ id: playlistId \}\)\)[\s\S]*?subscribed: playlistSubscribedState\(detailResult\?\.body \|\| \{\}\)/, "playlist detail should return the API subscribed state to the renderer");
-  assert.match(service, /async setPlaylistSubscribed\(\{ id, neteaseId, subscribed = true \} = \{\}\) \{[\s\S]*?const input = \{[\s\S]*?t: subscribed \? 1 : 2[\s\S]*?neteaseApi\.playlist_subscribe\(this\.withCookie\(input\)\)/, "playlist collection should use the NetEase playlist subscribe API");
-  assert.match(service, /Number\(parsed\.code\) !== 406[\s\S]*?playlist_subscribe\(this\.withCookie\(\{ \.\.\.input, crypto: "weapi" \}\)\)/, "playlist collection should retry through weapi when NetEase rejects the eapi route as too frequent");
+  assert.match(service, /async setPlaylistSubscribed\(\{ id, neteaseId, subscribed = true \} = \{\}\) \{[\s\S]*?playlistSubscriptionRequests\.get\(playlistId\)[\s\S]*?const action = targetSubscribed \? "subscribe" : "unsubscribe";[\s\S]*?this\.request\([\s\S]*?`\/api\/playlist\/\$\{action\}`[\s\S]*?\{ crypto: "weapi", cookie: this\.cookie \}/, "playlist collection should coalesce writes through the verified token-free weapi route");
+  assert.match(service, /PLAYLIST_SUBSCRIPTION_RATE_LIMIT_CODES = new Set\(\[405, 406\]\)[\s\S]*?playlistSubscriptionCooldownUntil[\s\S]*?music\.neteaseActionRateLimited/, "playlist collection should cool down and localize NetEase anti-abuse responses");
+  assert.doesNotMatch(service, /this\.api\.playlist_subscribe/, "playlist collection should avoid the upstream anti-cheat wrapper that returns 405 for valid sessions");
   assert.match(preload, /setPlaylistSubscribed: \(input\) => ipcRenderer\.invoke\("netease:set-playlist-subscribed", input\)/, "preload should expose playlist collection");
   assert.match(main, /ipcMain\.handle\("netease:set-playlist-subscribed",\(_event,input\)=>neteaseService\.setPlaylistSubscribed\(input\)\);/, "main should register playlist collection");
   assert.match(musicHtml, /\.netease-search-home\{display:grid;gap:28px/, "search home should have dedicated layout styles");
@@ -2307,7 +2336,7 @@ test("shared player artist fallback respects local and NetEase sources", async (
   );
   assert.match(
     playerScript,
-    /els\.artist\.textContent=clean\(t\.artist\)\|\|artistFallback\(t\);/,
+    /els\.artist\.textContent = track \? clean\(track\.artist\)\|\|artistFallback\(track\) : tr\('player\.localAmbience'/,
     "the main shared player artist label should use the same source-aware fallback"
   );
 });

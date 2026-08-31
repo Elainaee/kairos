@@ -6,37 +6,55 @@ const DEFAULT_MAX_RETRIES = 2;
 const fallbackTranslate = (_key, _params, fallback = "") => fallback;
 const providerText = (translate, key, fallback, params = {}) => (typeof translate === "function" ? translate(key, params, fallback) : fallbackTranslate(key, params, fallback));
 
+const builtin = definition => Object.freeze({
+  kind: "builtin",
+  protocol: "openai-compatible",
+  capabilities: ["text", "stream", "tool_call"],
+  timeout: DEFAULT_TIMEOUT_MS,
+  maxRetries: DEFAULT_MAX_RETRIES,
+  ...definition,
+});
+
 export const PROVIDERS = Object.freeze({
-  openai: Object.freeze({
-    id: "openai", name: "OpenAI", protocol: "openai-compatible", defaultModel: "gpt-4.1-mini",
+  openai: builtin({
+    id: "openai", name: "OpenAI", defaultModel: "gpt-4.1-mini",
     models: ["gpt-4.1-mini", "gpt-4.1", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini", "o3", "o4-mini"],
-    capabilities: ["text", "vision", "stream", "tool_call"], timeout: DEFAULT_TIMEOUT_MS, maxRetries: DEFAULT_MAX_RETRIES,
+    capabilities: ["text", "vision", "stream", "tool_call"],
   }),
-  anthropic: Object.freeze({
-    id: "anthropic", name: "Anthropic", protocol: "native", defaultModel: "claude-opus-4-7",
-    models: ["claude-opus-4-7", "claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1-20250805"],
-    capabilities: ["text", "vision", "files", "stream"], timeout: DEFAULT_TIMEOUT_MS, maxRetries: DEFAULT_MAX_RETRIES,
-  }),
-  gemini: Object.freeze({
-    id: "gemini", name: "Google Gemini", protocol: "native", defaultModel: "gemini-2.5-flash",
-    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
-    capabilities: ["text", "vision", "files", "stream"], timeout: DEFAULT_TIMEOUT_MS, maxRetries: DEFAULT_MAX_RETRIES,
-  }),
-  doubao: Object.freeze({
-    id: "doubao", name: "豆包（火山方舟）", protocol: "openai-compatible", baseURL: "https://ark.cn-beijing.volces.com/api/v3",
+  doubao: builtin({
+    id: "doubao", name: "豆包（火山方舟）", baseURL: "https://ark.cn-beijing.volces.com/api/v3",
     defaultModel: "doubao-seed-2-0-pro-260215", models: ["doubao-seed-2-0-mini-260428", "doubao-seed-2-0-lite-260428", "doubao-seed-2-0-pro-260215"],
-    capabilities: ["text", "vision", "stream", "tool_call"], timeout: DEFAULT_TIMEOUT_MS, maxRetries: DEFAULT_MAX_RETRIES,
+    capabilities: ["text", "vision", "stream", "tool_call"],
+  }),
+  deepseek: builtin({
+    id: "deepseek", name: "DeepSeek", baseURL: "https://api.deepseek.com",
+    defaultModel: "deepseek-v4-flash", models: ["deepseek-v4-flash", "deepseek-v4-pro"],
+  }),
+  "mimo-api": builtin({
+    id: "mimo-api", name: "MiMo API", baseURL: "https://api.xiaomimimo.com/v1",
+    defaultModel: "mimo-v2.5", models: ["mimo-v2.5", "mimo-v2.5-pro"],
+  }),
+  "mimo-token-plan": builtin({
+    id: "mimo-token-plan", name: "MiMo Token Plan", baseURL: "https://token-plan-cn.xiaomimimo.com/v1",
+    defaultModel: "mimo-v2.5", models: ["mimo-v2.5", "mimo-v2.5-pro"],
   }),
 });
+
+export const BUILTIN_PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 export class ProviderError extends Error {
   constructor(code, message, details = {}) { super(message); this.name = "ProviderError"; this.code = code; this.details = details; }
 }
 
+export function providerDefinition(provider, options = {}) {
+  const definition = options.definition || PROVIDERS[provider];
+  if (!definition || definition.id !== provider) throw new ProviderError("unknown_provider", providerText(options.t, "errors.unknownProvider", "Unknown AI provider."));
+  return definition;
+}
+
 export function resolveProviderConfig(provider, options = {}) {
   const { apiKey, model, t: translate } = options;
-  const definition = PROVIDERS[provider];
-  if (!definition) throw new ProviderError("unknown_provider", providerText(translate, "errors.unknownProvider", "Unknown AI provider."));
+  const definition = providerDefinition(provider, options);
   if (definition.protocol !== "openai-compatible") throw new ProviderError("not_implemented", providerText(translate, "errors.providerNotImplemented", "{provider} is not connected through the OpenAI-compatible transport.", { provider: definition.name }));
   return { ...definition, apiKey, model: model || definition.defaultModel };
 }
@@ -80,24 +98,24 @@ function modelIds(values) {
 }
 
 /**
- * Combines a provider's built-in and account-discovered catalogue with the
- * user's model selection. A missing or empty `enabledModels` list means that
- * the account has not enabled a chat model yet.
+ * Model discovery is authoritative after the first successful refresh. A
+ * configured model stays visible when it later disappears, but it is not
+ * selectable. Selected models never silently fall back to another default.
  */
 export function resolveSelectableModels(provider, settings = {}, options = {}) {
-  const definition = typeof provider === "string" ? PROVIDERS[provider] : provider;
+  const definition = typeof provider === "string" ? providerDefinition(provider, options) : provider;
   if (!definition) throw new ProviderError("unknown_provider", providerText(options.t, "errors.unknownProvider", "Unknown AI provider."));
-  const requested = modelIds(settings.enabledModels);
-  const availableModels = modelIds([
-    ...(definition.models || []),
-    ...(settings.discoveredModels || []),
-    settings.model,
-    ...requested,
-  ]);
-  const enabledModels = requested;
-  const preferredDefault = String(settings.model || definition.defaultModel || "").trim();
-  const defaultModel = enabledModels.includes(preferredDefault) ? preferredDefault : enabledModels[0] || "";
-  return { availableModels, enabledModels, defaultModel };
+  const discoveredModels = modelIds(settings.discoveredModels);
+  const catalogModels = settings.modelCatalogUpdatedAt ? discoveredModels : modelIds(definition.models);
+  const configuredModels = modelIds(settings.enabledModels);
+  const availableModels = modelIds([...catalogModels, ...configuredModels, settings.model]);
+  const catalogSet = new Set(catalogModels);
+  const unavailableModels = settings.modelCatalogUpdatedAt ? configuredModels.filter(model => !catalogSet.has(model)) : [];
+  const unavailableSet = new Set(unavailableModels);
+  const enabledModels = configuredModels.filter(model => !unavailableSet.has(model));
+  const preferredDefault = String(settings.model || "").trim();
+  const defaultModel = enabledModels.includes(preferredDefault) ? preferredDefault : "";
+  return { availableModels, catalogModels, configuredModels, enabledModels, unavailableModels, defaultModel };
 }
 
 export async function listProviderModels(provider, options = {}) {
@@ -106,13 +124,13 @@ export async function listProviderModels(provider, options = {}) {
     const page = await client.models.list();
     return filterAccountModels(page?.data || []);
   } catch (error) {
-    throw normalizeProviderError(provider, error, options.t);
+    throw normalizeProviderError(provider, error, options.t, options.definition);
   }
 }
 
-export function normalizeProviderError(provider, error, translate) {
+export function normalizeProviderError(provider, error, translate, explicitDefinition) {
   if (error instanceof ProviderError) return error;
-  const definition = PROVIDERS[provider];
+  const definition = explicitDefinition || PROVIDERS[provider];
   const providerName = definition?.name || providerText(translate, "errors.providerFallbackName", "provider");
   const status = error?.status ?? error?.statusCode ?? error?.httpStatusCode;
   const details = { status, requestId: error?.request_id || error?.requestId, providerCode: error?.code };

@@ -19,18 +19,13 @@ pnpm install
 pnpm dev
 ```
 
-也可使用 `start-kairos.cmd` 或 `start-kairos.ps1` 启动。环境自检：
-
-```powershell
-pnpm doctor
-```
+环境自检可运行 `pnpm doctor`。
 
 ## 常用命令
 
 | 命令 | 用途 |
 | --- | --- |
-| `pnpm dev` | 启动 Electron 开发环境 |
-| `pnpm dev:vue` | 启动 Vue/Vite 开发模式 |
+| `pnpm dev` | 同步生成资源并启动 Vite + Electron 开发环境 |
 | `pnpm check` | 版本、国际化、类型与测试检查 |
 | `pnpm typecheck` | Vue/TypeScript 类型检查 |
 | `pnpm build:renderer` | 构建渲染进程资源 |

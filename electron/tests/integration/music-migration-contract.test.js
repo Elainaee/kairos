@@ -52,8 +52,8 @@ test("Music migration contract: original motion timing and triggers remain expli
     "source submenu expansion keeps the source 300ms easing");
   assert.match(html, /\.playlist-tilted-inner\s*\{[\s\S]*?transition:\s*transform \.18s ease,box-shadow \.18s ease/,
     "playlist card tilt keeps the source 180ms transition");
-  assert.match(html, /\.netease-history-indicator\s*\{[\s\S]*?transition:\s*transform \.24s cubic-bezier\(\.2,\.8,\.2,1\),width \.24s cubic-bezier\(\.2,\.8,\.2,1\)/,
-    "NetEase history indicator keeps the source 240ms transition");
+  assert.match(html, /\.netease-history-indicator,\.netease-download-indicator\s*\{[\s\S]*?transition:\s*transform \.24s cubic-bezier\(\.2,\.8,\.2,1\),width \.24s cubic-bezier\(\.2,\.8,\.2,1\)/,
+    "NetEase history and Download indicators keep the source 240ms transition");
   assert.match(html, /\.kairos-toast\s*\{[\s\S]*?transition:\s*opacity \.18s ease,transform \.18s ease/,
     "toast enter and leave retain the source 180ms transition");
   assert.match(html, /requestAnimationFrame\(\(\) => item\.classList\.add\('is-visible'\)\);[\s\S]*?setTimeout\(\(\) => \{[\s\S]*?setTimeout\(\(\) => item\.remove\(\), 220\);[\s\S]*?\}, 2600\);/,
@@ -112,6 +112,17 @@ test("Music migration contract: Vue keeps the source controller alive across rou
     "the exact original Music source document must be the default route while retaining a diagnostic candidate");
   assert.match(view, /<EmbeddedLegacyView v-if="useSourceDocument" page="music" \/>[\s\S]*?<NativeMusicCandidate v-else \/>/,
     "the default /music route must preserve the source DOM and CSS in an isolated Vue-managed document");
+});
+
+test("Music migration contract: route locale sync preserves dynamic player metadata", async () => {
+  const player = await source("app/shell/player/music-player.js");
+
+  assert.doesNotMatch(player, /data-i18n="player\.(?:chooseSong|localAmbience)"/,
+    "dynamic title and artist nodes must not be overwritten by static DOM translation");
+  assert.match(player, /const syncTrackCopy = track => \{[\s\S]*?els\.title\.textContent = track \?[\s\S]*?els\.artist\.textContent = track \?/,
+    "player metadata should have one source-aware rendering path");
+  assert.match(player, /window\.addEventListener\('kairos:locale-changed',[\s\S]*?translatePlayer\(\);[\s\S]*?syncTrackCopy\(currentTrack\(\)\);/,
+    "locale synchronization should re-render the current track instead of restoring placeholders");
 });
 
 test("Music migration contract: the unrouted Vue candidate starts from original Music source", async () => {

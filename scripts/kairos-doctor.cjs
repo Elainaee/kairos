@@ -39,7 +39,7 @@ row("Electron exe", existsSync(localElectronExe) ? localElectronExe : "");
 console.log("");
 
 if (existsSync(localElectronCmd) || existsSync(localElectronExe)) {
-  console.log("OK: local Electron is installed. Use start-kairos.cmd, start-kairos.ps1, npm start, or pnpm dev.");
+  console.log("OK: local Electron is installed. Run pnpm dev.");
 } else {
-  console.log("Needs install: local Electron is missing. Run pnpm install, or npm install if pnpm is unavailable.");
+  console.log("Needs install: local Electron is missing. Run pnpm install.");
 }

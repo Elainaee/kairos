@@ -132,7 +132,7 @@ body[data-embedded="true"] .music-root { height: 100vh; }
   transition: max-height .3s cubic-bezier(.2,.8,.2,1);
 }
 .music-submenu[data-state="open"] .music-submenu-list {
-  max-height: 150px;
+  max-height: 190px;
 }
 .music-source-list{display:grid;gap:0}
 .music-submenu[draggable="true"]{cursor:grab}
@@ -435,26 +435,42 @@ body[data-page="music"] button.music-sidebar-account[aria-expanded="true"]:not(.
 .playlist-selection-text{font-size:13px;font-weight:750}
 .playlist-selection-actions{display:flex;gap:8px}
 .playlist-selection-actions button{height:30px;padding:0 11px;border:1px solid rgba(61,59,46,.13);border-radius:7px;background:#fff;color:var(--sidebar-fg);font:800 12px/1 Outfit,system-ui,sans-serif;cursor:pointer}
+.playlist-selection-actions button:hover{background:transparent;color:var(--primary);border-color:var(--primary);box-shadow:none}
+.playlist-selection-actions button:focus-visible{outline:2px solid var(--ring);outline-offset:2px;background:transparent;color:var(--primary);border-color:var(--primary);box-shadow:none}
+.playlist-selection-actions button:disabled{cursor:default;opacity:.5}
+.playlist-selection-actions button:disabled:hover,.playlist-selection-actions button:disabled:focus-visible{background:#fff;color:var(--sidebar-fg);border-color:rgba(61,59,46,.13);box-shadow:none;outline:0}
 .playlist-selection-actions .danger{border-color:rgba(186,26,26,.18);color:#ba1a1a}
 .playlist-detail-table tbody tr .track-play-cell .track-select-button{display:inline-grid!important;place-items:center!important;width:16px!important;height:16px!important;min-width:16px!important;max-width:16px!important;min-height:16px!important;max-height:16px!important;padding:0!important;border:1px solid #d6d1c6!important;border-radius:2px!important;background:#fff!important;background-color:#fff!important;color:#fff!important;box-shadow:none!important;cursor:pointer;appearance:none!important;-webkit-appearance:none!important;transition:background .12s,border-color .12s}
 .track-select-button .checkmark{font-family:"Material Symbols Outlined";font-size:13px;line-height:1;opacity:0;transform:translateY(-.5px);font-variation-settings:"FILL" 1,"wght" 700,"GRAD" 0,"opsz" 20}
 .playlist-detail-table tbody tr .track-play-cell .track-select-button[aria-pressed="true"]{background:var(--primary,#d1633c)!important;background-color:var(--primary,#d1633c)!important;border-color:var(--primary,#d1633c)!important}
 .track-select-button[aria-pressed="true"] .checkmark{opacity:1}
+.playlist-detail-table.netease-results:not(.is-selecting) tbody tr .track-play-cell .track-select-button{display:none!important}
 .playlist-detail-tabs{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:10px;border-bottom:1px solid rgba(61,59,46,.08)}
 .playlist-detail-tab{position:relative;height:38px;display:inline-flex;align-items:center;color:var(--sidebar-fg);font-size:14px;font-weight:850}
 .playlist-detail-tab::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:#ff4761}
 .playlist-detail-tab-row{display:flex;align-items:center;height:38px}
-.netease-history-tabs{position:relative;display:inline-flex;align-items:center;align-self:stretch;gap:18px;height:38px;margin-left:22px;padding:0;border:0;background:transparent}
-.netease-history-tab{position:relative;height:38px;padding:0;border:0;border-radius:0;background:transparent;color:var(--sidebar-muted);font:850 14px/1 Outfit,system-ui,sans-serif;cursor:pointer;transition:color .18s ease}
-.netease-history-tab:hover,.netease-history-tab:focus,.netease-history-tab:active{background:transparent!important;box-shadow:none!important;outline:0}
-body[data-page="music"] .netease-history-tabs button.netease-history-tab:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
-body[data-page="music"] .netease-history-tabs button.netease-history-tab:focus:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
-body[data-page="music"] .netease-history-tabs button.netease-history-tab:active:not(.kairos-create):not(.habit-primary):not(.play):not(.send){background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var(--sidebar-muted)!important;transform:none!important}
-body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pressed="true"]:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
-body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pressed="true"]:focus:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
-body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pressed="true"]:active:not(.kairos-create):not(.habit-primary):not(.play):not(.send){color:var(--sidebar-fg)!important}
-.netease-history-tab[aria-pressed="true"]{color:var(--sidebar-fg)}
-.netease-history-indicator{position:absolute;left:0;bottom:-1px;width:0;height:2px;border-radius:2px;background:#ff4761;transform:translateX(0);transition:transform .24s cubic-bezier(.2,.8,.2,1),width .24s cubic-bezier(.2,.8,.2,1)}
+.netease-history-tabs,.netease-download-tabs{position:relative;display:inline-flex;align-items:center;align-self:stretch;gap:18px;height:38px;margin-left:22px;padding:0;border:0;background:transparent}
+.netease-history-tab,.netease-download-tab{position:relative;height:38px;padding:0;border:0;border-radius:0!important;background:transparent;color:var(--text-muted,var(--sidebar-muted));font:850 14px/1 Outfit,system-ui,sans-serif;cursor:pointer;transition:color .18s ease}
+.netease-history-tab:hover,.netease-download-tab:hover{background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var(--primary)!important;transform:none!important}
+.netease-history-tab[aria-selected="true"],.netease-download-tab[aria-selected="true"]{color:var(--text-strong,var(--sidebar-fg))!important}
+.netease-history-tab:focus-visible,.netease-download-tab:focus-visible{outline:2px solid var(--ring)!important;outline-offset:2px!important;background:transparent!important;box-shadow:none!important;color:var(--primary)!important}
+.netease-history-indicator,.netease-download-indicator{position:absolute;left:0;bottom:-1px;width:0;height:2px;border-radius:2px;background:var(--primary);transform:translateX(0);transition:transform .24s cubic-bezier(.2,.8,.2,1),width .24s cubic-bezier(.2,.8,.2,1)}
+.netease-download-head{display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;gap:10px;margin-top:20px;border-bottom:1px solid var(--border,rgba(61,59,46,.08))}
+.netease-download-head .playlist-detail-title{flex:0 1 auto}
+.netease-download-tabs{margin-left:0}
+.netease-download-panel.is-empty{display:grid;min-height:calc(100vh - 320px);place-items:center}.netease-download-panel.is-empty .netease-empty{margin:0;text-align:center}
+.netease-download-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.netease-download-table th{height:38px;padding:0 10px;border-bottom:1px solid var(--border,rgba(61,59,46,.08));color:var(--text-muted,var(--sidebar-muted));font-weight:650;text-align:left}
+.netease-download-table td{min-height:60px;padding:9px 10px;border-bottom:1px solid rgba(61,59,46,.055);vertical-align:middle}
+.netease-download-table tbody tr{transition:background .14s ease}.netease-download-table tbody tr:hover{background:rgba(27,28,24,.035)}
+.netease-download-table tbody tr .track-row-menu-trigger{opacity:0}.netease-download-table tbody tr:hover .track-row-menu-trigger,.netease-download-table tbody tr:focus-within .track-row-menu-trigger,.netease-download-table .track-row-menu-trigger[aria-expanded="true"]{opacity:1;color:var(--primary)!important}
+.netease-download-track{display:flex;align-items:center;gap:10px;min-width:0}.netease-download-cover{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;overflow:hidden;border-radius:6px;background:var(--surface-subtle,#ece7d9);color:var(--text-muted)}.netease-download-cover img{width:100%;height:100%;object-fit:cover}.netease-download-copy{display:grid;min-width:0;gap:3px}.netease-download-copy strong,.netease-download-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.netease-download-copy strong{color:var(--text-strong,var(--sidebar-fg));font-weight:750}.netease-download-copy span{color:var(--text-muted,var(--sidebar-muted));font-size:11px;font-weight:600}
+.netease-download-status{display:grid;gap:3px;color:var(--text-muted,var(--sidebar-muted));font-size:12px;font-weight:650}.netease-download-status[data-status="failed"]{color:var(--status-danger,#ba1a1a)}.netease-download-status[data-status="completed"]{color:var(--status-success,#477054)}
+.netease-download-progress{display:grid;min-width:130px;gap:5px}.netease-download-progress-top{display:flex;justify-content:space-between;gap:8px;color:var(--text-muted,var(--sidebar-muted));font-size:11px;font-weight:650}.netease-download-progress-bar{height:5px;overflow:hidden;border-radius:999px;background:var(--muted)}.netease-download-progress-bar i{display:block;height:100%;border-radius:inherit;background:var(--primary);transition:width .18s ease}.netease-download-progress.is-indeterminate i{width:34%!important;animation:neteaseDownloadPulse 1.15s ease-in-out infinite}@keyframes neteaseDownloadPulse{50%{transform:translateX(190%)}}@media(prefers-reduced-motion:reduce){.netease-download-progress.is-indeterminate i{animation:none}}
+.netease-download-action{width:44px;text-align:right!important;white-space:nowrap}.netease-download-table.is-downloading .netease-download-action{width:92px}.netease-download-action>button{min-height:32px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text-muted);font:750 12px/1 Outfit,system-ui,sans-serif;cursor:pointer}.netease-download-action>button:hover{background:transparent!important;box-shadow:none!important;border-color:var(--primary)!important;color:var(--primary)!important}.netease-download-action>button:focus-visible{outline:2px solid var(--ring)!important;outline-offset:2px!important;background:transparent!important;color:var(--primary)!important}.netease-download-action>button.danger{border-color:color-mix(in oklch,var(--status-danger) 38%,var(--border));color:var(--status-danger)}
+.netease-download-table.is-downloading tbody tr:hover .track-number,.netease-download-table.is-downloading tbody tr:focus-within .track-number{opacity:1}
+.netease-download-table .track-main{display:grid;align-items:center;gap:3px;line-height:1.1}.netease-download-table .track-name,.netease-download-table .track-artist{display:block}
+.netease-download-play{position:relative;display:inline-grid;width:30px;height:30px;place-items:center;border:0!important;background:transparent!important;box-shadow:none!important;color:var(--text-muted);cursor:pointer}.netease-download-play .material-symbols-outlined{position:absolute;opacity:0}.netease-download-table tbody tr:hover .netease-download-play .track-number,.netease-download-play:focus-visible .track-number{opacity:0}.netease-download-table tbody tr:hover .netease-download-play .material-symbols-outlined,.netease-download-play:focus-visible .material-symbols-outlined{opacity:1}.netease-download-play:hover{color:var(--primary)!important}.netease-download-play:focus-visible{outline:2px solid var(--ring)!important;outline-offset:2px!important;color:var(--primary)!important}.netease-download-play[disabled]{cursor:not-allowed;opacity:.5}.netease-download-missing{color:var(--status-warning,#a36316);font-size:11px;font-weight:700}
 .playlist-input-group{display:flex;align-items:center;width:260px;height:34px;border:0;border-radius:0;background:transparent;color:var(--sidebar-muted);box-shadow:none}
 .playlist-input-group:focus-within{box-shadow:none}
 .playlist-input-addon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:100%;color:var(--sidebar-muted);flex:0 0 32px}
@@ -482,16 +498,16 @@ body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pr
 .track-index{width:44px;text-align:center!important;color:#8f8a7d}
 .track-play-cell{position:relative;width:44px;text-align:center!important;color:#8f8a7d}
 .track-number{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;color:#8f8a7d;font-weight:650}
-.playlist-detail-table tbody tr .track-play-cell button.track-play-button{position:absolute;left:50%;top:50%;display:grid;width:34px;height:34px;padding:0!important;place-items:center;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#27364a!important;opacity:0;transform:translate(-50%,-50%) scale(.92);cursor:pointer;appearance:none;-webkit-appearance:none;transition:opacity .14s ease,transform .14s ease,color .14s ease,filter .14s ease}
-.track-play-button svg{width:22px;height:22px;display:block;overflow:visible;filter:none;transition:filter .14s ease,transform .14s ease}
+.playlist-detail-table tbody tr .track-play-cell button.track-play-button{position:absolute;left:50%;top:50%;display:grid;width:34px;height:34px;padding:0!important;place-items:center;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#27364a!important;opacity:0;transform:translate(-50%,-50%);cursor:pointer;appearance:none;-webkit-appearance:none;transition:opacity .14s ease,color .14s ease}
+.track-play-button svg{width:22px;height:22px;display:block;overflow:visible;filter:none}
 .track-pause-icon{display:none!important}
 .track-play-button[data-state="pause"] .track-play-icon{display:none!important}
 .track-play-button[data-state="pause"] .track-pause-icon{display:block!important}
 .playlist-detail-table tbody tr:hover .track-number,.playlist-detail-table tbody tr:focus-within .track-number{opacity:0}
-.playlist-detail-table tbody tr:hover .track-play-cell button.track-play-button,.playlist-detail-table tbody tr:focus-within .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%) scale(1)}
+.playlist-detail-table tbody tr:hover .track-play-cell button.track-play-button,.playlist-detail-table tbody tr:focus-within .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%);color:var(--primary)!important}
 .playlist-detail-table tbody tr.is-playing .track-number{opacity:0}
-.playlist-detail-table tbody tr.is-playing .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%) scale(1)}
-.playlist-detail-table tbody tr .track-play-cell button.track-play-button:hover,.playlist-detail-table tbody tr .track-play-cell button.track-play-button:focus-visible{border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:#162236!important}
+.playlist-detail-table tbody tr.is-playing .track-play-cell button.track-play-button{opacity:1!important;transform:translate(-50%,-50%)}
+.playlist-detail-table tbody tr .track-play-cell button.track-play-button:hover{border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;color:var(--primary)!important}
 .playlist-detail-table tbody tr.is-unavailable{opacity:.58}
 .playlist-detail-table tbody tr.is-unavailable .track-play-cell button.track-play-button{cursor:not-allowed;color:#9a9386!important}
 .playlist-detail-table tbody tr.is-unavailable .track-artist,.playlist-detail-table tbody tr.is-unavailable .track-duration{color:#a34832}
@@ -509,10 +525,11 @@ body[data-page="music"] .netease-history-tabs button.netease-history-tab[aria-pr
 .track-like-button[aria-pressed="true"]{color:#ff4761}.track-like-button[aria-pressed="true"] .material-symbols-outlined{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
 .track-actions{width:44px;text-align:right!important}
 .track-row-menu-wrap{position:relative;display:inline-block}
-.track-row-menu-trigger{display:inline-grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#827c70;cursor:pointer;opacity:0;transition:opacity .14s,background .14s,color .14s}
-.playlist-detail-table tbody tr:hover .track-row-menu-trigger,.track-row-menu-trigger[aria-expanded="true"]{opacity:1}
-.track-row-menu-trigger:hover{background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var(--sidebar-fg)}
+.track-row-menu-trigger{display:inline-grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#827c70;cursor:pointer;opacity:0;transition:opacity .14s,color .14s}
+.playlist-detail-table tbody tr:hover .track-row-menu-trigger,.playlist-detail-table tbody tr:focus-within .track-row-menu-trigger,.track-row-menu-trigger[aria-expanded="true"]{opacity:1;color:var(--primary)!important}
+.track-row-menu-trigger:hover{background:transparent!important;background-color:transparent!important;box-shadow:none!important;color:var(--primary)}
 .track-like-button:hover,.track-like-button:focus-visible,.track-row-menu-trigger:hover,.track-row-menu-trigger:focus-visible,.playlist-manage-trigger:hover,.playlist-manage-trigger:focus-visible{background:transparent!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;transform:none!important}
+.track-like-button:hover{color:var(--primary)!important}
 body[data-page="music"] .playlist-detail-table button.track-play-button:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
 body[data-page="music"] .playlist-detail-table button.track-play-button:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
 body[data-page="music"] button.track-like-button:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
@@ -522,7 +539,10 @@ body[data-page="music"] button.track-row-menu-trigger:focus-visible:not(.kairos-
 body[data-page="music"] button.playlist-manage-trigger:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
 body[data-page="music"] button.playlist-manage-trigger:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send){background:transparent!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;transform:none!important}
 body[data-page="music"] .playlist-detail-table button.track-play-button:hover:not(.kairos-create):not(.habit-primary):not(.play):not(.send),
-body[data-page="music"] .playlist-detail-table button.track-play-button:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send){transform:translate(-50%,-50%) scale(1)!important}
+body[data-page="music"] .playlist-detail-table button.track-play-button:focus-visible:not(.kairos-create):not(.habit-primary):not(.play):not(.send){transform:translate(-50%,-50%)!important}
+.playlist-detail-table tbody tr .track-play-cell button.track-play-button:focus-visible,
+.track-like-button:focus-visible,
+.track-row-menu-trigger:focus-visible{outline:2px solid var(--ring)!important;outline-offset:2px!important;color:var(--primary)!important}
 .track-row-menu-trigger .material-symbols-outlined{font-size:20px;width:20px}
 .track-row-menu{position:absolute;right:0;top:calc(100% + 5px);z-index:30;min-width:178px;padding:5px;border:1px solid rgba(61,59,46,.12);border-radius:8px;background:rgba(255,255,255,.97);box-shadow:0 14px 34px rgba(27,28,24,.16);backdrop-filter:blur(10px)}
 .track-row-menu[hidden]{display:none}
@@ -531,6 +551,22 @@ body[data-page="music"] .playlist-detail-table button.track-play-button:focus-vi
 .track-row-menu button.danger{color:#ba1a1a}.track-row-menu button.danger:hover{background:rgba(186,26,26,.08)}
 .track-row-menu .material-symbols-outlined{font-size:17px;width:17px}
 .track-duration{width:74px;color:#8f8a7d}
+.netease-download-state{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted,var(--sidebar-muted));font-size:11px;font-weight:650;flex:0 1 auto}
+.netease-download-state[data-status="failed"]{color:var(--destructive,#ba1a1a)}
+.netease-download-state[data-status="completed"]{color:var(--primary,#d1633c)}
+.netease-download-dialog{width:min(440px,calc(100vw - 32px));margin:auto;padding:0;border:1px solid var(--border,rgba(61,59,46,.16));border-radius:18px;background:var(--surface-raised,#fffdf7);color:var(--text-strong,var(--sidebar-fg));box-shadow:0 18px 48px rgba(27,28,24,.16)}
+.netease-download-dialog::backdrop{background:rgba(27,28,24,.28)}
+.netease-download-dialog form{padding:22px}
+.netease-download-dialog h2{margin:0;color:var(--text-strong,var(--sidebar-fg));font-size:18px;line-height:1.25}
+.netease-download-dialog p{margin:7px 0 0;color:var(--text-muted,var(--sidebar-muted));font-size:13px;line-height:1.5}
+.netease-download-options{display:grid;gap:8px;margin-top:18px}
+.netease-download-quality{display:flex;align-items:flex-start;gap:10px;width:100%;padding:12px;border:1px solid var(--border,rgba(61,59,46,.16));border-radius:10px;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.netease-download-quality:hover,.netease-download-quality:focus-visible{border-color:var(--primary,#d1633c);background:transparent;box-shadow:none}
+.netease-download-quality[aria-pressed="true"]{border-color:var(--primary,#d1633c);background:var(--secondary,rgba(209,99,60,.1))}
+.netease-download-quality .material-symbols-outlined{margin-top:1px;font-size:19px;color:var(--primary,#d1633c)}
+.netease-download-quality-copy{display:grid;gap:3px}.netease-download-quality-copy strong{font-size:13px}.netease-download-quality-copy span{color:var(--text-muted,var(--sidebar-muted));font-size:12px;line-height:1.4}
+.netease-download-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.netease-download-footer button{height:34px;padding:0 13px;border:1px solid var(--border,rgba(61,59,46,.16));border-radius:8px;background:transparent;color:var(--text-strong,var(--sidebar-fg));font:700 12px/1 Outfit,system-ui,sans-serif;cursor:pointer}.netease-download-footer button:hover,.netease-download-footer button:focus-visible{border-color:var(--primary,#d1633c);background:transparent;box-shadow:none}.netease-download-footer .netease-download-submit{border-color:var(--primary,#d1633c);background:var(--primary,#d1633c);color:var(--primary-foreground,#fff)}
+.netease-results:not(.is-selecting) .track-select-button{display:none!important}.netease-results.is-selecting .track-number,.netease-results.is-selecting .track-play-button{display:none!important}.netease-results.is-selecting .track-like,.netease-results.is-selecting .track-actions{visibility:hidden}
 body[data-page="music"] .netease-search button#neteaseSearchButton{all:unset!important;position:absolute!important;right:9px!important;left:auto!important;top:50%!important;transform:translateY(-50%)!important;z-index:2!important;display:grid!important;place-items:center!important;width:24px!important;height:24px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;filter:none!important;color:#1f2a27!important;cursor:pointer!important;appearance:none!important;-webkit-appearance:none!important;box-sizing:border-box!important}
 body[data-page="music"] .netease-search button#neteaseSearchButton:hover,
 body[data-page="music"] .netease-search button#neteaseSearchButton:focus,
@@ -635,6 +671,10 @@ if (new URLSearchParams(location.search).get('embed') === '1' && window.parent !
                 <button class="music-item music-sub-item netease-sub-item" data-netease-view="history" aria-checked="false">
                   <span class="material-symbols-outlined">history</span>
                   <span data-i18n="music.history">History</span>
+                </button>
+                <button class="music-item music-sub-item netease-sub-item" data-netease-view="download" aria-checked="false">
+                  <span class="material-symbols-outlined">download</span>
+                  <span data-i18n="music.download">Download</span>
                 </button>
               </div>
             </div>
@@ -870,6 +910,10 @@ let neteaseStatusRequestId = 0;
 let neteaseAccountRequestId = 0;
 let neteaseLikedIds = new Set();
 let neteaseLikedIdsLoaded = false;
+const neteaseDownloadTasks = new Map();
+let neteaseDownloadTaskList = [];
+let neteaseDownloadTab = 'downloaded';
+let neteaseDownloadUnsubscribe = null;
 const getDesktopMusic = () => {
   if (window.kairosDesktop?.music) return window.kairosDesktop.music;
   try {
@@ -1071,6 +1115,7 @@ const formatTrackDuration = seconds => {
 
 const musicCount = (key, count, fallback) => trPlural(`music.${key}`, Number(count) || 0, fallback);
 const likedAriaLabel = liked => liked ? tr('music.removeFromLiked', {}, 'Remove from liked songs') : tr('player.addCurrentToLiked', {}, 'Add to liked songs');
+const likedMenuLabel = liked => liked ? tr('music.unliked', {}, 'Unliked') : tr('music.liked', {}, 'Liked');
 const trackPlayIcon = () => '<svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg>';
 
 const setNeteaseStatus = (message, ready = false) => {
@@ -1123,7 +1168,10 @@ const renderNeteaseSidebarProfile = profile => {
   if (serviceIcon) serviceIcon.hidden = !hasProfile;
   if (chevron) chevron.hidden = !hasProfile;
   if (!hasProfile) {
-    if (neteaseSidebarName) neteaseSidebarName.textContent = tr('music.notSignedIn', {}, 'Not signed in');
+    if (neteaseSidebarName) {
+      neteaseSidebarName.setAttribute('data-i18n', 'music.notSignedIn');
+      neteaseSidebarName.textContent = tr('music.notSignedIn', {}, 'Not signed in');
+    }
     if (neteaseSidebarAvatar) {
       neteaseSidebarAvatar.hidden = true;
       neteaseSidebarAvatar.removeAttribute('src');
@@ -1131,7 +1179,10 @@ const renderNeteaseSidebarProfile = profile => {
     if (neteaseSidebarAvatarFallback) neteaseSidebarAvatarFallback.hidden = false;
     return;
   }
-  if (neteaseSidebarName) neteaseSidebarName.textContent = profile.nickname || tr('music.neteaseCloud', {}, 'NetEase Cloud');
+  if (neteaseSidebarName) {
+    neteaseSidebarName.removeAttribute('data-i18n');
+    neteaseSidebarName.textContent = profile.nickname || tr('music.neteaseCloud', {}, 'NetEase Cloud');
+  }
   const avatarUrl = String(profile.avatarUrl || '').trim();
   if (neteaseSidebarAvatar) {
     neteaseSidebarAvatar.hidden = !avatarUrl;
@@ -1217,6 +1268,305 @@ const updateNeteasePlaybackRows = (override = null) => {
 
 const neteaseNumericId = song => String(song?.neteaseId || song?.id || '').replace(/^netease:/, '');
 const isNeteaseSongLiked = song => song?.liked === true || neteaseLikedIds.has(neteaseNumericId(song));
+const neteaseDownloadTaskFor = song => neteaseDownloadTasks.get(neteaseNumericId(song));
+const neteaseDownloadStageText = stage => {
+  if (stage === 'resolving') return tr('music.downloadPreparing', {}, 'Preparing download');
+  if (stage === 'downloading') return tr('music.downloadInProgress', {}, 'Downloading');
+  if (stage === 'tagging') return tr('music.downloadTagging', {}, 'Writing song details');
+  if (stage === 'importing') return tr('music.downloadImporting', {}, 'Adding to your library');
+  return tr('music.downloadFailed', {}, 'Download failed');
+};
+const neteaseDownloadFailureText = task => {
+  const reason = task?.message || tr('legacy.tryAgain', {}, 'Please try again.');
+  const stage = neteaseDownloadStageText(task?.stage);
+  return tr('music.downloadFailedAt', { stage, reason }, `Download failed while ${stage}: ${reason}`);
+};
+const neteaseDownloadTaskText = task => {
+  if (!task) return '';
+  if (task.status === 'queued' || task.status === 'resolving') return tr('music.downloadPreparing', {}, 'Preparing download');
+  if (task.status === 'downloading') {
+    if (task.totalBytes > 0) return tr('music.downloadProgress', { progress: `${Math.min(100, Math.round((task.receivedBytes || 0) / task.totalBytes * 100))}%` }, `${Math.min(100, Math.round((task.receivedBytes || 0) / task.totalBytes * 100))}% downloaded`);
+    return tr('music.downloadInProgress', {}, 'Downloading');
+  }
+  if (task.status === 'tagging') return tr('music.downloadTagging', {}, 'Writing metadata');
+  if (task.status === 'importing') return tr('music.downloadImporting', {}, 'Adding to library');
+  if (task.status === 'completed') return task.warning
+    ? tr('music.downloadCompletedWithWarnings', {}, 'Downloaded; some song details could not be written.')
+    : task.downgraded
+    ? tr('music.downloadQualityDowngraded', { quality: task.resolvedQuality || tr('music.downloadStandard', {}, 'Standard'), requested: task.requestedQuality || tr('music.downloadStandard', {}, 'Standard') }, 'Downloaded at the best available quality')
+    : tr('music.downloadCompleted', {}, 'Downloaded');
+  if (task.status === 'cancelled') return tr('music.downloadCancelled', {}, 'Download cancelled');
+  return neteaseDownloadFailureText(task);
+};
+const updateNeteaseDownloadRows = () => {
+  neteaseResults?.querySelectorAll('tbody tr[data-netease-id]').forEach(row => {
+    const state = row.querySelector('.netease-download-state');
+    if (!state) return;
+    const task = neteaseDownloadTasks.get(String(row.dataset.neteaseId || ''));
+    state.dataset.status = task?.status || '';
+    state.textContent = neteaseDownloadTaskText(task);
+    state.hidden = !task;
+  });
+};
+const formatDownloadBytes = value => {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let amount = bytes / 1024;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; }
+  return `${amount >= 10 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
+};
+const formatDownloadDate = value => {
+  const date = new Date(value || '');
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(document.documentElement.lang || undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+};
+const downloadTaskStatusText = task => {
+  if (task.status === 'queued') return task.message === 'download_restored' ? tr('music.downloadRestored', {}, 'Restoring download…') : tr('music.downloadQueued', {}, 'Queued');
+  if (task.status === 'failed') return tr('music.downloadFailedState', {}, 'Failed');
+  return neteaseDownloadTaskText(task);
+};
+const renderDownloadCover = (node, coverUrl) => {
+  node.replaceChildren();
+  if (coverUrl) {
+    const image = document.createElement('img');
+    image.alt = '';
+    image.src = coverUrl;
+    node.append(image);
+  } else {
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-outlined';
+    icon.textContent = 'music_note';
+    node.append(icon);
+  }
+};
+const createDownloadMoreAction = ({ label, title, onSelect }) => {
+  const cell = document.createElement('td');
+  cell.className = 'track-actions netease-download-action';
+  const wrap = document.createElement('span');
+  wrap.className = 'track-row-menu-wrap';
+  const trigger = document.createElement('button');
+  trigger.className = 'track-row-menu-trigger';
+  trigger.type = 'button';
+  trigger.setAttribute('aria-label', tr('music.moreActions', {}, 'More actions'));
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.innerHTML = '<span class="material-symbols-outlined">more_horiz</span>';
+  const menu = document.createElement('span');
+  menu.className = 'track-row-menu';
+  menu.hidden = true;
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'danger';
+  item.innerHTML = '<span class="material-symbols-outlined">delete</span><span></span>';
+  item.querySelector('span:last-child').textContent = label;
+  trigger.addEventListener('click', event => { event.stopPropagation(); document.querySelectorAll('.track-row-menu').forEach(other => { if (other !== menu) other.hidden = true; }); menu.hidden = !menu.hidden; trigger.setAttribute('aria-expanded', String(!menu.hidden)); });
+  item.addEventListener('click', async event => { event.stopPropagation(); menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); await onSelect(title); });
+  menu.append(item); wrap.append(trigger, menu); cell.append(wrap);
+  return cell;
+};
+const downloadedNeteaseTracks = state => (Array.isArray(state?.tracks) ? state.tracks : [])
+  .filter(track => track.source === 'netease-download')
+  .sort((left, right) => String(right.downloadedAt || right.addedAt || '').localeCompare(String(left.downloadedAt || left.addedAt || '')));
+const playDownloadedTrack = async trackId => {
+  const tracks = downloadedNeteaseTracks(musicState).filter(track => track.available !== false);
+  const target = tracks.find(track => track.id === trackId);
+  const desktopMusic = getDesktopMusic();
+  if (!target) return;
+  if (playbackState.currentTrackId === target.id && playbackState.playing) {
+    playbackState = { currentTrackId: target.id, playing: false };
+    if (desktopMusic?.updatePlayback) musicState = await desktopMusic.updatePlayback({ currentTrackId: target.id, playing: false });
+    notifyMusicPlayer({ currentTrackId: target.id, playing: false });
+    return;
+  }
+  const queueTrackIds = tracks.map(track => track.id);
+  if (desktopMusic?.updatePlayback) musicState = await desktopMusic.updatePlayback({ queueTrackIds, currentTrackId: target.id, playing: true, mode: 'sequence' });
+  playbackState = { currentTrackId: target.id, playing: true };
+  notifyMusicPlayer(localPlaybackDetail({ queueTrackIds, currentTrackId: target.id, playing: true, mode: 'sequence' }));
+};
+const renderNeteaseDownloadPage = async () => {
+  const api = getDesktopNetease();
+  const desktopMusic = getDesktopMusic();
+  if (!api?.getDownloadState || !neteaseAccountPanel || !neteaseResults) return;
+  const requestId = ++neteaseAccountRequestId;
+  setNeteaseSearchVisible(false);
+  neteaseAccountPanel.innerHTML = '<div class="netease-download-head"><h1 class="playlist-detail-title"></h1><div class="netease-download-tabs" role="tablist"></div></div>';
+  neteaseAccountPanel.querySelector('.playlist-detail-title').textContent = tr('music.download', {}, 'Download');
+  neteaseResults.innerHTML = renderSongRowsLoading(tr('music.downloadInProgress', {}, 'Downloading…'));
+  try {
+    const [downloadState, localState] = await Promise.all([api.getDownloadState(), desktopMusic?.getState?.()]);
+    if (neteaseActiveView !== 'download' || requestId !== neteaseAccountRequestId) return;
+    if (localState) musicState = localState;
+    neteaseDownloadTaskList = Array.isArray(downloadState?.tasks) ? downloadState.tasks : [];
+    neteaseDownloadTasks.clear();
+    neteaseDownloadTaskList.forEach(task => neteaseDownloadTasks.set(String(task.songId), task));
+    const tabs = neteaseAccountPanel.querySelector('.netease-download-tabs');
+    const panelId = 'neteaseDownloadResults';
+    const tabDefs = [['downloaded', tr('music.downloaded', {}, 'Downloaded')], ['downloading', tr('music.downloading', {}, 'Downloading')]];
+    tabs.replaceChildren(...tabDefs.map(([value, label]) => {
+      const button = document.createElement('button');
+      button.className = 'netease-download-tab';
+      button.type = 'button';
+      button.id = `netease-download-tab-${value}`;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', panelId);
+      button.setAttribute('aria-selected', String(neteaseDownloadTab === value));
+      button.tabIndex = neteaseDownloadTab === value ? 0 : -1;
+      button.textContent = label;
+      button.addEventListener('click', () => { neteaseDownloadTab = value; renderNeteaseDownloadPage(); });
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const buttons = [...tabs.querySelectorAll('[role="tab"]')];
+        const index = buttons.indexOf(button);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
+        buttons[next]?.click();
+      });
+      return button;
+    }), (() => { const indicator = document.createElement('span'); indicator.className = 'netease-download-indicator'; indicator.setAttribute('aria-hidden', 'true'); return indicator; })());
+    requestAnimationFrame(() => { const active = tabs.querySelector('[aria-selected="true"]'); const indicator = tabs.querySelector('.netease-download-indicator'); if (active && indicator) { indicator.style.width = `${active.offsetWidth}px`; indicator.style.transform = `translateX(${active.offsetLeft}px)`; } });
+    const panel = document.createElement('div');
+    panel.id = panelId;
+    panel.className = 'netease-download-panel';
+    panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('aria-labelledby', `netease-download-tab-${neteaseDownloadTab}`);
+    if (neteaseDownloadTab === 'downloading') {
+      const tasks = neteaseDownloadTaskList.filter(task => task.status !== 'completed');
+      if (!tasks.length) { panel.classList.add('is-empty'); panel.innerHTML = `<p class="netease-empty">${tr('music.downloadQueueEmpty', {}, 'No downloads in progress.')}</p>`; }
+      else {
+        const table = document.createElement('table'); table.className = 'playlist-detail-table netease-download-table is-downloading';
+        table.innerHTML = '<thead><tr><th class="track-index">#</th><th>Title</th><th>Quality</th><th>Status</th><th>Progress</th><th class="track-actions"></th></tr></thead><tbody></tbody>';
+        const headers = table.querySelectorAll('th'); ['#', tr('music.title', {}, 'Title'), tr('music.downloadQualityLabel', {}, 'Quality'), tr('music.downloadStatus', {}, 'Status'), tr('music.downloadProgressLabel', {}, 'Progress'), ''].forEach((label, index) => { headers[index].textContent = label; });
+        const body = table.querySelector('tbody');
+        tasks.forEach((task, index) => {
+          const row = document.createElement('tr');
+          const indexCell = document.createElement('td'); indexCell.className = 'track-play-cell'; indexCell.innerHTML = '<span class="track-number"></span>'; indexCell.firstChild.textContent = String(index + 1).padStart(2, '0');
+          const title = document.createElement('td'); title.innerHTML = '<div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div>';
+          renderDownloadCover(title.querySelector('.track-cover'), task.coverUrl); title.querySelector('.track-name').textContent = cleanMusicText(task.title) || tr('music.neteaseSong', {}, 'NetEase song'); title.querySelector('.track-artist').textContent = cleanMusicText(task.artist) || task.songId;
+          const quality = document.createElement('td'); quality.textContent = task.downgraded && task.resolvedQuality ? `${task.requestedQuality} → ${task.resolvedQuality}` : task.resolvedQuality || task.requestedQuality;
+          const status = document.createElement('td'); status.innerHTML = '<span class="netease-download-status"></span>'; const statusNode = status.firstChild; statusNode.dataset.status = task.status; statusNode.textContent = downloadTaskStatusText(task); if (task.status === 'failed' && task.message) { const reason = document.createElement('small'); reason.textContent = task.message; statusNode.append(document.createElement('br'), reason); }
+          const progress = document.createElement('td'); progress.innerHTML = '<span class="netease-download-progress"><span class="netease-download-progress-top"><span></span><span></span></span><span class="netease-download-progress-bar"><i></i></span></span>'; const progressRoot = progress.firstChild; const percent = task.totalBytes > 0 ? Math.min(100, Math.round((task.receivedBytes || 0) / task.totalBytes * 100)) : 0; progressRoot.querySelector('.netease-download-progress-top span:first-child').textContent = task.status === 'failed' ? tr('music.downloadFailedState', {}, 'Failed') : `${percent}%`; progressRoot.querySelector('.netease-download-progress-top span:last-child').textContent = task.totalBytes ? `${formatDownloadBytes(task.receivedBytes)} / ${formatDownloadBytes(task.totalBytes)}` : formatDownloadBytes(task.receivedBytes); progressRoot.querySelector('i').style.width = `${percent}%`; progressRoot.classList.toggle('is-indeterminate', !task.totalBytes && task.status !== 'failed');
+          const action = document.createElement('td'); action.className = 'track-actions netease-download-action'; if (task.status === 'failed') { const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = tr('music.downloadRetry', {}, 'Retry'); retry.addEventListener('click', async () => { const result = await api.retryDownload?.({ taskId: task.taskId }); if (!result?.ok) toast.error(tr('music.downloadRetryFailed', {}, 'Unable to retry this download.')); }); const remove = createDownloadMoreAction({ label: tr('music.downloadRemoveTask', {}, 'Remove record'), title: '', onSelect: async () => { if (!await kairosConfirmAlert({ title: tr('music.downloadRemoveTaskTitle', {}, 'Remove download record?'), description: tr('music.downloadRemoveTaskDescription', {}, 'This failed download and its temporary file will be removed.') })) return; const result = await api.removeDownloadTask?.({ taskId: task.taskId }); if (!result?.ok) toast.error(tr('music.removeFailed', {}, 'Remove failed')); else renderNeteaseDownloadPage(); } }); action.append(retry, remove.firstChild); }
+          row.append(indexCell, title, quality, status, progress, action); body.append(row);
+        });
+        panel.append(table);
+      }
+    } else {
+      const tracks = downloadedNeteaseTracks(musicState);
+      if (!tracks.length) { panel.classList.add('is-empty'); panel.innerHTML = `<p class="netease-empty">${tr('music.downloadedEmpty', {}, 'No downloaded songs yet.')}</p>`; }
+      else {
+        const table = document.createElement('table'); table.className = 'playlist-detail-table netease-download-table'; table.innerHTML = '<thead><tr><th class="track-index">#</th><th>Title</th><th>Album</th><th>Quality</th><th>Size</th><th>Downloaded</th><th class="track-actions"></th></tr></thead><tbody></tbody>';
+        const headers = table.querySelectorAll('th'); ['#', tr('music.title', {}, 'Title'), tr('music.album', {}, 'Album'), tr('music.downloadQualityLabel', {}, 'Quality'), tr('music.downloadSize', {}, 'Size'), tr('music.downloadedAt', {}, 'Downloaded'), ''].forEach((label, index) => { headers[index].textContent = label; });
+        const body = table.querySelector('tbody');
+        tracks.forEach((track, index) => {
+          const row = document.createElement('tr');
+          const indexCell = document.createElement('td'); indexCell.className = 'track-play-cell'; indexCell.innerHTML = '<span class="track-number"></span><button class="track-play-button send" type="button" data-state="play"><svg class="track-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8.75 6.45c0-1.18 1.29-1.9 2.29-1.28l8.22 5.14c.94.59.94 1.96 0 2.55L11.04 18c-1 .62-2.29-.1-2.29-1.28V6.45Z" fill="currentColor"/></svg><svg class="track-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7.4 5.2h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2H7.4c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Zm6 0h3.2c.66 0 1.2.54 1.2 1.2v11.2c0 .66-.54 1.2-1.2 1.2h-3.2c-.66 0-1.2-.54-1.2-1.2V6.4c0-.66.54-1.2 1.2-1.2Z" fill="currentColor"/></svg></button>'; indexCell.querySelector('.track-number').textContent = String(index + 1).padStart(2, '0'); const play = indexCell.querySelector('.track-play-button'); play.setAttribute('aria-label', tr('player.playTrack', {}, 'Play track')); play.disabled = track.available === false; play.addEventListener('click', () => playDownloadedTrack(track.id).catch(error => toast.error(tr('music.playFailed', {}, 'Play failed'), error?.message || '')));
+          const title = document.createElement('td'); title.innerHTML = '<div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div>'; renderDownloadCover(title.querySelector('.track-cover'), track.coverUrl); title.querySelector('.track-name').textContent = cleanMusicText(track.title) || cleanMusicText(track.fileName); title.querySelector('.track-artist').textContent = track.available === false ? tr('music.downloadMissing', {}, 'Missing') : cleanMusicText(track.artist); if (track.available === false) title.querySelector('.track-artist').classList.add('netease-download-missing');
+          const album = document.createElement('td'); album.className = 'track-album'; album.textContent = cleanMusicText(track.album);
+          const quality = document.createElement('td'); quality.textContent = [track.resolvedQuality || track.requestedQuality, track.format].filter(Boolean).join(' · ');
+          const size = document.createElement('td'); size.textContent = formatDownloadBytes(track.fileSize);
+          const date = document.createElement('td'); date.textContent = formatDownloadDate(track.downloadedAt || track.addedAt);
+          const action = createDownloadMoreAction({ label: tr('music.removeDownloaded', {}, 'Remove'), title: track.title || track.fileName, onSelect: async () => { if (!await kairosConfirmAlert({ title: tr('music.removeDownloadedTitle', {}, 'Remove downloaded song?'), description: tr('music.removeDownloadedDescription', { title: track.title || track.fileName }, `${track.title || track.fileName} and its audio file will be removed from Kairos Downloads.`) })) return; try { const wasPlaying = playbackState.currentTrackId === track.id; if (wasPlaying) { const queueTrackIds = (musicState.queueTrackIds || []).filter(id => id !== track.id); if (desktopMusic?.updatePlayback) musicState = await desktopMusic.updatePlayback({ queueTrackIds, currentTrackId: null, playing: false }); playbackState = { currentTrackId: null, playing: false }; notifyMusicPlayer(localPlaybackDetail({ queueTrackIds, currentTrackId: null, playing: false })); } const result = await api.removeCompletedDownload?.({ trackId: track.id }); if (!result?.ok) throw new Error(result?.reason || 'remove_failed'); musicState = result.state || musicState; notifyMusicPlayer(localPlaybackDetail({ queueTrackIds: musicState.queueTrackIds || [], currentTrackId: musicState.currentTrackId || null, playing: false })); renderNeteaseDownloadPage(); } catch (error) { toast.error(tr('music.removeFailed', {}, 'Remove failed'), error?.message || ''); } } });
+          row.append(indexCell, title, album, quality, size, date, action); body.append(row);
+        });
+        panel.append(table);
+      }
+    }
+    neteaseResults.replaceChildren(panel);
+  } catch (error) {
+    if (neteaseActiveView === 'download' && requestId === neteaseAccountRequestId) neteaseResults.innerHTML = `<p class="netease-empty">${error?.message || tr('music.downloadFailed', {}, 'Download failed')}</p>`;
+  }
+};
+const handleNeteaseDownloadProgress = (task, { notify = true } = {}) => {
+  if (!task?.songId) return;
+  const previousStatus = neteaseDownloadTasks.get(String(task.songId))?.status || '';
+  neteaseDownloadTasks.set(String(task.songId), task);
+  const index = neteaseDownloadTaskList.findIndex(item => item.taskId === task.taskId);
+  if (index >= 0) neteaseDownloadTaskList[index] = task;
+  else neteaseDownloadTaskList.push(task);
+  updateNeteaseDownloadRows();
+  if (neteaseActiveView === 'download') renderNeteaseDownloadPage();
+  if (notify && previousStatus !== task.status && task.status === 'completed') toast.success(tr('music.downloadCompleted', {}, 'Downloaded'), task.warning ? tr('music.downloadCompletedWithWarnings', {}, 'Downloaded; some song details could not be written.') : task.outputName || '');
+  if (notify && previousStatus !== task.status && task.status === 'failed') toast.error(tr('music.downloadFailed', {}, 'Download failed'), neteaseDownloadFailureText(task));
+};
+const subscribeNeteaseDownloadEvents = () => {
+  if (neteaseDownloadUnsubscribe) return;
+  const api = getDesktopNetease();
+  if (!api?.onDownloadProgress) return;
+  neteaseDownloadUnsubscribe = api.onDownloadProgress(handleNeteaseDownloadProgress);
+  api.getDownloadState?.().then(state => {
+    neteaseDownloadTaskList = Array.isArray(state?.tasks) ? state.tasks : state?.batches?.flatMap(batch => batch.tasks || []) || [];
+    neteaseDownloadTaskList.forEach(task => handleNeteaseDownloadProgress(task, { notify: false }));
+  }).catch(() => {});
+};
+const openNeteaseDownloadDialog = async songs => {
+  const api = getDesktopNetease();
+  const songIds = [...new Set((songs || []).map(neteaseNumericId).filter(id => /^\d{1,20}$/.test(id)))];
+  if (!songIds.length || !api?.startDownload) return;
+  try {
+    const status = await api.getStatus?.();
+    if (!status?.loggedIn) {
+      toast.message(tr('music.downloadLoginRequired', {}, 'Log in to download songs.'), tr('music.loginAndTryAgain', {}, 'Please log in and try again.'));
+      return;
+    }
+  } catch {
+    toast.error(tr('music.downloadFailed', {}, 'Download failed'), tr('music.unableToCheckNeteaseStatus', {}, 'Unable to check NetEase status.'));
+    return;
+  }
+  let dialog = document.getElementById('neteaseDownloadDialog');
+  if (!dialog) {
+    dialog = document.createElement('dialog');
+    dialog.id = 'neteaseDownloadDialog';
+    dialog.className = 'netease-download-dialog';
+    dialog.innerHTML = `<form method="dialog"><h2></h2><p class="netease-download-description"></p><div class="netease-download-options"></div><footer class="netease-download-footer"><button type="submit" value="cancel"></button><button class="netease-download-submit" type="submit" value="confirm"></button></footer></form>`;
+    document.body.append(dialog);
+  }
+  const form = dialog.querySelector('form');
+  const qualities = [
+    ['standard', tr('music.downloadStandard', {}, 'Standard'), tr('music.downloadStandardDescription', {}, 'Reliable quality and smaller files')],
+    ['lossless', tr('music.downloadLossless', {}, 'Lossless'), tr('music.downloadLosslessDescription', {}, 'Higher fidelity when available')],
+    ['hires', tr('music.downloadHires', {}, 'Hi-Res'), tr('music.downloadHiresDescription', {}, 'Best available quality; falls back automatically')]
+  ];
+  let quality = 'standard';
+  dialog.querySelector('h2').textContent = tr('music.downloadSongsTitle', {}, 'Download songs');
+  dialog.querySelector('.netease-download-description').textContent = tr('music.downloadQualityDescription', { count: songIds.length }, `Choose quality for ${songIds.length} songs. Higher tiers fall back automatically when unavailable.`);
+  dialog.querySelector('.netease-download-footer button[value="cancel"]').textContent = tr('common.cancel', {}, 'Cancel');
+  dialog.querySelector('.netease-download-submit').textContent = tr('music.startDownload', {}, 'Start download');
+  const options = dialog.querySelector('.netease-download-options');
+  options.replaceChildren(...qualities.map(([value, label, description]) => {
+    const button = document.createElement('button');
+    button.className = 'netease-download-quality';
+    button.type = 'button';
+    button.dataset.quality = value;
+    button.setAttribute('aria-pressed', String(value === quality));
+    button.innerHTML = `<span class="material-symbols-outlined">${value === 'hires' ? 'graphic_eq' : 'download'}</span><span class="netease-download-quality-copy"><strong></strong><span></span></span>`;
+    button.querySelector('strong').textContent = label;
+    button.querySelector('.netease-download-quality-copy span').textContent = description;
+    button.addEventListener('click', () => {
+      quality = value;
+      options.querySelectorAll('button').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    });
+    return button;
+  }));
+  form.onsubmit = async event => {
+    if (event.submitter?.value === 'cancel') return;
+    event.preventDefault();
+    const submit = dialog.querySelector('.netease-download-submit');
+    submit.disabled = true;
+    try {
+      const result = await api.startDownload({ songIds, quality, songs: songs.map(song => ({ neteaseId: neteaseNumericId(song), title: song.title, artist: song.artist, album: song.album, coverUrl: song.coverUrl })) });
+      if (!result?.ok) throw new Error(result?.message || tr('music.downloadFailed', {}, 'Download failed'));
+      dialog.close('confirm');
+      toast.success(tr('music.downloadInProgress', {}, 'Downloading'), musicCount('selectedCount', songIds.length, `${songIds.length} selected`));
+    } catch (error) {
+      toast.error(tr('music.downloadFailed', {}, 'Download failed'), error?.message || tr('legacy.tryAgain', {}, 'Please try again.'));
+    } finally {
+      submit.disabled = false;
+    }
+  };
+  dialog.showModal();
+  options.querySelector('button')?.focus();
+};
 const refreshNeteaseVisibleIndexes = () => {
   let visibleIndex = 0;
   neteaseResults?.querySelectorAll('tbody tr[data-id]').forEach(row => {
@@ -1246,9 +1596,9 @@ const updateNeteaseLikeRows = () => {
     const liked = neteaseLikedIdsLoaded ? neteaseLikedIds.has(id) : row.dataset.liked === 'true';
     row.dataset.liked = String(liked);
     button.setAttribute('aria-pressed', String(liked));
-    button.setAttribute('aria-label', liked ? tr('music.removeFromLiked', {}, 'Remove from liked songs') : tr('player.addCurrentToLiked', {}, 'Add to liked songs'));
+    button.setAttribute('aria-label', likedAriaLabel(liked));
     const menuLike = row.querySelector('[data-action="like"] span:last-child');
-    if (menuLike) menuLike.textContent = liked ? tr('music.removeFromLiked', {}, 'Remove from liked songs') : tr('music.like', {}, 'Like');
+    if (menuLike) menuLike.textContent = likedMenuLabel(liked);
   });
 };
 
@@ -1367,6 +1717,43 @@ const toggleNeteaseLike = async (song, button = null) => {
   } finally {
     if (button) button.disabled = false;
   }
+};
+
+const setNeteaseSongsLiked = async (songs, liked) => {
+  const api = getDesktopNetease();
+  const uniqueSongs = [...new Map((songs || []).map(song => [neteaseNumericId(song), song]).filter(([id]) => Boolean(id))).values()];
+  if (!uniqueSongs.length || !api?.setSongLiked) return { succeededIds: new Set(), failed: 0 };
+  if (!neteaseLikedIdsLoaded) await ensureNeteaseLikedIds().catch(() => {});
+  const previousLiked = new Map(uniqueSongs.map(song => {
+    const id = neteaseNumericId(song);
+    return [id, neteaseLikedIdsLoaded ? neteaseLikedIds.has(id) : isNeteaseSongLiked(song)];
+  }));
+  uniqueSongs.forEach(song => {
+    const id = neteaseNumericId(song);
+    liked ? neteaseLikedIds.add(id) : neteaseLikedIds.delete(id);
+    syncNeteaseCachedLike(id, liked);
+    song.liked = liked;
+  });
+  updateNeteaseLikeRows();
+  const results = await Promise.allSettled(uniqueSongs.map(song => api.setSongLiked({ id: neteaseNumericId(song), liked })));
+  const succeededIds = new Set();
+  results.forEach((result, index) => {
+    const song = uniqueSongs[index];
+    const id = neteaseNumericId(song);
+    if (result.status === 'fulfilled' && result.value?.ok) {
+      succeededIds.add(id);
+      return;
+    }
+    const previous = previousLiked.get(id) === true;
+    previous ? neteaseLikedIds.add(id) : neteaseLikedIds.delete(id);
+    syncNeteaseCachedLike(id, previous);
+    song.liked = previous;
+  });
+  updateNeteaseLikeRows();
+  const failed = uniqueSongs.length - succeededIds.size;
+  if (failed) toast.error(tr('music.likeFailed', {}, 'Like failed'), tr('music.bulkActionPartialFailure', { count: failed }, `${failed} songs could not be updated.`));
+  else toast[liked ? 'success' : 'message'](liked ? tr('music.neteaseLikedAdded', {}, 'Added to NetEase liked songs') : tr('music.neteaseLikedRemoved', {}, 'Removed from NetEase liked songs'));
+  return { succeededIds, failed };
 };
 
 const makeNeteaseTrackShell = song => ({
@@ -1501,9 +1888,11 @@ const renderNeteaseResults = (songs, options = {}) => {
     return;
   }
   const queueSongs = options.queueSongs || songs;
+  const downloadSelection = options.downloadSelection || null;
   const table = document.createElement('table');
   table.className = 'playlist-detail-table netease-results';
-  table.innerHTML = `<thead><tr><th class="track-index">#</th><th>${tr('music.title', {}, 'Title')}</th><th>${tr('music.album', {}, 'Album')}</th><th class="track-like">${tr('music.like', {}, 'Like')}</th><th class="track-duration">${tr('schedule.endTime', {}, 'Time')}</th><th class="track-actions"></th></tr></thead><tbody></tbody>`;
+  table.classList.toggle('is-selecting', Boolean(downloadSelection));
+  table.innerHTML = `<thead><tr><th class="track-index">#</th><th>${tr('music.title', {}, 'Title')}</th><th>${tr('music.album', {}, 'Album')}</th><th class="track-like">${tr('music.like', {}, 'Like')}</th><th class="track-duration">${tr('music.time', {}, 'Time')}</th><th class="track-actions"></th></tr></thead><tbody></tbody>`;
   const tbody = table.querySelector('tbody');
   songs.forEach((song, index) => {
     const row = document.createElement('tr');
@@ -1535,10 +1924,21 @@ const renderNeteaseResults = (songs, options = {}) => {
         playButton.disabled = false;
       }
     });
-    playCell.append(number, playButton);
+    const selectButton = document.createElement('button');
+    selectButton.className = 'track-select-button';
+    selectButton.type = 'button';
+    selectButton.setAttribute('aria-label', tr('music.selectSongs', {}, 'Select songs'));
+    selectButton.setAttribute('aria-pressed', String(downloadSelection?.selected?.has(neteaseNumericId(song))));
+    selectButton.innerHTML = '<span class="checkmark">check</span>';
+    selectButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      downloadSelection?.onToggle?.(song);
+    });
+    playCell.append(number, playButton, selectButton);
 
     const titleCell = document.createElement('td');
-    titleCell.innerHTML = '<div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div>';
+    titleCell.innerHTML = '<div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span><span class="netease-download-state" hidden></span></span></div>';
     const cover = titleCell.querySelector('.track-cover');
     if (song.coverUrl) {
       const img = document.createElement('img');
@@ -1550,6 +1950,11 @@ const renderNeteaseResults = (songs, options = {}) => {
     }
     titleCell.querySelector('.track-name').textContent = song.title || tr('music.netease', {}, 'NetEase Music');
     titleCell.querySelector('.track-artist').textContent = song.artist || tr('music.neteaseCloud', {}, 'NetEase Cloud');
+    const downloadState = titleCell.querySelector('.netease-download-state');
+    const downloadTask = neteaseDownloadTaskFor(song);
+    downloadState.dataset.status = downloadTask?.status || '';
+    downloadState.textContent = neteaseDownloadTaskText(downloadTask);
+    downloadState.hidden = !downloadTask;
 
     const albumCell = document.createElement('td');
     albumCell.className = 'track-album';
@@ -1574,8 +1979,8 @@ const renderNeteaseResults = (songs, options = {}) => {
     const actionCell = document.createElement('td');
     actionCell.className = options.showPlayCount ? 'track-actions history-actions' : 'track-actions';
     const rowMenuHtml = options.showPlayCount
-      ? `<span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button></span></span>`
-      : `<span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button><button type="button" data-action="add-queue"><span class="material-symbols-outlined">playlist_add</span><span>${tr('music.addToQueue', {}, 'Add to Queue')}</span></button><button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${likedAriaLabel(isNeteaseSongLiked(song))}</span></button></span></span>`;
+      ? `<span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="download"><span class="material-symbols-outlined">download</span><span>${tr('music.download', {}, 'Download')}</span></button><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button></span></span>`
+      : `<span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="download"><span class="material-symbols-outlined">download</span><span>${tr('music.download', {}, 'Download')}</span></button><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button><button type="button" data-action="add-queue"><span class="material-symbols-outlined">playlist_add</span><span>${tr('music.addToQueue', {}, 'Add to Queue')}</span></button><button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${likedMenuLabel(isNeteaseSongLiked(song))}</span></button></span></span>`;
     actionCell.innerHTML = options.showPlayCount
       ? `<span class="history-play-count"><span class="material-symbols-outlined">play_arrow</span>${Number(song.playCount) || 0}</span>${rowMenuHtml}`
       : rowMenuHtml;
@@ -1593,7 +1998,8 @@ const renderNeteaseResults = (songs, options = {}) => {
         menu.hidden = true;
         trigger.setAttribute('aria-expanded', 'false');
         try {
-          if (button.dataset.action === 'like') await toggleNeteaseLike(song, likeButton);
+          if (button.dataset.action === 'download') await openNeteaseDownloadDialog([song]);
+          else if (button.dataset.action === 'like') await toggleNeteaseLike(song, likeButton);
           else await enqueueNeteaseTrack(song, button.dataset.action === 'play-next' ? 'next' : 'queue');
         } catch (error) {
           console.error('netease queue failed', error);
@@ -1604,13 +2010,25 @@ const renderNeteaseResults = (songs, options = {}) => {
     row.append(playCell, titleCell, albumCell, likeCell, timeCell, actionCell);
     tbody.append(row);
   });
+  const selectionBar = downloadSelection ? document.createElement('div') : null;
+  if (selectionBar) {
+    selectionBar.className = 'playlist-selection-bar';
+    const selectedCount = downloadSelection.selected?.size || 0;
+    const selectedSongs = songs.filter(song => downloadSelection.selected?.has(neteaseNumericId(song)));
+    const nextLiked = !selectedSongs.length || !selectedSongs.every(isNeteaseSongLiked);
+    selectionBar.innerHTML = `<span class="playlist-selection-text">${musicCount('selectedCount', selectedCount, `${selectedCount} selected`)}</span><span class="playlist-selection-actions"><button type="button" data-action="cancel">${tr('common.cancel', {}, 'Cancel')}</button><button type="button" data-action="queue" ${selectedCount ? '' : 'disabled'}>${tr('music.addToQueue', {}, 'Add to Queue')}</button><button type="button" data-action="like" ${selectedCount ? '' : 'disabled'}>${likedMenuLabel(!nextLiked)}</button><button type="button" data-action="download" ${selectedCount ? '' : 'disabled'}>${tr('music.download', {}, 'Download')}</button></span>`;
+    selectionBar.querySelector('[data-action="cancel"]').addEventListener('click', () => downloadSelection.onCancel?.());
+    selectionBar.querySelector('[data-action="queue"]').addEventListener('click', () => downloadSelection.onQueue?.(selectedSongs));
+    selectionBar.querySelector('[data-action="like"]').addEventListener('click', () => downloadSelection.onLike?.(selectedSongs, nextLiked));
+    selectionBar.querySelector('[data-action="download"]').addEventListener('click', () => downloadSelection.onDownload?.());
+  }
   if (options.withFilter) {
     const tabs = document.createElement('div');
     tabs.className = 'playlist-detail-tabs';
     const historyToggle = options.historyType === 0 || options.historyType === 1
-      ? `<span class="netease-history-tabs" role="group" aria-label="${tr('music.historyRange', {}, 'History range')}">
-          <button class="netease-history-tab" type="button" data-history-type="1" aria-pressed="${options.historyType === 1}">${tr('music.historyRecent', {}, 'Recent week')}</button>
-          <button class="netease-history-tab" type="button" data-history-type="0" aria-pressed="${options.historyType === 0}">${tr('music.historyAllTime', {}, 'All time')}</button>
+      ? `<span class="netease-history-tabs" role="tablist" aria-label="${tr('music.historyRange', {}, 'History range')}">
+          <button class="netease-history-tab" type="button" role="tab" data-history-type="1" aria-selected="${options.historyType === 1}" tabindex="${options.historyType === 1 ? '0' : '-1'}">${tr('music.historyRecent', {}, 'Recent week')}</button>
+          <button class="netease-history-tab" type="button" role="tab" data-history-type="0" aria-selected="${options.historyType === 0}" tabindex="${options.historyType === 0 ? '0' : '-1'}">${tr('music.historyAllTime', {}, 'All time')}</button>
           <span class="netease-history-indicator" aria-hidden="true"></span>
         </span>`
       : '';
@@ -1627,7 +2045,7 @@ const renderNeteaseResults = (songs, options = {}) => {
     const positionHistoryIndicator = () => {
       const group = tabs.querySelector('.netease-history-tabs');
       const indicator = tabs.querySelector('.netease-history-indicator');
-      const active = tabs.querySelector('.netease-history-tab[aria-pressed="true"]');
+      const active = tabs.querySelector('.netease-history-tab[aria-selected="true"]');
       if (!group || !indicator || !active) return;
       indicator.style.width = `${active.offsetWidth}px`;
       indicator.style.transform = `translateX(${active.offsetLeft}px)`;
@@ -1646,16 +2064,25 @@ const renderNeteaseResults = (songs, options = {}) => {
       button.addEventListener('click', () => {
         const nextType = Number(button.dataset.historyType);
         if (nextType === neteaseHistoryType) return;
-        tabs.querySelectorAll('[data-history-type]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+        tabs.querySelectorAll('[data-history-type]').forEach(item => { item.setAttribute('aria-selected', String(item === button)); item.tabIndex = item === button ? 0 : -1; });
         positionHistoryIndicator();
         neteaseHistoryType = nextType;
         loadNeteaseHistory(nextType);
       });
+      tabs.querySelectorAll('[data-history-type]').forEach(button => button.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const buttons = [...tabs.querySelectorAll('[data-history-type]')];
+        const index = buttons.indexOf(button);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
+        buttons[next]?.click();
+      }));
     });
     requestAnimationFrame(positionHistoryIndicator);
-    neteaseResults.replaceChildren(tabs, table);
+    neteaseResults.replaceChildren(...(selectionBar ? [selectionBar, tabs, table] : [tabs, table]));
   } else {
-    neteaseResults.replaceChildren(table);
+    neteaseResults.replaceChildren(...(selectionBar ? [selectionBar, table] : [table]));
   }
   neteaseResults.onclick = event => {
     if (event.target.closest('.track-row-menu-wrap')) return;
@@ -1774,11 +2201,11 @@ const createNeteaseHomeSongTable = songs => {
     row.dataset.searchText = `${song.title || ''} ${song.artist || ''} ${song.album || ''}`.toLowerCase();
     row.innerHTML = `
       <td class="track-play-cell"><span class="track-number">${String(index + 1).padStart(2, '0')}</span><button class="track-play-button" type="button" aria-label="${tr('player.playTrack', {}, 'Play track')}" data-state="play">${trackPlayIcon()}</button></td>
-      <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span></span></div></td>
+      <td><div class="track-title-cell"><span class="track-cover"></span><span class="track-main"><span class="track-name"></span><span class="track-artist"></span><span class="netease-download-state" hidden></span></span></div></td>
       <td class="track-album"></td>
       <td class="track-like"><button class="track-like-button" type="button" aria-label="${likedAriaLabel(isNeteaseSongLiked(song))}" aria-pressed="${isNeteaseSongLiked(song)}"><span class="material-symbols-outlined">favorite</span></button></td>
       <td class="track-duration">${formatTrackDuration(Number(song.duration) || 0)}</td>
-      <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button><button type="button" data-action="add-queue"><span class="material-symbols-outlined">playlist_add</span><span>${tr('music.addToQueue', {}, 'Add to Queue')}</span></button><button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${likedAriaLabel(isNeteaseSongLiked(song))}</span></button></span></span></td>
+      <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden><button type="button" data-action="download"><span class="material-symbols-outlined">download</span><span>${tr('music.download', {}, 'Download')}</span></button><button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button><button type="button" data-action="add-queue"><span class="material-symbols-outlined">playlist_add</span><span>${tr('music.addToQueue', {}, 'Add to Queue')}</span></button><button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${likedMenuLabel(isNeteaseSongLiked(song))}</span></button></span></span></td>
     `;
     const number = row.querySelector('.track-number');
     number.dataset.indexLabel = number.textContent;
@@ -1793,6 +2220,11 @@ const createNeteaseHomeSongTable = songs => {
     }
     row.querySelector('.track-name').textContent = song.title || tr('music.netease', {}, 'NetEase Music');
     row.querySelector('.track-artist').textContent = song.artist || tr('music.netease', {}, 'NetEase Music');
+    const downloadState = row.querySelector('.netease-download-state');
+    const downloadTask = neteaseDownloadTaskFor(song);
+    downloadState.dataset.status = downloadTask?.status || '';
+    downloadState.textContent = neteaseDownloadTaskText(downloadTask);
+    downloadState.hidden = !downloadTask;
     row.querySelector('.track-album').textContent = song.album || '';
     row.querySelector('.track-play-button').addEventListener('click', async event => {
       event.stopPropagation();
@@ -1822,7 +2254,8 @@ const createNeteaseHomeSongTable = songs => {
         menu.hidden = true;
         trigger.setAttribute('aria-expanded', 'false');
         try {
-          if (button.dataset.action === 'like') await toggleNeteaseLike(song, likeButton);
+          if (button.dataset.action === 'download') await openNeteaseDownloadDialog([song]);
+          else if (button.dataset.action === 'like') await toggleNeteaseLike(song, likeButton);
           else await enqueueNeteaseTrack(song, button.dataset.action === 'play-next' ? 'next' : 'queue');
         } catch (error) {
           toast.error(tr('music.addFailed', {}, 'Add failed'), error?.message || tr('music.songUnavailable', {}, 'This song is unavailable.'));
@@ -1911,6 +2344,59 @@ const loadNeteaseSearchHome = async ({ force = false } = {}) => {
 const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options = {}) => {
   neteaseRenderedCollection = { title, songs, subtitle, options };
   setNeteaseSearchVisible(false);
+  let downloadSelectMode = false;
+  const selectedDownloadSongIds = new Set();
+  const renderCollectionSongs = () => {
+    if (!downloadSelectMode) {
+      renderNeteaseResults(songs, { remember: false, queueSongs: songs, withFilter: true, showPlayCount: options.showPlayCount === true, historyType: options.historyType, emptyMessage: options.emptyMessage });
+      return;
+    }
+    renderNeteaseResults(songs, {
+      remember: false,
+      queueSongs: songs,
+      withFilter: true,
+      showPlayCount: options.showPlayCount === true,
+      historyType: options.historyType,
+      emptyMessage: options.emptyMessage,
+      downloadSelection: {
+      selected: selectedDownloadSongIds,
+      onToggle: song => {
+        const id = neteaseNumericId(song);
+        if (selectedDownloadSongIds.has(id)) selectedDownloadSongIds.delete(id);
+        else selectedDownloadSongIds.add(id);
+        renderCollectionSongs();
+      },
+      onCancel: () => {
+        downloadSelectMode = false;
+        selectedDownloadSongIds.clear();
+        renderCollectionSongs();
+      },
+      onQueue: async selectedSongs => {
+        try {
+          for (const song of selectedSongs) await enqueueNeteaseTrack(song, 'queue');
+          toast.success(tr('music.addToQueue', {}, 'Add to Queue'), musicCount('selectedCount', selectedSongs.length, `${selectedSongs.length} selected`));
+        } catch (error) {
+          console.error('netease bulk queue failed', error);
+          toast.error(tr('music.addFailed', {}, 'Add failed'), error?.message || tr('music.songUnavailable', {}, 'This song is unavailable.'));
+        }
+      },
+      onLike: async (selectedSongs, liked) => {
+        const { succeededIds } = await setNeteaseSongsLiked(selectedSongs, liked);
+        if (!liked && neteaseActiveView === 'liked' && succeededIds.size) {
+          for (let index = songs.length - 1; index >= 0; index -= 1) {
+            if (succeededIds.has(neteaseNumericId(songs[index]))) songs.splice(index, 1);
+          }
+          neteaseLastSongs = neteaseLastSongs.filter(song => !succeededIds.has(neteaseNumericId(song)));
+          neteaseVisibleSongs = neteaseVisibleSongs.filter(song => !succeededIds.has(neteaseNumericId(song)));
+        }
+        selectedDownloadSongIds.clear();
+        downloadSelectMode = false;
+        renderCollectionSongs();
+      },
+      onDownload: () => openNeteaseDownloadDialog(songs.filter(song => selectedDownloadSongIds.has(neteaseNumericId(song))))
+      }
+    });
+  };
   if (neteaseAccountPanel) {
     neteaseAccountPanel.onclick = event => {
       if (!event.target.closest('.track-row-menu-wrap')) closeNeteaseRowMenus();
@@ -1925,6 +2411,7 @@ const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options =
         <p class="playlist-detail-meta"></p>
         <div class="playlist-detail-actions">
           <button class="playlist-play-all" type="button"><span class="material-symbols-outlined">play_arrow</span><span>${tr('music.playAll', {}, 'Play All')}</span></button>
+          ${options.playlist ? `<button class="playlist-subscribe-button playlist-download-select" type="button"><span class="material-symbols-outlined">checklist</span><span>${tr('music.selected', {}, 'Selected')}</span></button>` : ''}
           ${options.playlist ? `<button class="playlist-subscribe-button" type="button" aria-pressed="false" data-subscribed="false"><span class="material-symbols-outlined">favorite_border</span><span>${tr('music.save', {}, 'Save')}</span></button>` : ''}
         </div>
       </div>
@@ -1949,11 +2436,15 @@ const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options =
         playAll.disabled = !songs.length;
       }
     });
-    const subscribeButton = hero.querySelector('.playlist-subscribe-button');
+    const subscribeButton = hero.querySelector('.playlist-subscribe-button[data-subscribed]');
     if (subscribeButton && options.playlist) {
       updatePlaylistSubscribeButton(subscribeButton, options.playlist.subscribed === true);
       subscribeButton.addEventListener('click', () => toggleNeteasePlaylistSubscribed(options.playlist, subscribeButton));
     }
+    hero.querySelector('.playlist-download-select')?.addEventListener('click', () => {
+      downloadSelectMode = true;
+      renderCollectionSongs();
+    });
     if (options.backTo === 'playlists') {
       const back = document.createElement('button');
       back.className = 'playlist-detail-back';
@@ -1972,7 +2463,7 @@ const renderNeteaseSongCollection = (title, songs = [], subtitle = '', options =
       neteaseAccountPanel.replaceChildren(hero);
     }
   }
-  renderNeteaseResults(songs, { remember: false, queueSongs: songs, withFilter: true, showPlayCount: options.showPlayCount === true, historyType: options.historyType, emptyMessage: options.emptyMessage });
+  renderCollectionSongs();
 };
 
 const loadNeteasePlaylists = async () => {
@@ -2159,6 +2650,7 @@ const showNeteaseSection = (view = 'search') => {
   if (view === 'playlists') loadNeteasePlaylists();
   if (view === 'liked') loadNeteaseLiked();
   if (view === 'history') loadNeteaseHistory();
+  if (view === 'download') renderNeteaseDownloadPage();
 };
 
 const initializeNeteaseView = async () => {
@@ -2258,7 +2750,7 @@ const pollNeteaseLogin = async () => {
   try {
     const result = await api.loginCheck({ key: loginKey });
     if (loginKey !== neteaseLoginKey) return;
-    if (result?.code === 803 || result?.loggedIn) {
+    if (result?.loggedIn === true) {
       clearInterval(neteaseLoginTimer);
       neteaseLoginTimer = null;
       neteaseLoginKey = "";
@@ -2676,7 +3168,7 @@ const renderPlaylistDetail = playlistId => {
   const table = document.createElement('table');
   table.className = 'playlist-detail-table';
   table.innerHTML = `
-    <thead><tr><th class="track-index">#</th><th>${tr('music.title', {}, 'Title')}</th><th>${tr('music.album', {}, 'Album')}</th><th class="track-like">${tr('music.like', {}, 'Like')}</th><th class="track-duration">${tr('schedule.endTime', {}, 'Time')}</th><th class="track-actions"></th></tr></thead>
+    <thead><tr><th class="track-index">#</th><th>${tr('music.title', {}, 'Title')}</th><th>${tr('music.album', {}, 'Album')}</th><th class="track-like">${tr('music.like', {}, 'Like')}</th><th class="track-duration">${tr('music.time', {}, 'Time')}</th><th class="track-actions"></th></tr></thead>
     <tbody></tbody>
   `;
   const tbody = table.querySelector('tbody');
@@ -2700,7 +3192,7 @@ const renderPlaylistDetail = playlistId => {
       selectionBar.querySelector('.playlist-selection-text').textContent = musicCount('selectedCount', selectedTrackIds.size, `${selectedTrackIds.size} selected`);
       selectionBar.querySelector('[data-action="queue"]').hidden = false;
       selectionBar.querySelector('[data-action="queue"]').disabled = selectedTrackIds.size === 0;
-      selectionBar.querySelector('[data-action="apply"]').textContent = isLikedPlaylist ? tr('music.removeFromLiked', {}, 'Remove from liked songs') : tr('music.removeSelected', {}, 'Remove Selected');
+      selectionBar.querySelector('[data-action="apply"]').textContent = isLikedPlaylist ? tr('music.unliked', {}, 'Unliked') : tr('music.removeSelected', {}, 'Remove Selected');
       selectionBar.querySelector('[data-action="apply"]').disabled = selectedTrackIds.size === 0;
       return;
     }
@@ -3012,7 +3504,7 @@ const renderPlaylistDetail = playlistId => {
           <td class="track-album"></td>
           <td class="track-like"><button class="track-like-button" type="button" aria-label="${likedAriaLabel(track.liked === true)}" aria-pressed="${track.liked === true}"><span class="material-symbols-outlined">favorite</span></button></td>
           <td class="track-duration"></td>
-      <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden>${unavailable ? '' : `<button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button>`}${isLikedPlaylist ? '' : `<button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${likedAriaLabel(track.liked)}</span></button>`}<button class="danger" type="button" data-action="remove"><span class="material-symbols-outlined">${isLikedPlaylist ? 'heart_minus' : 'visibility_off'}</span><span>${isLikedPlaylist ? tr('music.removeFromLiked', {}, 'Remove from liked songs') : tr('music.removeFromPlaylist', {}, 'Remove from Playlist')}</span></button></span></span></td>
+      <td class="track-actions"><span class="track-row-menu-wrap"><button class="track-row-menu-trigger" type="button" aria-label="${tr('music.moreActions', {}, 'More actions')}" aria-expanded="false"><span class="material-symbols-outlined">more_horiz</span></button><span class="track-row-menu" hidden>${unavailable ? '' : `<button type="button" data-action="play-next"><span class="material-symbols-outlined">queue_play_next</span><span>${tr('music.addToPlayNext', {}, 'Play Next')}</span></button>`}${isLikedPlaylist ? '' : `<button type="button" data-action="like"><span class="material-symbols-outlined">favorite</span><span>${likedMenuLabel(track.liked)}</span></button>`}<button class="danger" type="button" data-action="remove"><span class="material-symbols-outlined">${isLikedPlaylist ? 'heart_minus' : 'visibility_off'}</span><span>${isLikedPlaylist ? tr('music.unliked', {}, 'Unliked') : tr('music.removeFromPlaylist', {}, 'Remove from Playlist')}</span></button></span></span></td>
         `;
         const selectButton = row.querySelector('.track-select-button');
         if (selectButton) {
@@ -3864,6 +4356,7 @@ window.addEventListener('kairos:locale-changed', () => {
   if (neteaseLastSongs.length) renderNeteaseResults(neteaseLastSongs);
 });
 registerNeteaseUrlRefreshListener();
+subscribeNeteaseDownloadEvents();
 showInitialMusicSource();
 initializeNeteaseView();
 refreshMusicState().finally(() => {

@@ -22,7 +22,6 @@ function handleKeydown(event: KeyboardEvent) {
           <div class="vue-close-choice-icon" aria-hidden="true"><span class="material-symbols-outlined">pets</span></div>
           <div class="vue-close-choice-copy">
             <h2>{{ t("tray.closeTitle") }}</h2>
-            <p>{{ t("tray.closeMessage") }}</p>
           </div>
           <footer>
             <button class="vue-close-choice-cancel" type="button" @click="choose('cancel')">{{ t("common.cancel") }}</button>

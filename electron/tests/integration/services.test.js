@@ -11,7 +11,7 @@ import { ContextManager } from "../../services/ai/context-manager.js";
 import { parseDocument } from "../../services/documents/document-parser.js";
 import { MusicLibrary } from "../../services/music/music-library.js";
 import { KairosAppDatabase } from "../../data/sqlite/index.js";
-import { NeteaseApiService, readableNeteasePlaybackMessage } from "../../services/music/netease-api-service.js";
+import { NeteaseApiService, normalizeNeteaseProfile, readableNeteasePlaybackMessage } from "../../services/music/netease-api-service.js";
 
 async function fixture() { const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-test-"));const store=new AiDataStore(path.join(dir,"data.json"));return{dir,store}; }
 
@@ -21,7 +21,75 @@ test.skip("AI data store restores conversations and memories from SQLite when JS
 
 test.skip("NetEase API state restores login cookie from SQLite when JSON is missing or corrupt",async()=>{});
 
+test("NetEase profile cache retains the sidebar identity fields only",()=>{assert.deepEqual(normalizeNeteaseProfile({userId:42,nickname:"Kairos",avatarUrl:"http://p1.music.126.net/avatar.jpg",extra:"ignored"}),{userId:42,nickname:"Kairos",avatarUrl:"https://p1.music.126.net/avatar.jpg"});assert.deepEqual(normalizeNeteaseProfile({account:{id:7,userName:"Account fallback"}}),{userId:7,nickname:"Account fallback",avatarUrl:""});assert.equal(normalizeNeteaseProfile({nickname:"Missing id"}),null);});
+
 test("NetEase playback failures explain rights and unavailable URLs",()=>{assert.equal(readableNeteasePlaybackMessage({fee:1}),"This song requires NetEase membership or purchase.");assert.equal(readableNeteasePlaybackMessage({fee:4}),"This song requires NetEase membership or purchase.");assert.equal(readableNeteasePlaybackMessage({fee:8,payed:0}),"This song is restricted by NetEase rights.");assert.equal(readableNeteasePlaybackMessage({code:404}),"NetEase cannot provide a playable URL for this song.");assert.equal(readableNeteasePlaybackMessage({freeTrialInfo:{start:0}}),"This song is only available as a NetEase trial preview.");assert.equal(readableNeteasePlaybackMessage({message:"custom unavailable"}),"custom unavailable");assert.equal(readableNeteasePlaybackMessage({},"fallback unavailable"),"fallback unavailable");});
+
+test("NetEase playback stays on the legacy EAPI client while downloads use the dedicated resolver",async()=>{
+  const playbackCalls=[];
+  let downloadCalls=0;
+  const service=new NeteaseApiService({
+    playbackApi:{
+      song_detail:async input=>{playbackCalls.push(["detail",input]);return{body:{songs:[{id:100,name:"Song",ar:[{name:"Artist"}],al:{name:"Album"},dt:180000}]}};},
+      song_url_v1:async input=>{playbackCalls.push(["url",input]);return{body:{data:[{id:100,url:"https://m10.music.126.net/song.mp3",time:180000,br:320000,level:"standard",expi:1200}]}};}
+    },
+    downloadUrlResolver:async()=>{downloadCalls++;return{code:200,data:[]};}
+  });
+  service.cookie="MUSIC_U=test-session";
+  const result=await service.playSong({neteaseId:"100",level:"standard"});
+  assert.equal(result.ok,true);
+  assert.equal(result.track.playUrl,"https://m10.music.126.net/song.mp3");
+  assert.deepEqual(playbackCalls.map(([kind])=>kind),["detail","url"]);
+  assert.equal(playbackCalls.every(([,input])=>input.cookie==="MUSIC_U=test-session"),true);
+  assert.equal(downloadCalls,0);
+});
+
+test("NetEase playlist collection coalesces writes and cools down after anti-abuse responses",async()=>{
+  let calls=0;
+  let clock=1_000;
+  let mode="rate-limit";
+  let rejectUpstream;
+  const inputs=[];
+  const requestClient=(uri,data,options)=>{
+      calls++;
+      inputs.push({uri,data,options});
+      if(mode==="success")return Promise.resolve({status:200,body:{code:200}});
+      return new Promise((_resolve,reject)=>{rejectUpstream=reject;});
+  };
+  const service=new NeteaseApiService({
+    requestClient,
+    now:()=>clock,
+    t:(key,_params,fallback)=>key==="music.neteaseActionRateLimited"?"网易云提示操作过于频繁，请稍后再试。":fallback
+  });
+  service.cookie="MUSIC_U=test-session";
+  service.requireProfile=async()=>({ok:true,profile:{userId:42}});
+
+  const first=service.setPlaylistSubscribed({neteaseId:"123",subscribed:true});
+  const duplicate=service.setPlaylistSubscribed({neteaseId:"123",subscribed:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  rejectUpstream({status:405,body:{code:405,message:"鎿嶄綴杞囦粅棰ュ繁锛�请稍后再试"}});
+  const [firstResult,duplicateResult]=await Promise.all([first,duplicate]);
+
+  assert.equal(calls,1);
+  assert.equal(firstResult.ok,false);
+  assert.equal(firstResult.code,405);
+  assert.equal(firstResult.message,"网易云提示操作过于频繁，请稍后再试。");
+  assert.equal(firstResult.retryAfter,60_000);
+  assert.deepEqual(duplicateResult,firstResult);
+  assert.deepEqual(inputs,[{uri:"/api/playlist/subscribe",data:{id:"123"},options:{crypto:"weapi",cookie:"MUSIC_U=test-session"}}]);
+
+  const cooledDown=await service.setPlaylistSubscribed({neteaseId:"456",subscribed:true});
+  assert.equal(cooledDown.code,405);
+  assert.equal(cooledDown.retryAfter,60_000);
+  assert.equal(calls,1);
+
+  clock+=60_000;
+  mode="success";
+  const success=await service.setPlaylistSubscribed({neteaseId:"456",subscribed:true});
+  assert.equal(success.ok,true);
+  assert.equal(success.subscribed,true);
+  assert.equal(calls,2);
+});
 
 test("concurrent mutations use isolated temporary files and preserve every write",async()=>{const{dir,store}=await fixture();const items=await Promise.all(Array.from({length:20},(_,index)=>store.createConversation({title:`chat-${index}`})));assert.equal(items.length,20);assert.equal((await store.listConversations()).length,20);const tempFiles=await fs.readdir(dir);assert.equal(tempFiles.filter(name=>name.includes(".tmp")).length,0);await fs.rm(dir,{recursive:true,force:true});});
 
@@ -89,5 +157,7 @@ test("music library removes a playlist from persistent state",async()=>{const di
 test("music library hides and restores playlist tracks",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-music-hide-track-"));const folder=path.join(dir,"set");await fs.mkdir(folder,{recursive:true});await fs.writeFile(path.join(folder,"a.wav"),Buffer.from("RIFF....WAVEfmt "));await fs.writeFile(path.join(folder,"b.wav"),Buffer.from("RIFF....WAVEfmt "));const library=new MusicLibrary({statePath:path.join(dir,"music.json"),coverDir:path.join(dir,"covers")});let state=await library.addFolder(folder);const playlistId=state.playlist.id;const [first,second]=state.playlist.trackIds;state=await library.removeTracksFromPlaylist(playlistId,[first]);assert.deepEqual(state.playlists[0].trackIds,[second]);assert.equal(state.playlists[0].hiddenTrackPaths.length,1);state=await library.refreshPlaylist(playlistId);assert.deepEqual(state.playlists[0].trackIds,[second]);state=await library.restoreHiddenTracks(playlistId,state.playlists[0].hiddenTrackPaths);assert.equal(state.playlists[0].trackIds.length,2);await fs.rm(dir,{recursive:true,force:true});});
 
 test("music library persists liked tracks",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-music-like-"));const audio=path.join(dir,"like.wav");await fs.writeFile(audio,Buffer.from("RIFF....WAVEfmt "));const library=new MusicLibrary({statePath:path.join(dir,"music.json"),coverDir:path.join(dir,"covers")});let result=await library.addFiles([audio]);const trackId=result.state.tracks[0].id;let state=await library.updateTrack({id:trackId,liked:true});assert.equal(state.tracks[0].liked,true);assert.ok(state.tracks[0].likedAt);state=await library.updateTrack({id:trackId,liked:false});assert.equal(state.tracks[0].liked,false);assert.equal(state.tracks[0].likedAt,null);await fs.rm(dir,{recursive:true,force:true});});
+
+test("music library removes a NetEase download, its file, and active playback together",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-music-download-remove-"));const downloadDir=path.join(dir,"Kairos Downloads");await fs.mkdir(downloadDir,{recursive:true});const audio=path.join(downloadDir,"Artist - Song [100].mp3");await fs.writeFile(audio,Buffer.from("ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000"));const library=new MusicLibrary({statePath:path.join(dir,"music.json"),coverDir:path.join(dir,"covers")});let state=await library.upsertDownloadedTrack({filePath:audio,source:{neteaseId:"100",title:"Song",artist:"Artist",album:"Album",requestedQuality:"standard",resolvedQuality:"standard"}});const track=state.tracks[0];await library.updatePlayback({queueTrackIds:[track.id],currentTrackId:track.id,playing:true,position:{trackId:track.id,seconds:12}});state=await library.removeDownloadedTrack(track.id,{downloadDir});assert.equal(state.tracks.length,0);assert.deepEqual(state.queueTrackIds,[]);assert.equal(state.currentTrackId,null);assert.equal(state.playing,false);assert.equal(state.positions[track.id],undefined);await assert.rejects(fs.access(audio));await fs.rm(dir,{recursive:true,force:true});});
 
 test("music library persists play counts",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"kairos-music-plays-"));const audio=path.join(dir,"played.wav");await fs.writeFile(audio,Buffer.from("RIFF....WAVEfmt "));const library=new MusicLibrary({statePath:path.join(dir,"music.json"),coverDir:path.join(dir,"covers")});let result=await library.addFiles([audio]);const trackId=result.state.tracks[0].id;let state=await library.updateTrack({id:trackId,incrementPlayCount:true});assert.equal(state.tracks[0].playCount,1);assert.ok(state.tracks[0].lastPlayedAt);state=await library.updateTrack({id:trackId,incrementPlayCount:true});assert.equal(state.tracks[0].playCount,2);await fs.rm(dir,{recursive:true,force:true});});

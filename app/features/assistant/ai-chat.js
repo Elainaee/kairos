@@ -52,6 +52,7 @@
     name: $('aiAssistantName'), rename: $('renameAiAssistant')
   };
   let providers = [];
+  let providerSettings = {};
   let sessions = [];
   let active = null;
   let pendingAttachments = [];
@@ -111,7 +112,6 @@
     const profile = await desktop.initializeAssistantProfile(legacy);
     localStorage.removeItem(legacyAssistantNameKey); localStorage.removeItem(legacyAvatarKey); applyAssistantProfile(profile);
   };
-  const supportedProviderIds = new Set(['openai', 'doubao']);
   ui.avatarButton?.addEventListener('click', () => ui.avatarInput?.click());
   ui.avatarInput?.addEventListener('change', () => {
     const file = ui.avatarInput.files?.[0]; if (!file) return;
@@ -167,28 +167,31 @@
     aiComboboxSync.forEach(sync=>sync?.());
   };
   const renderProviders = () => {
-    ui.provider.replaceChildren(...providers.map(item => { const option = document.createElement('option'); option.value = item.id; option.textContent = item.name; return option; }));
-    const provider = providers.some(item => item.id === active?.provider) ? active.provider : providers[0]?.id || '';
-    if (active) ui.provider.value = provider;
-    const model = renderModels(active?.model);
-    if (active && (active.provider !== provider || (model && active.model !== model))) {
-      active = { ...active, provider, ...(model ? { model } : {}) };
-      desktop?.conversations.update(active.id, { provider: active.provider, ...(model ? { model } : {}) }).catch(() => {});
+    const options = providers.map(item => { const option = document.createElement('option'); option.value = item.id; option.textContent = item.name; return option; });
+    const currentProvider = active?.provider || '';
+    if (currentProvider && !providers.some(item => item.id === currentProvider)) {
+      const retired = document.createElement('option'); retired.value = currentProvider; retired.textContent = `${providerSettings?.retiredProviders?.[currentProvider]?.name || currentProvider} · ${tr('assistant.providerUnavailable', {}, 'Unavailable')}`; retired.disabled = true; options.push(retired);
     }
+    ui.provider.replaceChildren(...options);
+    ui.provider.value = currentProvider || providerSettings.defaultProvider || providers[0]?.id || '';
+    renderModels(active?.model);
     aiComboboxSync.forEach(sync=>sync?.());
   };
   const renderModels = selectedModel => {
     const provider = providers.find(item => item.id === ui.provider.value);
-    const models = [...new Set((provider?.models || [provider?.defaultModel]).filter(Boolean))];
-    ui.model.replaceChildren(...models.map(model => { const option = document.createElement('option'); option.value = model; option.textContent = model; return option; }));
-    ui.model.value = models.includes(selectedModel) ? selectedModel : provider?.defaultModel || models[0] || '';
+    const models = [...new Set((provider?.models || []).filter(Boolean))];
+    const options = models.map(model => { const option = document.createElement('option'); option.value = model; option.textContent = model; return option; });
+    if (selectedModel && !models.includes(selectedModel)) { const unavailable = document.createElement('option'); unavailable.value = selectedModel; unavailable.textContent = `${selectedModel} · ${tr('assistant.modelUnavailable', {}, 'Unavailable')}`; unavailable.disabled = true; options.push(unavailable); }
+    ui.model.replaceChildren(...options);
+    ui.model.value = selectedModel || provider?.defaultModel || '';
     aiComboboxSync.forEach(sync=>sync?.());
     return ui.model.value;
   };
-  desktop?.onProviderSettingsChanged?.(({ providers: nextProviders }) => {
+  desktop?.onProviderSettingsChanged?.(({ providers: nextProviders, settings }) => {
     if (!Array.isArray(nextProviders) || !nextProviders.length) return;
-    providers = nextProviders.filter(item => supportedProviderIds.has(item.id));
-    if (active) renderProviders();
+    providers = nextProviders;
+    providerSettings = settings || providerSettings;
+    if (active) { renderProviders(); updateComposer(); }
   });
   const updateUsage = async () => {
     if (!desktop || !active) return;
@@ -196,8 +199,11 @@
     ui.usage.textContent = `${trPlural('assistant.requestCount', usage.requests, `${usage.requests} requests`)} · ${window.KairosI18n?.formatNumber?.(usage.inputTokens + usage.outputTokens) || usage.inputTokens + usage.outputTokens} ${tr('assistant.tokens', {}, 'tokens')}`;
   };
   const updateComposer = () => {
-    send.disabled = (!input.value.trim() && !currentRequestId) || !active;
+    const provider = providers.find(item => item.id === ui.provider.value);
+    const selectable = Boolean(provider && provider.models?.includes(ui.model.value));
+    send.disabled = (!input.value.trim() && !currentRequestId) || !active || (!currentRequestId && !selectable);
     input.disabled = Boolean(currentRequestId);
+    input.setAttribute('aria-invalid', String(!selectable));
     send.querySelector('.material-symbols-outlined').textContent = currentRequestId ? 'stop' : 'arrow_upward'; send.classList.toggle('is-stopping', Boolean(currentRequestId));
     send.setAttribute('aria-label', currentRequestId ? tr('assistant.stopGeneration', {}, 'Stop generation') : tr('assistant.send', {}, 'Send message'));
     input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
@@ -211,7 +217,7 @@
   };
   const createConversation = async () => {
     if (!desktop) throw new Error(tr('assistant.desktopOnly', {}, 'AI is available only in Kairos desktop.'));
-    const provider = ui.provider.value || providers[0]?.id || 'openai';
+    const provider = ui.provider.value || providerSettings.defaultProvider || providers.find(item => item.defaultModel)?.id || providers[0]?.id || '';
     const model = ui.model.value || providers.find(item => item.id === provider)?.defaultModel || '';
     const created = await desktop.conversations.create({ title: tr('assistant.newConversation', {}, 'New conversation'), provider, model });
     sessions.unshift(created); await loadConversation(created.id); input.focus(); return active;
@@ -219,8 +225,8 @@
   const initialize = async () => {
     if (!desktop) throw new Error(tr('assistant.desktopOnly', {}, 'AI is available only in Kairos desktop.'));
     await initializeAssistantProfile();
-    providers = (await desktop.listProviders()).filter(item => supportedProviderIds.has(item.id));
-    const settings = await desktop.getProviderSettings();
+    providers = await desktop.listProviders();
+    const settings = await desktop.getProviderSettings(); providerSettings = settings;
     sessions = await desktop.conversations.list();
     if (!sessions.length) { const provider = settings.defaultProvider || providers[0]?.id || 'openai'; sessions = [await desktop.conversations.create({ title: tr('assistant.newConversation', {}, 'New conversation'), provider, model: settings.providers?.[provider]?.model || '' })]; }
     active = await desktop.conversations.get(sessions[0].id); if (!active) throw new Error(tr('assistant.currentConversationUnavailable', {}, 'Unable to load the current conversation.'));
@@ -349,12 +355,32 @@
     if (active && streamText) active.messages.push({ role: 'assistant', content: streamText, status, createdAt: new Date().toISOString(), error: errorMessage ? { message: errorMessage } : null });
     currentRequestId = null; waitingForRequest = false; streamArticle = null; streamText = ''; updateComposer(); updateUsage();
   };
+  const renderMusicAction = event => {
+    const record = document.createElement('div'); record.className = 'ai-music-action-record';
+    const icon = document.createElement('span'); icon.className = 'material-symbols-outlined'; icon.setAttribute('aria-hidden', 'true'); icon.textContent = ['search','searching'].includes(event.action) ? 'search' : event.action === 'volume' ? 'volume_up' : event.action === 'liked' ? 'favorite' : 'graphic_eq';
+    const label = document.createElement('span');
+    const result = event.result || {};
+    if (event.action === 'searching') label.textContent = tr('assistant.musicSearching', {}, 'Searching NetEase Music...');
+    else if (event.action === 'search') { const count = ['songs','playlists','albums','artists'].reduce((sum, key) => sum + (result[key]?.length || 0), 0); label.textContent = tr('assistant.musicSearchRecord', { count }, `NetEase search · ${count} results`); }
+    else if (event.action === 'play_next' && result.track?.title) label.textContent = tr('assistant.musicPlayNext', { title: result.track.title }, `Set “${result.track.title}” as next`);
+    else if (event.action === 'play_now' && result.track?.title) label.textContent = tr('assistant.musicPlaying', { title: result.track.title }, `Playing “${result.track.title}”`);
+    else if (event.action === 'replace_queue') label.textContent = tr('assistant.musicNewQueue', { count: result.playable || 0 }, `New queue · ${result.playable || 0} tracks`);
+    else if (event.action === 'queue_cleared') label.textContent = tr('assistant.musicQueueCleared', {}, 'Music queue cleared');
+    else if (event.action === 'queue_removed' && result.track?.title) label.textContent = tr('assistant.musicQueueRemoved', { title: result.track.title }, `Removed “${result.track.title}” from queue`);
+    else if (event.action === 'queue_list') label.textContent = tr('assistant.musicQueueListed', { count: result.tracks?.length || 0 }, `Current queue · ${result.tracks?.length || 0} tracks`);
+    else if (result.track?.title) label.textContent = `${result.track.title}${result.track.artist ? ` · ${result.track.artist}` : ''}`;
+    else if (result.name) label.textContent = `${result.name} · ${tr('assistant.musicQueueReplaced', {}, 'queue replaced')}`;
+    else if (event.action === 'volume') label.textContent = result.muted ? tr('assistant.musicMuted', {}, 'Music muted') : tr('assistant.musicVolumeRecord', { volume: result.volume }, `Volume ${result.volume}`);
+    else label.textContent = tr('assistant.musicActionRecord', { action: event.action }, `Music · ${event.action}`);
+    record.append(icon, label); messages.append(record); scrollToLatest();
+  };
   desktop?.onStreamEvent(event => {
     if (waitingForRequest && !currentRequestId) currentRequestId = event.requestId;
     if (event.requestId !== currentRequestId) return;
     if (event.type === 'text_delta') { streamText += event.delta; streamArticle.bubble.classList.remove('ai-message-thinking'); streamArticle.bubble.textContent = streamText; scrollToLatest(); }
     if (event.type === 'tool_proposal') renderAgentProposals([event.proposal]);
     if (event.type === 'search_results') { setThinkingState(streamArticle, tr('assistant.organizingSearchResults', {}, 'Organizing search results')); renderSearchSources(event.result); }
+    if (event.type === 'music_action') renderMusicAction(event);
     if (event.type === 'memory_saved') appendSystem(tr('assistant.memorySaved', { value: event.item.value }, `Kairos remembered: ${event.item.value}`));
     if (event.type === 'memory_forgotten') appendSystem(event.count ? trPlural('assistant.memoryForgottenCount', event.count, `Kairos forgot ${event.count} related memories.`) : tr('assistant.noMemoryToForget', {}, 'No related memories were found to forget.'));
     if (event.type === 'conversation_title' && active) { active.title = event.title; sessions = sessions.map(item => item.id === active.id ? { ...item, title: event.title } : item); renderSessions(); }
@@ -424,6 +450,8 @@
   const submit = async () => {
     if (currentRequestId) { await desktop.stopMessage(currentRequestId); return; }
     const text = input.value.trim(); if (!text || !active || !desktop) return;
+    const selectedProvider = providers.find(item => item.id === ui.provider.value);
+    if (!selectedProvider?.models?.includes(ui.model.value)) { appendSystem(tr('assistant.modelUnavailableSendBlocked', {}, 'Choose an enabled model that has passed tool verification before sending.')); return; }
     const assessment = await desktop.context.assess(active.id, ui.provider.value);
     if (assessment.requiresDecision) {
       const summarize = window.confirm(tr('assistant.contextLimitDecision', {}, 'This conversation is close to the context limit.\nConfirm: summarize and continue\nCancel: start a new conversation'));
@@ -474,8 +502,9 @@
     const provider = providers.find(item => item.id === ui.provider.value); renderModels(provider?.defaultModel);
     active = { ...active, provider: ui.provider.value, model: ui.model.value };
     await desktop.conversations.update(active.id, { provider: active.provider, model: active.model });
+    updateComposer();
   }));
-  ui.model?.addEventListener('change', runAction(async () => { if (!active) throw new Error(tr('assistant.conversationNotReady', {}, 'Conversation has not finished loading.')); active.model = ui.model.value.trim(); await desktop.conversations.update(active.id, { model: active.model }); }));
+  ui.model?.addEventListener('change', runAction(async () => { if (!active) throw new Error(tr('assistant.conversationNotReady', {}, 'Conversation has not finished loading.')); active.model = ui.model.value.trim(); await desktop.conversations.update(active.id, { model: active.model }); updateComposer(); }));
   $('closeAiPanel')?.addEventListener('click', () => {
     if (windowMode) desktop?.closeAiWindow?.();
     else panel.close();

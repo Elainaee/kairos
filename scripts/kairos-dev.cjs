@@ -19,21 +19,12 @@ function localPath(...parts) {
   return path.join(root, ...parts);
 }
 
-function commandExists(command) {
-  const probe = isWindows ? "where" : "command";
-  const args = isWindows ? [command] : ["-v", command];
-  return spawnSync(probe, args, { stdio: "ignore", shell: !isWindows }).status === 0;
-}
-
 function printInstallHelp() {
   const lines = [
     "Kairos could not find the local Electron runtime.",
     "",
     "Install dependencies first, then run the app again:",
-    commandExists("pnpm") ? "  pnpm install" : "  corepack enable && corepack prepare pnpm@latest --activate && pnpm install",
-    "",
-    "Fallback if pnpm is not available:",
-    commandExists("npm") ? "  npm install" : "  Install Node.js/npm, then run npm install.",
+    "  pnpm install",
     "",
     "For environment details:",
     "  node scripts/kairos-doctor.cjs"
@@ -58,12 +49,6 @@ function electronCommand() {
   return null;
 }
 
-function runElectron() {
-  const target = electronCommand();
-  if (!target) return 1;
-  return spawnSync(target.command, target.args, { cwd: root, stdio: "inherit", shell: target.shell }).status ?? 1;
-}
-
 function waitForVueServer(url, timeoutMs = 15000) {
   const startedAt = Date.now();
   return new Promise((resolve, reject) => {
@@ -83,18 +68,20 @@ function waitForVueServer(url, timeoutMs = 15000) {
   });
 }
 
-async function runVuePreview() {
-  const controllerSync = spawnSync(process.execPath, [localPath("scripts", "sync-music-native-controller.cjs")], {
-    cwd: root,
-    stdio: "inherit",
-    shell: false
-  });
-  if (controllerSync.status !== 0) return controllerSync.status ?? 1;
+async function runDevelopment() {
+  for (const script of ["build-i18n.cjs", "sync-music-native-controller.cjs"]) {
+    const preparation = spawnSync(process.execPath, [localPath("scripts", script)], {
+      cwd: root,
+      stdio: "inherit",
+      shell: false
+    });
+    if (preparation.status !== 0) return preparation.status ?? 1;
+  }
   const viteEntry = localPath("node_modules", "vite", "bin", "vite.js");
   const target = electronCommand();
   if (!target) return 1;
   if (!existsSync(viteEntry)) {
-    console.error("Kairos Vue preview requires Vite. Run pnpm install first.");
+    console.error("Kairos development requires Vite. Run pnpm install first.");
     return 1;
   }
 
@@ -136,8 +123,4 @@ async function runVuePreview() {
   return undefined;
 }
 
-if (process.env.KAIROS_RENDERER === "vue") {
-  runVuePreview().then(code => { if (typeof code === "number") process.exit(code); });
-} else {
-  process.exit(runElectron());
-}
+runDevelopment().then(code => { if (typeof code === "number") process.exit(code); });

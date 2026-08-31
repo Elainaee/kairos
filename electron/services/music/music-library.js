@@ -1,12 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { KairosAppDatabase } from "../../data/sqlite/index.js";
 
-const SUPPORTED_EXTENSIONS = new Set([".mp3", ".flac", ".wav", ".m4a", ".mp4", ".aac"]);
+const SUPPORTED_EXTENSIONS = new Set([".mp3", ".flac", ".wav", ".m4a", ".mp4", ".aac", ".ogg", ".opus"]);
 const COVER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const MAX_EMBEDDED_COVER_BYTES = 5 * 1024 * 1024;
 const pathKey = value => path.resolve(String(value || "")).toLowerCase();
+const isPathInside = (filePath, directory) => {
+  const relative = path.relative(path.resolve(String(directory || "")), path.resolve(String(filePath || "")));
+  return Boolean(directory) && relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+};
 const EMPTY = {
   version: 1,
   tracks: [],
@@ -370,6 +375,89 @@ export class MusicLibrary {
     return { state: await this.publicState(), added: await Promise.all(added.map(track => this.publicTrack(track))), rejected };
   }
 
+  /**
+   * Import a completed NetEase download without creating a duplicate entry on
+   * re-download. The source id, not a display filename, is the stable key.
+   */
+  async upsertDownloadedTrack({ filePath, source = {}, batchId = "", coverPath = "", coverMimeType = "" } = {}) {
+    return this.enqueueMutation(async () => {
+      const resolved = path.resolve(String(filePath || ""));
+      const ext = path.extname(resolved).toLowerCase();
+      if (!SUPPORTED_EXTENSIONS.has(ext)) throw new Error("unsupported_format");
+      const stat = await fs.stat(resolved);
+      if (!stat.isFile() || stat.size <= 0) throw new Error("unreadable_file");
+      const sourceId = String(source?.neteaseId || "").replace(/^netease:/, "");
+      if (!/^\d{1,20}$/.test(sourceId)) throw new Error("invalid_netease_source_id");
+      const state = await this.read();
+      const existing = state.tracks.find(track => track.source === "netease-download" && String(track.sourceId || "") === sourceId);
+      const metadata = await parseMetadata(resolved);
+      const id = existing?.id || crypto.randomUUID();
+      let coverAssetId = existing?.coverAssetId || "";
+      let cover = metadata.cover || null;
+      if (!cover && coverPath) {
+        const bytes = await fs.readFile(coverPath).catch(() => null);
+        if (bytes?.length) cover = { data: bytes, mimeType: coverMimeType || "image/jpeg" };
+      }
+      if (cover?.data?.length && cover.data.length <= MAX_EMBEDDED_COVER_BYTES) {
+        coverAssetId = `music-cover:${id}`;
+        this.database?.saveBinaryAsset?.({
+          id: coverAssetId,
+          ownerType: "music-cover",
+          ownerId: id,
+          name: `${id}${coverExtension(cover.mimeType)}`,
+          mimeType: cover.mimeType || "image/jpeg",
+          payload: cover.data
+        });
+      }
+      const now = new Date().toISOString();
+      const previousPath = existing?.path ? path.resolve(existing.path) : "";
+      const track = {
+        ...(existing || {}),
+        id,
+        path: resolved,
+        fileName: path.basename(resolved),
+        title: metadata.title || source.title || path.basename(resolved, ext),
+        artist: metadata.artist || source.artist || "NetEase Cloud",
+        album: metadata.album || source.album || "",
+        duration: Number(source.duration || existing?.duration || 0),
+        coverAssetId,
+        coverPath: "",
+        format: ext.slice(1).toUpperCase(),
+        fileSize: stat.size,
+        source: "netease-download",
+        sourceId,
+        requestedQuality: String(source.requestedQuality || "standard"),
+        resolvedQuality: String(source.resolvedQuality || source.requestedQuality || "standard"),
+        downloadedAt: now,
+        downloadBatchId: String(batchId || ""),
+        addedAt: existing?.addedAt || now,
+        updatedAt: now
+      };
+      if (existing) state.tracks[state.tracks.findIndex(item => item.id === id)] = track;
+      else state.tracks.push(track);
+      const playlistId = "kairos_download";
+      const playlist = state.playlists.find(item => item.id === playlistId) || {
+        id: playlistId,
+        name: "Kairos Downloads",
+        folderPath: path.dirname(resolved),
+        trackIds: [],
+        hiddenTrackPaths: [],
+        coverPath: "",
+        managed: true,
+        createdAt: now
+      };
+      if (!state.playlists.includes(playlist)) state.playlists.push(playlist);
+      playlist.name = "Kairos Downloads";
+      playlist.folderPath = path.dirname(resolved);
+      playlist.managed = true;
+      playlist.trackIds = [...new Set([...(playlist.trackIds || []), id])];
+      playlist.updatedAt = now;
+      await this.write(state);
+      if (previousPath && pathKey(previousPath) !== pathKey(resolved)) await fs.rm(previousPath, { force: true }).catch(() => {});
+      return this.publicState();
+    });
+  }
+
   async scanAudioFiles(dirPath) {
     const found = [];
     const visit = async current => {
@@ -512,6 +600,89 @@ export class MusicLibrary {
     if (state.currentTrackId === id) state.currentTrackId = state.queueTrackIds[0] || null;
     await this.write(state);
     return this.publicState();
+  }
+
+  /**
+   * Removes a NetEase-owned local download as one logical operation. The
+   * renderer supplies only the stable track id; the main process verifies the
+   * source and download directory before touching the file system.
+   */
+  async removeDownloadedTrack(id, { downloadDir } = {}) {
+    return this.enqueueMutation(async () => {
+      const state = await this.read();
+      const track = state.tracks.find(item => item.id === String(id || ""));
+      if (!track || track.source !== "netease-download") throw new Error("download_track_not_found");
+      const filePath = path.resolve(track.path);
+      if (!isPathInside(filePath, downloadDir)) throw new Error("download_path_outside_directory");
+      const removedPathKey = pathKey(filePath);
+      const removedId = track.id;
+      const temporaryPath = `${filePath}.${crypto.randomUUID()}.deleting`;
+      let moved = false;
+      try {
+        await fs.rename(filePath, temporaryPath);
+        moved = true;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      try {
+        state.tracks = state.tracks.filter(item => item.id !== removedId);
+        state.queueTrackIds = state.queueTrackIds.filter(trackId => trackId !== removedId);
+        delete state.positions[removedId];
+        if (state.currentTrackId === removedId) {
+          state.currentTrackId = null;
+          state.playing = false;
+        }
+        for (const playlist of state.playlists) {
+          playlist.trackIds = (playlist.trackIds || []).filter(trackId => trackId !== removedId);
+          playlist.hiddenTrackPaths = (playlist.hiddenTrackPaths || []).filter(hiddenPath => pathKey(hiddenPath) !== removedPathKey);
+          playlist.updatedAt = new Date().toISOString();
+        }
+        await this.write(state);
+        if (track.coverAssetId) this.database?.removeBinaryAsset?.(track.coverAssetId);
+        if (moved) await fs.rm(temporaryPath, { force: true });
+      } catch (error) {
+        if (moved) await fs.rename(temporaryPath, filePath).catch(() => {});
+        throw error;
+      }
+      return this.publicState();
+    });
+  }
+
+  /**
+   * Move a downloaded track inside the managed download directory while
+   * keeping every library and playlist reference pointed at the new path.
+   */
+  async relocateDownloadedTrack(id, { targetPath, downloadDir } = {}) {
+    return this.enqueueMutation(async () => {
+      const state = await this.read();
+      const track = state.tracks.find(item => item.id === String(id || ""));
+      if (!track || track.source !== "netease-download") throw new Error("download_track_not_found");
+      const previousPath = path.resolve(track.path);
+      const nextPath = path.resolve(String(targetPath || ""));
+      if (!isPathInside(previousPath, downloadDir) || !isPathInside(nextPath, downloadDir)) throw new Error("download_path_outside_directory");
+      if (path.extname(previousPath).toLowerCase() !== path.extname(nextPath).toLowerCase()) throw new Error("download_extension_mismatch");
+      if (pathKey(previousPath) === pathKey(nextPath)) return this.publicState();
+      const sourceStat = await fs.stat(previousPath);
+      if (!sourceStat.isFile() || sourceStat.size <= 0) throw new Error("unreadable_file");
+      const targetStat = await fs.stat(nextPath).catch(() => null);
+      if (targetStat) throw new Error("download_target_exists");
+
+      await fs.rename(previousPath, nextPath);
+      try {
+        const previousKey = pathKey(previousPath);
+        track.path = nextPath;
+        track.fileName = path.basename(nextPath);
+        track.updatedAt = new Date().toISOString();
+        for (const playlist of state.playlists) {
+          playlist.hiddenTrackPaths = (playlist.hiddenTrackPaths || []).map(hiddenPath => pathKey(hiddenPath) === previousKey ? pathKey(nextPath) : hiddenPath);
+        }
+        await this.write(state);
+      } catch (error) {
+        await fs.rename(nextPath, previousPath).catch(() => {});
+        throw error;
+      }
+      return this.publicState();
+    });
   }
 
   async removeUnavailableTracks() {
