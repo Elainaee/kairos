@@ -24,6 +24,18 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   isDesktop: true,
   listProviders: () => ipcRenderer.invoke("ai:list-providers"),
   getProviderSettings: () => ipcRenderer.invoke("ai:get-settings"),
+  personalProfile: Object.freeze({
+    get: () => ipcRenderer.invoke("ai:personal-profile:get"),
+    update: (input) => ipcRenderer.invoke("ai:personal-profile:update", input),
+    refresh: (conversationId) => ipcRenderer.invoke("ai:personal-profile:refresh", conversationId),
+    finalize: (conversationId) => ipcRenderer.invoke("ai:personal-profile:finalize", conversationId),
+    clearPortrait: () => ipcRenderer.invoke("ai:personal-profile:clear-portrait"),
+    onChanged: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("ai:personal-profile-changed", listener);
+      return () => ipcRenderer.removeListener("ai:personal-profile-changed", listener);
+    }
+  }),
   initializeAssistantProfile: (legacy) => ipcRenderer.invoke("ai:initialize-assistant-profile", legacy),
   saveAssistantProfile: (profile) => ipcRenderer.invoke("ai:save-assistant-profile", profile),
   createProvider: (input) => ipcRenderer.invoke("ai:create-provider", input),

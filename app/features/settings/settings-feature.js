@@ -14,7 +14,7 @@
     general: { language: 'en', timeFormat: 'system' },
     appearance: { theme: 'claude-plus', calendarBackground: { source: 'builtin', id: 'default.jpg', blur: 6, brightness: 95 } },
     accessibility: { reduceMotion: false },
-    ai: { replyStyle: 'companion', memoryEnabled: true, webSearchMode: 'ask' },
+    ai: { webSearchMode: 'ask' },
     music: { neteaseQuality: 'standard' },
     reminders: { deadline: '1440', event: '30', match: '30', snoozeMinutes: '10', desktopNotifications: true }
   };
@@ -32,7 +32,6 @@
     language: [['system', t('settings.systemDefault', 'System default')], ['en', t('settings.english', 'English')], ['zh-CN', t('settings.simplifiedChinese', 'Simplified Chinese')]],
     timeFormat: [['system', t('settings.systemDefault', 'System default')], ['12h', t('settings.12hour', '12-hour')], ['24h', t('settings.24hour', '24-hour')]],
     theme: [['claude-plus', 'Claude +']],
-    replyStyle: [['companion', t('settings.replyCompanion', 'Warm companion')], ['concise', t('settings.replyConcise', 'Concise execution')], ['learning', t('settings.replyLearning', 'Focused learning')]],
     webSearchMode: [['ask', t('settings.webSearchAsk', 'Ask every time')], ['off', t('settings.webSearchOff', 'Off')]],
     neteaseQuality: [['standard', t('settings.qualityStandard', 'Standard')], ['higher', t('settings.qualityHigher', 'Higher')], ['exhigh', t('settings.qualityVeryHigh', 'Very high')], ['lossless', t('settings.qualityLossless', 'Lossless')]],
     reminderOffset: [['none', t('time.none', 'No reminder')], ['0', t('time.atStart', 'At start time')], ['10', t('time.minutesBefore', '10 minutes before', { count: 10 })], ['30', t('time.minutesBefore', '30 minutes before', { count: 30 })], ['60', t('time.hourBefore', '1 hour before')], ['1440', t('time.dayBefore', '1 day before')]],
@@ -82,6 +81,7 @@
   let providerModelScrollSnapshot;
   let neteaseStatus;
   let calendarBackgrounds = [];
+  let personalProfile = { memoryEnabled: true, manual: { name: '', nickname: '', age: null, occupation: '', longTermGoals: [] }, interaction: { addressMode: 'auto', customAddress: '', tonePreset: 'companion', customTone: '', relationshipPreset: 'companion', customRelationship: '' }, portrait: { text: '', status: 'empty', updatedAt: '' } };
   let statusTimer;
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -191,6 +191,40 @@
       `);
   };
   const card = (title, body) => `<section class="kairos-ai-card"><header><h3>${title}</h3></header>${body}</section>`;
+  const profileSelect = (id, label, value, rows, field) => `
+    <label class="kairos-profile-field" for="${id}"><span>${label}</span><span class="kairos-select-wrap"><select id="${id}" data-profile-field="${field}" data-profile-group="interaction">${rows.map(([key, text]) => `<option value="${key}" ${key === value ? 'selected' : ''}>${text}</option>`).join('')}</select><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></span></label>`;
+  const profileInput = (id, label, value, field, options = '') => `<label class="kairos-profile-field" for="${id}"><span>${label}</span><input id="${id}" data-profile-field="${field}" data-profile-group="manual" value="${escapeHtml(value)}" ${options}></label>`;
+  const personalProfileMarkup = () => {
+    const profile = personalProfile || {};
+    const manual = profile.manual || {};
+    const interaction = profile.interaction || {};
+    const portrait = profile.portrait || {};
+    const memoryEnabled = profile.memoryEnabled !== false;
+    const addressRows = [['auto', t('settings.profileAddressAuto', 'Automatic')], ['nickname', t('settings.profileAddressNickname', 'Use nickname')], ['name', t('settings.profileAddressName', 'Use name')], ['custom', t('settings.custom', 'Custom')]];
+    const toneRows = [['companion', t('settings.replyCompanion', 'Warm companion')], ['concise', t('settings.replyConcise', 'Concise execution')], ['learning', t('settings.replyLearning', 'Focused learning')], ['custom', t('settings.custom', 'Custom')]];
+    const relationshipRows = [['companion', t('settings.profileRelationshipCompanion', 'Companion')], ['friend', t('settings.profileRelationshipFriend', 'Friend')], ['study_partner', t('settings.profileRelationshipStudyPartner', 'Study partner')], ['assistant', t('settings.profileRelationshipAssistant', 'Execution assistant')], ['custom', t('settings.custom', 'Custom')]];
+    const toggleMarkup = `<label class="kairos-profile-memory-toggle" for="kairosPersonalMemory"><span>${t('settings.personalMemory', 'Personal memory')}</span><span class="kairos-switch"><input id="kairosPersonalMemory" data-profile-memory-enabled type="checkbox" ${memoryEnabled ? 'checked' : ''}><i></i></span></label>`;
+    if (!memoryEnabled) return `<section class="kairos-ai-card kairos-profile-card is-disabled"><header><div><h3>${t('settings.personalProfile', 'Personal profile')}</h3><p>${t('settings.personalProfileDisabledHint', 'Turn on personal memory to display and use your profile.')}</p></div>${toggleMarkup}</header><div class="kairos-profile-disabled"><span class="material-symbols-outlined" aria-hidden="true">visibility_off</span><p>${t('settings.personalProfileDisabledCopy', 'Kairos will not display, use, or update this profile. Existing information is kept until you clear it.')}</p></div><div class="kairos-danger-row"><span><strong>${t('settings.clearMemory', 'Clear all AI memories?')}</strong></span><button type="button" data-reset-memories>${t('common.clearAll', 'Clear all')}</button></div></section>`;
+    const updated = portrait.updatedAt ? (window.KairosI18n?.formatDate?.(new Date(portrait.updatedAt), { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) || portrait.updatedAt) : '';
+    const portraitText = portrait.text ? escapeHtml(portrait.text) : t('settings.profilePortraitEmpty', 'After a few conversations, Kairos can gradually form an understanding of you.');
+    return `<section class="kairos-ai-card kairos-profile-card"><header><div><h3>${t('settings.personalProfile', 'Personal profile')}</h3><p>${t('settings.personalProfileHint', 'Your information stays under your control. Kairos can only update the description it generates.')}</p></div>${toggleMarkup}</header>
+      <fieldset class="kairos-profile-section"><legend>${t('settings.profileAboutYou', 'About you')}</legend><div class="kairos-profile-grid">
+        ${profileInput('kairosProfileName', t('settings.profileName', 'Name'), manual.name || '', 'name', 'maxlength="32"')}
+        ${profileInput('kairosProfileNickname', t('settings.profileNickname', 'Nickname'), manual.nickname || '', 'nickname', 'maxlength="32"')}
+        ${profileInput('kairosProfileAge', t('settings.profileAge', 'Age'), manual.age ?? '', 'age', 'type="number" min="1" max="120" inputmode="numeric"')}
+        ${profileInput('kairosProfileOccupation', t('settings.profileOccupation', 'Occupation'), manual.occupation || '', 'occupation', 'maxlength="80"')}
+      </div><label class="kairos-profile-field kairos-profile-field-wide" for="kairosProfileGoals"><span>${t('settings.profileLongTermGoals', 'Long-term goals')}</span><textarea id="kairosProfileGoals" data-profile-field="longTermGoals" data-profile-group="manual" rows="3" maxlength="1280" placeholder="${escapeHtml(t('settings.profileGoalsHint', 'One goal per line, up to 8'))}">${escapeHtml((manual.longTermGoals || []).join('\n'))}</textarea></label></fieldset>
+      <fieldset class="kairos-profile-section"><legend>${t('settings.profileInteraction', 'How we interact')}</legend><div class="kairos-profile-grid">
+        ${profileSelect('kairosProfileAddress', t('settings.profileAddress', 'How AI addresses you'), interaction.addressMode || 'auto', addressRows, 'addressMode')}
+        ${profileSelect('kairosProfileTone', t('settings.profileTone', 'Tone'), interaction.tonePreset || 'companion', toneRows, 'tonePreset')}
+        ${profileSelect('kairosProfileRelationship', t('settings.profileRelationship', 'Relationship'), interaction.relationshipPreset || 'companion', relationshipRows, 'relationshipPreset')}
+        ${interaction.addressMode === 'custom' ? `<label class="kairos-profile-field"><span>${t('settings.profileCustomAddress', 'Custom address')}</span><input data-profile-field="customAddress" data-profile-group="interaction" value="${escapeHtml(interaction.customAddress || '')}" maxlength="24"></label>` : ''}
+      </div>
+      ${interaction.tonePreset === 'custom' ? `<label class="kairos-profile-field kairos-profile-field-wide"><span>${t('settings.profileCustomTone', 'Custom tone')}</span><textarea data-profile-field="customTone" data-profile-group="interaction" rows="2" maxlength="300">${escapeHtml(interaction.customTone || '')}</textarea></label>` : ''}
+      ${interaction.relationshipPreset === 'custom' ? `<label class="kairos-profile-field kairos-profile-field-wide"><span>${t('settings.profileCustomRelationship', 'Custom relationship')}</span><textarea data-profile-field="customRelationship" data-profile-group="interaction" rows="2" maxlength="160">${escapeHtml(interaction.customRelationship || '')}</textarea></label>` : ''}</fieldset>
+      <section class="kairos-profile-portrait"><header><div><strong>${t('settings.profileAiView', 'How AI sees me')}</strong>${updated ? `<small>${t('settings.profileUpdatedAt', 'Updated {time}', { time: updated })}</small>` : ''}</div><span data-portrait-status="${escapeHtml(portrait.status || 'empty')}">${portrait.status === 'pending' ? t('settings.profileUpdating', 'Updating…') : portrait.status === 'failed' ? t('settings.profileUpdateFailed', 'Update failed') : ''}</span></header><p class="${portrait.text ? '' : 'is-empty'}">${portraitText}</p><footer><button type="button" data-refresh-personal-portrait ${portrait.status === 'pending' ? 'disabled' : ''}><span class="material-symbols-outlined" aria-hidden="true">refresh</span>${t('settings.profileUpdateNow', 'Update now')}</button><button type="button" data-clear-personal-portrait ${portrait.text ? '' : 'disabled'}><span class="material-symbols-outlined" aria-hidden="true">ink_eraser</span>${t('settings.profileClearPortrait', 'Clear description')}</button></footer></section>
+      <div class="kairos-danger-row"><span><strong>${t('settings.clearMemory', 'Clear all AI memories?')}</strong><small>${t('settings.clearMemoryKeepsProfile', 'Clears learned memories and the AI description, while keeping information you entered.')}</small></span><button type="button" data-reset-memories>${t('common.clearAll', 'Clear all')}</button></div></section>`;
+  };
   const credentialRow = (kind, label, configured, createdAt, keyHint = '', source = 'none', allowClear = true) => `
     <div class="kairos-credential-row" data-credential="${kind}">
       <strong>${label}</strong>
@@ -258,12 +292,7 @@
     ${card(t('settings.searchConfiguration', 'Search'), `
       ${credentialRow('firecrawl', 'FireCrawl API Key', providerSettings?.firecrawl?.configured, providerSettings?.firecrawl?.createdAt, providerSettings?.firecrawl?.keyHint, providerSettings?.firecrawl?.source)}
       <div class="kairos-settings-group">${select('kairosWebSearchMode', t('settings.webSearch', 'Web search'), state.ai.webSearchMode, choices.webSearchMode, 'ai.webSearchMode')}</div>`)}
-    ${card(t('settings.agentBehavior', 'Behavior'), `
-      <div class="kairos-settings-group">
-        ${select('kairosReplyStyle', t('settings.replyStyle', 'Reply style'), state.ai.replyStyle, choices.replyStyle, 'ai.replyStyle')}
-        ${toggle('kairosMemoryEnabled', t('settings.longTermMemory', 'Long-term memory'), state.ai.memoryEnabled, 'ai.memoryEnabled')}
-      </div>
-      <div class="kairos-danger-row"><span><strong>${t('settings.clearMemory', 'Clear all AI memories?')}</strong></span><button type="button" data-reset-memories>${t('common.clearAll', 'Clear all')}</button></div>`)}
+    ${personalProfileMarkup()}
   `);
   const remindersMarkup = () => sectionView('reminders', t('settings.reminders', 'Reminders'), `
     ${card(t('settings.defaultRules', 'Default Rules'), `
@@ -469,11 +498,12 @@
   };
   const refreshProviderData = async () => {
     if (!window.kairosDesktop) return;
-    [providerCatalog, providerSettings, neteaseStatus, calendarBackgrounds] = await Promise.all([
+    [providerCatalog, providerSettings, neteaseStatus, calendarBackgrounds, personalProfile] = await Promise.all([
       window.kairosDesktop.listProviders(),
       window.kairosDesktop.getProviderSettings(),
       window.kairosDesktop.netease?.getStatus ? window.kairosDesktop.netease.getStatus().catch(() => null) : Promise.resolve(null),
-      window.kairosDesktop.calendarBackgrounds?.listBuiltins ? window.kairosDesktop.calendarBackgrounds.listBuiltins().catch(() => []) : Promise.resolve([])
+      window.kairosDesktop.calendarBackgrounds?.listBuiltins ? window.kairosDesktop.calendarBackgrounds.listBuiltins().catch(() => []) : Promise.resolve([]),
+      window.kairosDesktop.personalProfile?.get ? window.kairosDesktop.personalProfile.get().catch(() => personalProfile) : Promise.resolve(personalProfile)
     ]);
     if (!providerCatalog.some(item => item.id === selectedProviderId)) selectedProviderId = providerSettings?.defaultProvider || providerCatalog[0]?.id || '';
   };
@@ -601,6 +631,60 @@
       const path = event.target.dataset.settingPath;
       setByPath(path, event.target.type === 'checkbox' ? event.target.checked : event.target.value);
     }));
+    dialog.querySelector('[data-profile-memory-enabled]')?.addEventListener('change', async event => {
+      const content = dialog.querySelector('.kairos-settings-content');
+      const scrollTop = content?.scrollTop || 0;
+      try {
+        personalProfile = await window.kairosDesktop.personalProfile.update({ memoryEnabled: event.currentTarget.checked });
+        render();
+        requestAnimationFrame(() => { const next = dialog.querySelector('.kairos-settings-content'); if (next) next.scrollTop = scrollTop; });
+        flashSaved();
+      } catch (error) {
+        personalProfile = await window.kairosDesktop.personalProfile.get().catch(() => personalProfile);
+        render();
+        toast(t('errors.saveFailed', 'Unable to save changes.'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+      }
+    });
+    dialog.querySelectorAll('[data-profile-field]').forEach(input => input.addEventListener('change', async event => {
+      const field = event.currentTarget.dataset.profileField;
+      const group = event.currentTarget.dataset.profileGroup;
+      let value = event.currentTarget.value;
+      if (field === 'age') value = value === '' ? null : Number(value);
+      if (field === 'longTermGoals') value = value.split(/\r?\n/);
+      const content = dialog.querySelector('.kairos-settings-content');
+      const scrollTop = content?.scrollTop || 0;
+      try {
+        personalProfile = await window.kairosDesktop.personalProfile.update({ [group]: { [field]: value } });
+        render();
+        requestAnimationFrame(() => { const next = dialog.querySelector('.kairos-settings-content'); if (next) next.scrollTop = scrollTop; });
+        flashSaved();
+      } catch (error) {
+        personalProfile = await window.kairosDesktop.personalProfile.get().catch(() => personalProfile);
+        render();
+        toast(t('errors.saveFailed', 'Unable to save changes.'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+      }
+    }));
+    dialog.querySelector('[data-refresh-personal-portrait]')?.addEventListener('click', async event => {
+      event.currentTarget.disabled = true;
+      try {
+        const result = await window.kairosDesktop.personalProfile.refresh();
+        personalProfile = await window.kairosDesktop.personalProfile.get();
+        render();
+        if (personalProfile.portrait?.status === 'failed') toast(t('settings.profileUpdateFailed', 'Update failed'), 'error', personalProfile.portrait?.lastErrorCode || t('legacy.tryAgain', 'Please try again.'));
+        else flashSaved(result?.updated ? t('settings.profileUpdated', 'Profile updated') : t('settings.profileNoNewEvidence', 'No new conversation content'));
+      } catch (error) {
+        toast(t('settings.profileUpdateFailed', 'Update failed'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+      }
+    });
+    dialog.querySelector('[data-clear-personal-portrait]')?.addEventListener('click', async () => {
+      try {
+        personalProfile = await window.kairosDesktop.personalProfile.clearPortrait();
+        render();
+        flashSaved(t('settings.profilePortraitCleared', 'AI description cleared'));
+      } catch (error) {
+        toast(t('errors.saveFailed', 'Unable to save changes.'), 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+      }
+    });
     dialog.querySelector('[data-model-picker-toggle]')?.addEventListener('click', event => {
       const picker = event.currentTarget.closest('[data-model-picker]');
       setModelPickerOpen(picker, !isModelPickerOpen(picker));
@@ -802,6 +886,8 @@
     });
     dialog.querySelector('[data-reset-memories]')?.addEventListener('click', () => confirmAction({ title: t('settings.clearMemory', 'Clear all AI memories?'), copy: t('settings.clearMemoryDescription', 'This permanently deletes every long-term memory saved by Kairos.'), action: t('common.clearAll', 'Clear all'), dangerous: true, onConfirm: async () => {
       await window.kairosDesktop.memories.clear();
+      personalProfile = await window.kairosDesktop.personalProfile.get();
+      render();
       flashSaved(t('settings.allMemoriesCleared', 'All AI memories cleared'));
     }}));
     dialog.querySelector('[data-netease-login]')?.addEventListener('click', openNeteaseLogin);
@@ -862,6 +948,14 @@
   });
 
   window.KairosSettingsFeature = Object.freeze({ open, read: () => state, save: persist });
+  window.kairosDesktop?.personalProfile?.onChanged?.(nextProfile => {
+    personalProfile = nextProfile || personalProfile;
+    if (!dialog?.open || activeSection !== 'agent') return;
+    const content = dialog.querySelector('.kairos-settings-content');
+    const scrollTop = content?.scrollTop || 0;
+    render();
+    requestAnimationFrame(() => { const next = dialog.querySelector('.kairos-settings-content'); if (next) next.scrollTop = scrollTop; });
+  });
   window.addEventListener('kairos:locale-changed', () => {
     sections = buildSections();
     choices = buildChoices();

@@ -215,8 +215,12 @@
     renderSessions(); renderProviders(); renderMessages();
     input.value = active.draft || ''; pendingAttachments = []; renderAttachments(); updateComposer(); await updateUsage();
   };
+  const finalizeActiveConversation = () => active?.id && desktop?.personalProfile?.finalize
+    ? desktop.personalProfile.finalize(active.id).catch(() => ({ queued: false }))
+    : Promise.resolve({ queued: false });
   const createConversation = async () => {
     if (!desktop) throw new Error(tr('assistant.desktopOnly', {}, 'AI is available only in Kairos desktop.'));
+    await finalizeActiveConversation();
     const provider = ui.provider.value || providerSettings.defaultProvider || providers.find(item => item.defaultModel)?.id || providers[0]?.id || '';
     const model = ui.model.value || providers.find(item => item.id === provider)?.defaultModel || '';
     const created = await desktop.conversations.create({ title: tr('assistant.newConversation', {}, 'New conversation'), provider, model });
@@ -488,13 +492,13 @@
     editor.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); void finish(true); } if (event.key === 'Escape') { event.preventDefault(); cancelled = true; void finish(false); } };
     editor.onblur = () => void finish(!cancelled); ui.name.hidden = true; ui.name.after(editor); editor.focus(); editor.select();
   });
-  ui.session?.addEventListener('change', runAction(() => loadConversation(ui.session.value)));
+  ui.session?.addEventListener('change', runAction(async () => { await finalizeActiveConversation(); await loadConversation(ui.session.value); }));
   ui.create?.addEventListener('click', runAction(createConversation));
   ui.remove?.addEventListener('click', runAction(async () => {
     if (!initialized || !active) throw new Error(tr('assistant.conversationNotReady', {}, 'Conversation has not finished loading.'));
     const ok=await kairosConfirmAlert({title:tr('assistant.deleteConversation', {}, 'Delete conversation'),description:tr('assistant.deleteConversationDescription', { title: active.title || tr('assistant.newConversation', {}, 'New conversation') }, `Conversation "${active.title || 'New conversation'}" and its related attachments will be removed. This action cannot be undone.`),action:tr('common.delete', {}, 'Delete'),cancel:tr('common.cancel', {}, 'Cancel')});
     if (!ok) return;
-    const id = active.id; await desktop.conversations.delete(id); sessions = sessions.filter(item => item.id !== id);
+    const id = active.id; await desktop.conversations.delete(id); sessions = sessions.filter(item => item.id !== id); active = null;
     if (!sessions.length) await createConversation(); else await loadConversation(sessions[0].id);
   }));
   ui.provider?.addEventListener('change', runAction(async () => {
@@ -506,6 +510,7 @@
   }));
   ui.model?.addEventListener('change', runAction(async () => { if (!active) throw new Error(tr('assistant.conversationNotReady', {}, 'Conversation has not finished loading.')); active.model = ui.model.value.trim(); await desktop.conversations.update(active.id, { model: active.model }); updateComposer(); }));
   $('closeAiPanel')?.addEventListener('click', () => {
+    void finalizeActiveConversation();
     if (windowMode) desktop?.closeAiWindow?.();
     else panel.close();
   });

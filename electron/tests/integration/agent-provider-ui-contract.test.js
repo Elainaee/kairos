@@ -6,11 +6,15 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "../../..");
 const read = file => fs.readFile(path.join(root, file), "utf8");
 
-test("Agent settings keep provider, web search, and behavior as three themed areas", async () => {
+test("Agent settings keep provider, web search, and personal profile as three themed areas", async () => {
   const source = await read("app/features/settings/settings-feature.js");
-  assert.match(source, /card\(t\('settings\.providerConfiguration'[\s\S]*?card\(t\('settings\.searchConfiguration'[\s\S]*?card\(t\('settings\.agentBehavior'/);
+  assert.match(source, /card\(t\('settings\.providerConfiguration'[\s\S]*?card\(t\('settings\.searchConfiguration'[\s\S]*?personalProfileMarkup\(\)/);
   assert.match(source, /kairos-provider-list[\s\S]*?kairos-provider-detail/);
   assert.match(source, /credentialRow\('firecrawl'[\s\S]*?kairosWebSearchMode/);
+  assert.match(source, /data-profile-memory-enabled/);
+  assert.match(source, /data-profile-field="longTermGoals"/);
+  assert.match(source, /data-refresh-personal-portrait/);
+  assert.doesNotMatch(source, /kairosReplyStyle|kairosMemoryEnabled/);
   assert.doesNotMatch(source, /data-test-firecrawl|testFirecrawl|test-firecrawl/i);
 });
 

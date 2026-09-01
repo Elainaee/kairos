@@ -85,12 +85,12 @@ test("LangChain model decides when to save a durable memory", async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-test("Agent reply style is included in the runtime system prompt", async () => {
+test("Agent personal profile instruction is included in the runtime system prompt", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-langchain-style-"));
   const store = new AiDataStore(path.join(dir, "ai.json"));
   const model = fakeModel().respond(new AIMessage("Done."));
-  await runKairosAgent({ chatModel: model, model: "test", replyStyle: "concise", messages: [{ role: "user", content: "Please help." }], store, toolRuntime: new ToolRuntime(store), appAdapters: {}, searchWeb: async () => ({ items: [] }), ensureExternalSearch: async () => {}, now: new Date() });
-  assert.match(callText(model.calls[0]), /Reply concisely and action-first/);
+  await runKairosAgent({ chatModel: model, model: "test", personalizationInstruction: "Address the user as Captain and keep the tone warm.", messages: [{ role: "user", content: "Please help." }], store, toolRuntime: new ToolRuntime(store), appAdapters: {}, searchWeb: async () => ({ items: [] }), ensureExternalSearch: async () => {}, now: new Date() });
+  assert.match(callText(model.calls[0]), /Address the user as Captain and keep the tone warm/);
   await fs.rm(dir, { recursive: true, force: true });
 });
 

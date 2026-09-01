@@ -25,6 +25,7 @@ import { CalendarBackgroundService } from "../services/calendar/calendar-backgro
 import { MemoryLedger } from "../services/ai/memory/memory-ledger.js";
 import { MemoryViews } from "../services/ai/memory/memory-views.js";
 import { AgentMemoryService } from "../services/ai/memory/memory-service.js";
+import { DEFAULT_PERSONAL_PROFILE, buildPersonalizationInstruction, buildPortraitMessages, clearPortrait, commitPortrait, initializePersonalProfile, normalizePersonalProfile, parsePortraitResponse, setPortraitStatus, updatePersonalProfile } from "../data/personal-profile.js";
 
 // Vue's development renderer is served from http://127.0.0.1, which cannot
 // load a user's file: music URL directly.  The original file-based renderer
@@ -79,9 +80,11 @@ let petVisible = true;
 let tray = null;
 let isQuitting = false;
 let closePromptOpen = false;
-let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, neteaseDownloadService, aiMusicController, aiSettingsRepository, calendarBackgrounds, agentMemoryService;
+let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, neteaseDownloadService, aiMusicController, aiSettingsRepository, personalProfileSettingsRepository, calendarBackgrounds, agentMemoryService;
 const pendingMusicCommands = new Map();
 const pendingCalendarBackgroundImports = new Map();
+const personalPortraitJobs = new Map();
+let personalProfileMutationQueue = Promise.resolve();
 // Electron transparent windows must not be resized after construction. Reserve
 // the largest surface needed by the pet and its context menu up front; unused
 // pixels remain transparent and mouse-pass-through.
@@ -146,6 +149,7 @@ const smokePersistLanguage = process.env.KAIROS_SMOKE_PERSIST_LANGUAGE || "";
 const smokeCaptureVisuals = process.env.KAIROS_SMOKE_CAPTURE_VISUALS === "1";
 
 const settingsPath = () => path.join(app.getPath("userData"), "ai-settings.json");
+const personalProfilePath = () => path.join(app.getPath("userData"), "personal-profile.json");
 const petStatePath = () => path.join(app.getPath("userData"), "pet-state.json");
 const windowStatePath = () => path.join(app.getPath("userData"), "window-state.json");
 const calendarBackgroundDir = () => path.join(app.getPath("userData"), "calendar-backgrounds");
@@ -158,6 +162,37 @@ function normalizeSettings(value = {}) { const base = structuredClone(defaults);
 function settingsRepository() { if (!aiSettingsRepository) aiSettingsRepository = new SettingsRepository({ filePath: settingsPath(), defaults, normalize: normalizeSettings, database: appDatabase, storeKey: "ai-settings", summarize: value => ({ defaultProvider: value.defaultProvider || "", providers: Object.keys(value.providers || {}).length, firecrawlConfigured: Boolean(value.firecrawl?.encryptedKey), assistantProfileConfigured: Boolean(value.assistantProfile?.updatedAt) }) }); return aiSettingsRepository; }
 async function readSettings() { return settingsRepository().read(); }
 async function writeSettings(value) { return settingsRepository().write(value); }
+function personalProfileRepository() {
+  if (!personalProfileSettingsRepository) personalProfileSettingsRepository = new SettingsRepository({
+    filePath: personalProfilePath(),
+    defaults: DEFAULT_PERSONAL_PROFILE,
+    normalize: normalizePersonalProfile,
+    database: appDatabase,
+    storeKey: "personal-profile",
+    summarize: value => ({ memoryEnabled: value.memoryEnabled, manualFields: Object.values(value.manual || {}).filter(item => Array.isArray(item) ? item.length : item !== "" && item != null).length, portraitConfigured: Boolean(value.portrait?.text) })
+  });
+  return personalProfileSettingsRepository;
+}
+async function readPersonalProfile() { await personalProfileMutationQueue.catch(() => {}); return personalProfileRepository().read(); }
+async function writePersonalProfile(value) {
+  const operation = personalProfileMutationQueue.catch(() => {}).then(async () => {
+    const saved = await personalProfileRepository().write(value);
+    for (const win of [mainWindow, aiChatWindow]) if (win && !win.isDestroyed()) win.webContents.send("ai:personal-profile-changed", saved);
+    return saved;
+  });
+  personalProfileMutationQueue = operation.catch(() => {});
+  return operation;
+}
+async function mutatePersonalProfile(change) {
+  const operation = personalProfileMutationQueue.catch(() => {}).then(async () => {
+    const current = await personalProfileRepository().read();
+    const saved = await personalProfileRepository().write(change(normalizePersonalProfile(current)));
+    for (const win of [mainWindow, aiChatWindow]) if (win && !win.isDestroyed()) win.webContents.send("ai:personal-profile-changed", saved);
+    return saved;
+  });
+  personalProfileMutationQueue = operation.catch(() => {});
+  return operation;
+}
 async function readLegacyStore(store, legacyPath, fallback = null) {
   const existing = appDatabase?.readStorePayload(store);
   if (existing !== null && existing !== undefined) return existing;
@@ -171,8 +206,8 @@ async function cleanupMigratedLegacyData(userData) {
   if (!/KairosDev$/i.test(userData) && process.env.KAIROS_MIGRATE_CLEANUP !== "1") return { skipped: true };
   const audit = appDatabase.audit();
   const stores = new Set((audit.stores || []).map(item => item.store));
-  if (!audit.snapshot || !["ai-data", "ai-settings", "music-state", "netease-api-state", "pet-state", "window-state"].every(store => stores.has(store))) throw new Error("sqlite_migration_verification_failed");
-  const targets = ["ai-data.json", "ai-settings.json", "app-state.json", "music-state.json", "netease-api-state.json", "pet-state.json", "window-state.json", "attachments", "blob_storage", "music-covers", "calendar-backgrounds"].map(name => path.join(userData, name));
+  if (!audit.snapshot || !["ai-data", "ai-settings", "personal-profile", "music-state", "netease-api-state", "pet-state", "window-state"].every(store => stores.has(store))) throw new Error("sqlite_migration_verification_failed");
+  const targets = ["ai-data.json", "ai-settings.json", "personal-profile.json", "app-state.json", "music-state.json", "netease-api-state.json", "pet-state.json", "window-state.json", "attachments", "blob_storage", "music-covers", "calendar-backgrounds"].map(name => path.join(userData, name));
   await Promise.all(targets.map(target => fs.rm(target, { recursive: true, force: true })));
   return { removed: targets.map(target => path.basename(target)) };
 }
@@ -476,6 +511,55 @@ function broadcastProviderSettings(settings) {
   for (const win of [mainWindow, aiChatWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send("ai:settings-changed", payload);
   }
+}
+async function refreshPersonalPortrait(conversationId, { force = false } = {}) {
+  let id = String(conversationId || "").trim();
+  if (!id) id = String((await aiStore.listConversations())?.[0]?.id || "");
+  if (!id) return { updated: false, reason: "conversation_required" };
+  if (personalPortraitJobs.has(id)) return personalPortraitJobs.get(id);
+  const job = (async () => {
+    let snapshot = await readPersonalProfile();
+    if (!snapshot.memoryEnabled) return { updated: false, reason: "memory_disabled" };
+    const conversation = await aiStore.getConversation(id);
+    if (!conversation) return { updated: false, reason: "conversation_not_found" };
+    const source = buildPortraitMessages(snapshot, conversation, nativeLocale());
+    const evidenceLength = source.messages[0]?.content?.length || 0;
+    if (!source.messages.length || (!force && (source.evidenceCount < 1 || evidenceLength < 80))) return { updated: false, reason: "no_new_evidence" };
+    await mutatePersonalProfile(current => setPortraitStatus(current, "pending"));
+    try {
+      const settings = await readSettings();
+      const provider = conversation.provider || settings.defaultProvider;
+      const definition = requireProviderDefinition(settings, provider);
+      const entry = settings.providers?.[provider] || {};
+      const selection = resolveSelectableModels(definition, entry, { t: nativeT });
+      const model = conversation.model || selection.defaultModel;
+      if (!model || !selection.enabledModels.includes(model)) throw new Error("profile_model_unavailable");
+      let output = "";
+      for await (const event of streamProviderRequest({ provider, definition, model, apiKey: resolveProviderKey(settings, entry, provider), messages: source.messages, signal: new AbortController().signal, t: nativeT })) {
+        if (event.type === "text_delta") output += event.delta;
+      }
+      const parsed = parsePortraitResponse(output);
+      const nextText = parsed.changed && parsed.summary ? parsed.summary : snapshot.portrait.text;
+      const committed = commitPortrait(await readPersonalProfile(), {
+        text: nextText,
+        sourceConversationId: id,
+        sourceMessageCursor: source.cursor,
+        providerId: provider,
+        model,
+      }, snapshot.revision);
+      if (!committed.committed) {
+        await mutatePersonalProfile(current => current.portrait.status === "pending" ? setPortraitStatus(current, current.portrait.text ? "ready" : "empty") : current);
+        return { updated: false, reason: committed.reason };
+      }
+      await writePersonalProfile(committed.profile);
+      return { updated: parsed.changed, profile: committed.profile };
+    } catch (error) {
+      const failed = await mutatePersonalProfile(current => setPortraitStatus(current, "failed", error?.code || error?.message || "portrait_update_failed"));
+      return { updated: false, reason: failed.portrait.lastErrorCode };
+    }
+  })().finally(() => personalPortraitJobs.delete(id));
+  personalPortraitJobs.set(id, job);
+  return job;
 }
 function dispatchMusicCommand(command) {
   if (!mainWindow || mainWindow.isDestroyed()) return Promise.reject(new Error("music_player_unavailable"));
@@ -1561,6 +1645,18 @@ ipcMain.on("pet:set-mouse-passthrough", (event, ignore) => {
 
 ipcMain.handle("ai:list-providers", async () => providerCatalog(await readSettings()));
 ipcMain.handle("ai:get-settings", async () => publicSettings(await readSettings()));
+ipcMain.handle("ai:personal-profile:get", () => readPersonalProfile());
+ipcMain.handle("ai:personal-profile:update", async (_event, input = {}) => mutatePersonalProfile(current => updatePersonalProfile(current, {
+  memoryEnabled: input.memoryEnabled,
+  manual: input.manual,
+  interaction: input.interaction,
+})));
+ipcMain.handle("ai:personal-profile:refresh", async (_event, conversationId) => refreshPersonalPortrait(conversationId, { force: true }));
+ipcMain.handle("ai:personal-profile:finalize", async (_event, conversationId) => {
+  queueMicrotask(() => refreshPersonalPortrait(conversationId).catch(error => console.error("Failed to refresh personal portrait:", error)));
+  return { queued: true };
+});
+ipcMain.handle("ai:personal-profile:clear-portrait", () => mutatePersonalProfile(current => clearPortrait(current)));
 ipcMain.handle("ai:initialize-assistant-profile", async (_event, legacy = {}) => {
   const current = await readSettings(); const result = initializeAssistantProfile(current.assistantProfile, legacy);
   if (result.changed) await writeSettings({ ...current, assistantProfile: result.profile });
@@ -1694,7 +1790,7 @@ ipcMain.handle("ai:send", async (_event, payload) => {
   const definition = requireProviderDefinition(settings, provider);
   const entry = settings.providers[provider] || {}; const selection = resolveSelectableModels(definition, entry, { t: nativeT }); const requestedModel = String(payload.model || "").trim(); const model = requestedModel || selection.defaultModel; if (!model) throw new ProviderError("no_enabled_model", nativeT("errors.noEnabledModel", {}, "Select at least one chat model in Settings first.")); if (!selection.enabledModels.includes(model)) throw new ProviderError("model_unavailable", nativeT("errors.noEnabledModel", {}, "The selected model is unavailable or hidden."));
   const controller = new AbortController(); controllers.set(requestId, controller); const conversationId=payload.conversationId; if(conversationId)await aiStore.updateConversation(conversationId,{provider,model}); const lastUser=[...(payload.messages||[])].reverse().find(x=>x.role==="user"); if(conversationId&&lastUser&&!payload.isRetry)await aiStore.addMessage({conversationId,role:"user",content:lastUser.content,provider,model,attachmentIds:payload.attachmentIds,attachmentNames:payload.attachmentNames});
-  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,definition.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`${nativeT("assistant.attachmentExtractedContent",{},"Extracted attachment content:")}\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?nativeT("assistant.attachmentPart",{part:x.part}," · Part {part}"):""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const result=await runKairosAgent({provider,providerDefinition:definition,apiKey:resolveProviderKey(settings,entry,provider),model,messages:requestMessages,conversationTitle:conversation?.title||nativeT("assistant.newConversation",{},"New conversation"),replyStyle:aiPreferences.replyStyle,memoryEnabled:aiPreferences.memoryEnabled!==false,signal:controller.signal,store:aiStore,memoryService:agentMemoryService,toolRuntime,appAdapters,musicController:aiMusicController,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:[nativeT("electron.allowWebSearch",{},"Allow web search"),nativeT("common.cancel",{},"Cancel")],defaultId:0,cancelId:1,title:nativeT("electron.webSearchPermissionTitle",{},"Allow Kairos to search the web?"),message:nativeT("electron.webSearchPermissionMessage",{},"Kairos wants to search external web pages to answer the current question. Only model-selected search terms will be sent.")});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;usage=result.usage;broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { if(controller.signal.aborted){status="stopped";broadcastAiStream({requestId,type:"stopped"});}else{status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue });} } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
+  queueMicrotask(async () => { let output="",usage=null,status="completed",errorValue=null;try { const requestMessages=[...(payload.messages||[])];for(const id of payload.attachmentIds||[]){const prepared=await attachments.prepare(id,definition.capabilities||[]);if(prepared.mode==="extracted_text")requestMessages.push({role:"user",content:`${nativeT("assistant.attachmentExtractedContent",{},"Extracted attachment content:")}\n${prepared.chunks.map(x=>`[${x.location}${x.part>1?nativeT("assistant.attachmentPart",{part:x.part}," · Part {part}"):""}]\n${x.text}`).join("\n\n")}`});}broadcastAiStream({ requestId, type:"started" });const conversation=conversationId?await aiStore.getConversation(conversationId):null;const aiPreferences=payload.aiPreferences||{};const personalProfile=await readPersonalProfile();const result=await runKairosAgent({provider,providerDefinition:definition,apiKey:resolveProviderKey(settings,entry,provider),model,messages:requestMessages,conversationTitle:conversation?.title||nativeT("assistant.newConversation",{},"New conversation"),personalizationInstruction:buildPersonalizationInstruction(personalProfile,nativeLocale()),memoryEnabled:personalProfile.memoryEnabled,signal:controller.signal,store:aiStore,memoryService:agentMemoryService,toolRuntime,appAdapters,musicController:aiMusicController,searchWeb:input=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");return searchWebWithSettings({...input,firecrawlReader:aiPreferences.firecrawlReader!==false});},ensureExternalSearch:async()=>{if(aiPreferences.webSearchMode==="off")throw new Error("external_search_disabled");const permissions=await toolRuntime.getPermissions();if(permissions.externalSearch==="read")return;const response=await dialog.showMessageBox(mainWindow||aiChatWindow,{type:"question",buttons:[nativeT("electron.allowWebSearch",{},"Allow web search"),nativeT("common.cancel",{},"Cancel")],defaultId:0,cancelId:1,title:nativeT("electron.webSearchPermissionTitle",{},"Allow Kairos to search the web?"),message:nativeT("electron.webSearchPermissionMessage",{},"Kairos wants to search external web pages to answer the current question. Only model-selected search terms will be sent.")});if(response.response!==0)throw new Error("external_search_not_approved");await toolRuntime.setPermissions({externalSearch:"read"});},onSetTitle:title=>conversationId?aiStore.updateConversation(conversationId,{title}):{title},onToolEvent:event=>broadcastAiStream({requestId,...event})});output=result.text;usage=result.usage;broadcastAiStream({requestId,type:"completed",usage}); } catch (error) { if(controller.signal.aborted){status="stopped";broadcastAiStream({requestId,type:"stopped"});}else{status="failed";errorValue=errorInfo(error);broadcastAiStream({ requestId, type: "failed", ...errorValue });} } finally { if(conversationId){try { const message=await aiStore.addMessage({conversationId,role:"assistant",content:output,status,provider,model});if(errorValue)await aiStore.updateMessage(message.id,{error:errorValue});if(usage)await aiStore.addUsage({conversationId,requestId,provider,model,inputTokens:usage.input_tokens||usage.prompt_tokens||0,outputTokens:usage.output_tokens||usage.completion_tokens||0}); } catch (persistenceError) { console.error("Failed to persist AI response:",persistenceError); broadcastAiStream({requestId,type:"persistence_failed",message:errorInfo(persistenceError).message}); }}controllers.delete(requestId); } }); return { requestId };
 });
 ipcMain.handle("ai:stop", (_event, requestId) => { controllers.get(requestId)?.abort(); return { ok: true }; });
 ipcMain.handle("ai:conversations:list",()=>aiStore.listConversations());
@@ -1705,7 +1801,7 @@ ipcMain.handle("ai:conversations:delete",async(_event,id)=>{const files=await ai
 ipcMain.handle("ai:usage",(_event,filters)=>aiStore.usageSummary(filters));
 ipcMain.handle("ai:memories:list",()=>aiStore.listMemories());
 ipcMain.handle("ai:memories:forget",(_event,id)=>aiStore.forgetMemory(id));
-ipcMain.handle("ai:memories:clear",()=>aiStore.clearMemories());
+ipcMain.handle("ai:memories:clear",async()=>{const result=await aiStore.clearMemories();await mutatePersonalProfile(current=>clearPortrait(current));return result;});
 ipcMain.handle("ai:memory:profile:get",()=>agentMemoryService.getProfile());
 ipcMain.handle("ai:memory:profile:update",(_event,input)=>agentMemoryService.updateProfileField(input));
 ipcMain.handle("ai:memory:profile:forget",(_event,key)=>agentMemoryService.forgetProfileField(key));
@@ -1810,7 +1906,7 @@ ipcMain.handle("netease:open-download-directory", async () => {
 
 if (hasSingleInstanceLock) {
   app.on("second-instance", () => { focusMainWindow(); });
-app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();aiMusicController=new AiMusicController({netease:neteaseService,dispatch:dispatchMusicCommand,quality:async()=>(await appStateStore.read())?.settings?.music?.neteaseQuality||"standard"});neteaseDownloadService=new NeteaseDownloadService({neteaseService,musicLibrary,downloadDir:path.join(app.getPath("music"),"Kairos Downloads"),statePath:path.join(userData,"netease-download-state.json"),database:appDatabase,ffmpegPath:bundledFfmpegPath(),onProgress:payload=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send("netease:download-progress",payload);}});await neteaseDownloadService.initialize();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);setNativeLocale(await appStateStore.read());await createWindow();if(!smokeTest)await createPetWindow();});
+app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();const initialAppState=await appStateStore.read();const initializedProfile=initializePersonalProfile(await readPersonalProfile(),initialAppState?.settings?.ai||{});if(initializedProfile.changed)await writePersonalProfile(initializedProfile.profile);musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();aiMusicController=new AiMusicController({netease:neteaseService,dispatch:dispatchMusicCommand,quality:async()=>(await appStateStore.read())?.settings?.music?.neteaseQuality||"standard"});neteaseDownloadService=new NeteaseDownloadService({neteaseService,musicLibrary,downloadDir:path.join(app.getPath("music"),"Kairos Downloads"),statePath:path.join(userData,"netease-download-state.json"),database:appDatabase,ffmpegPath:bundledFfmpegPath(),onProgress:payload=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send("netease:download-progress",payload);}});await neteaseDownloadService.initialize();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);setNativeLocale(initialAppState);await createWindow();if(!smokeTest)await createPetWindow();});
   app.on("activate", () => { if (!focusMainWindow()) createWindow().catch(error => console.error("Failed to recreate main window:", error)); });
   app.on("window-all-closed", () => { closeWindowSafely(petWindow); if (process.platform !== "darwin") app.quit(); });
 }
