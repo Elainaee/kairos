@@ -2,10 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { KairosAppDatabase } from "../sqlite/index.js";
 
-export const APP_STATE_SCHEMA_VERSION = 4;
-const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], theme: "light" };
-const arrays = ["schedules", "checkins", "habits"];
+export const APP_STATE_SCHEMA_VERSION = 5;
+const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], focusSessions: [], activeFocusSession: null, theme: "light" };
+const arrays = ["schedules", "checkins", "habits", "focusSessions"];
 const SCHEDULE_TYPES = new Set(["task", "deadline", "event", "match", "holiday", "other"]);
+const FOCUS_PHASES = new Set(["focus", "rest"]);
+const FOCUS_STATUSES = new Set(["completed", "interrupted"]);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function migrationEntry(id, from, to) {
   return { id, from, to, applied_at: new Date().toISOString() };
@@ -50,7 +52,63 @@ export function normalize(input = {}) {
   if (hadNotesData && !out.migrations.some(item => item.id === "app-state-v4-remove-notes")) {
     out.migrations.push(migrationEntry("app-state-v4-remove-notes", Math.min(previousVersion || 3, 3), APP_STATE_SCHEMA_VERSION));
   }
+  out.focusSessions = out.focusSessions.map(repairedFocusSession).filter(Boolean);
+  out.activeFocusSession = repairedActiveFocusSession(out.activeFocusSession);
+  if (previousVersion < 5 && !out.migrations.some(item => item.id === "app-state-v5-focus-sessions")) {
+    out.migrations.push(migrationEntry("app-state-v5-focus-sessions", Math.max(previousVersion, 4), APP_STATE_SCHEMA_VERSION));
+  }
   return out;
+}
+function nonNegativeInteger(value) { const number = Math.floor(Number(value || 0)); return Number.isFinite(number) ? Math.max(0, number) : 0; }
+function validIso(value) { const date = new Date(value); return value && !Number.isNaN(date.valueOf()) ? date.toISOString() : ""; }
+function cleanFocusMusic(value = {}) {
+  return {
+    trackId: String(value?.trackId || "").slice(0, 240),
+    title: String(value?.title || "").slice(0, 240),
+    artist: String(value?.artist || "").slice(0, 240)
+  };
+}
+function repairedFocusSession(item) {
+  if (!item || typeof item !== "object" || !String(item.id || "").trim()) return null;
+  const startedAt = validIso(item.startedAt || item.created_at);
+  const endedAt = validIso(item.endedAt || item.updated_at);
+  if (!startedAt || !endedAt) return null;
+  return {
+    ...item,
+    id: String(item.id),
+    startedAt,
+    endedAt,
+    focusSeconds: nonNegativeInteger(item.focusSeconds),
+    restSeconds: nonNegativeInteger(item.restSeconds),
+    interruptionCount: nonNegativeInteger(item.interruptionCount),
+    status: FOCUS_STATUSES.has(item.status) ? item.status : "interrupted",
+    scheduleId: String(item.scheduleId || ""),
+    scheduleTitle: String(item.scheduleTitle || "").slice(0, 240),
+    music: cleanFocusMusic(item.music)
+  };
+}
+function repairedActiveFocusSession(item) {
+  if (!item || typeof item !== "object" || !String(item.id || "").trim()) return null;
+  const startedAt = validIso(item.startedAt);
+  const phaseStartedAt = validIso(item.phaseStartedAt);
+  const checkpointAt = validIso(item.checkpointAt || item.phaseStartedAt);
+  if (!startedAt || !phaseStartedAt || !checkpointAt) return null;
+  return {
+    ...item,
+    id: String(item.id),
+    phase: FOCUS_PHASES.has(item.phase) ? item.phase : "focus",
+    startedAt,
+    phaseStartedAt,
+    checkpointAt,
+    accumulatedFocusSeconds: nonNegativeInteger(item.accumulatedFocusSeconds),
+    accumulatedRestSeconds: nonNegativeInteger(item.accumulatedRestSeconds),
+    interruptionCount: nonNegativeInteger(item.interruptionCount),
+    scheduleId: String(item.scheduleId || ""),
+    scheduleTitle: String(item.scheduleTitle || "").slice(0, 240),
+    music: cleanFocusMusic(item.music),
+    pauseMusicDuringRest: item.pauseMusicDuringRest !== false,
+    musicWasPausedByFocus: item.musicWasPausedByFocus === true
+  };
 }
 function validDate(value) { return DATE.test(String(value || "")); }
 function scheduleType(value, item = {}) {
@@ -100,6 +158,7 @@ export function auditAppState(input = {}) {
     tasks: state.schedules.filter(item => ["task", "deadline"].includes(item.type)).length,
     habits: state.habits.length,
     checkins: state.checkins.length,
+    focusSessions: state.focusSessions.length,
     migrations: state.migrations.length,
     settings: state.settings && typeof state.settings === "object" ? 1 : 0
   };
@@ -118,6 +177,10 @@ export function auditAppState(input = {}) {
     const dates = Array.isArray(item?.dates) ? item.dates : [];
     const invalidDates = dates.filter(date => !validDate(date));
     if (invalidDates.length) addIssue(issues, "habit_dates_invalid", "habit contains invalid completion dates", { index, id: item.id || "", dates: invalidDates });
+  });
+  state.focusSessions.forEach((item, index) => {
+    if (!FOCUS_STATUSES.has(item.status)) addIssue(issues, "invalid_focus_status", "focus session has an unsupported status", { index, id: item.id || "", status: item.status || "" });
+    if (item.endedAt < item.startedAt) addIssue(issues, "invalid_focus_range", "focus session ends before it starts", { index, id: item.id || "" });
   });
   return { ok: issues.length === 0, summary, issues };
 }

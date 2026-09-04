@@ -22,6 +22,7 @@ import { AiMusicController } from "../services/music/ai-music-controller.js";
 import { SettingsRepository } from "../data/settings/index.js";
 import { initializeAssistantProfile, normalizeAssistantProfile, updateAssistantProfile } from "../data/assistant-profile.js";
 import { CalendarBackgroundService } from "../services/calendar/calendar-backgrounds.js";
+import { FocusSessionService } from "../services/focus/focus-session-service.js";
 import { MemoryLedger } from "../services/ai/memory/memory-ledger.js";
 import { MemoryViews } from "../services/ai/memory/memory-views.js";
 import { AgentMemoryService } from "../services/ai/memory/memory-service.js";
@@ -36,6 +37,9 @@ protocol.registerSchemesAsPrivileged([{
   // The Vue renderer is http:-backed.  Keep the local-audio endpoint
   // explicitly CORS-capable so Chromium is allowed to consume it from the
   // parent player without falling back to a blocked file: request.
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true }
+}, {
+  scheme: "kairos-focus-scene",
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true }
 }]);
 
@@ -79,8 +83,9 @@ let petPendingDy = 0;
 let petVisible = true;
 let tray = null;
 let isQuitting = false;
+let focusQuitFinalized = false;
 let closePromptOpen = false;
-let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, neteaseDownloadService, aiMusicController, aiSettingsRepository, personalProfileSettingsRepository, calendarBackgrounds, agentMemoryService;
+let aiStore, appStateStore, appDatabase, attachments, toolRuntime, contextManager, appAdapters, musicLibrary, neteaseService, neteaseDownloadService, aiMusicController, aiSettingsRepository, personalProfileSettingsRepository, calendarBackgrounds, agentMemoryService, focusSessionService;
 const pendingMusicCommands = new Map();
 const pendingCalendarBackgroundImports = new Map();
 const personalPortraitJobs = new Map();
@@ -362,7 +367,7 @@ function attachWindowStatePersistence(win) {
   });
 }
 function sendPetVisibility() { mainWindow?.webContents.send("pet:visibility", petVisible); }
-const PET_ACTIONS = new Set(["idle", "talk", "happy", "sleepy", "reminder"]);
+const PET_ACTIONS = new Set(["idle", "talk", "happy", "sleepy", "reminder", "focus-away"]);
 const SHELL_VIEWS = new Set(["calendar", "schedule", "habits", "music", "settings"]);
 function sendShellCommand(type, payload = {}) {
   if (!SHELL_VIEWS.has(type) || !mainWindow || mainWindow.isDestroyed()) return false;
@@ -478,6 +483,56 @@ function providerCatalog(settings = {}) {
     return { ...provider, models: selection.enabledModels, availableModels: selection.availableModels, catalogModels: selection.catalogModels, configuredModels: selection.configuredModels, unavailableModels: selection.unavailableModels, defaultModel: selection.defaultModel };
   });
 }
+
+const focusSceneMimeTypes = Object.freeze({
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".gif": "image/gif",
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2"
+});
+
+function focusSceneKind(filePath) {
+  const extension = path.extname(String(filePath || "")).toLowerCase();
+  if ([".mp4", ".webm"].includes(extension)) return "video";
+  if (extension === ".gif") return "image";
+  if ([".html", ".htm"].includes(extension)) return "html";
+  return "";
+}
+
+async function registerFocusSceneProtocol() {
+  protocol.handle("kairos-focus-scene", async request => {
+    try {
+      if (!appStateStore) return new Response("Not ready", { status: 503 });
+      const scene = (await appStateStore.read())?.settings?.focus?.scene;
+      const entryPath = String(scene?.path || "");
+      if (scene?.source !== "file" || !focusSceneKind(entryPath)) return new Response("Not found", { status: 404 });
+      const rootDir = path.resolve(path.dirname(entryPath));
+      const url = new URL(request.url);
+      const requested = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      const filePath = !requested || requested === "scene"
+        ? path.resolve(entryPath)
+        : path.resolve(rootDir, requested);
+      const relative = path.relative(rootDir, filePath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) return new Response("Forbidden", { status: 403 });
+      const payload = await fs.readFile(filePath);
+      const mimeType = focusSceneMimeTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+      return new Response(payload, { headers: { "content-type": mimeType, "access-control-allow-origin": "*", "cache-control": "no-store" } });
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+  });
+}
 function requireProviderDefinition(settings, provider) {
   const definition = definitionFromSettings(settings, provider);
   if (!definition) throw new ProviderError("unknown_provider", nativeT("errors.unknownProvider", {}, "Unknown AI provider."));
@@ -511,6 +566,9 @@ function broadcastProviderSettings(settings) {
   for (const win of [mainWindow, aiChatWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send("ai:settings-changed", payload);
   }
+}
+function broadcastFocusState(snapshot) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("focus:state-changed", snapshot);
 }
 async function refreshPersonalPortrait(conversationId, { force = false } = {}) {
   let id = String(conversationId || "").trim();
@@ -1468,6 +1526,10 @@ async function createWindow() {
   };
   mainWindow.on("maximize", sendMaximizedState);
   mainWindow.on("unmaximize", sendMaximizedState);
+  mainWindow.on("enter-full-screen", () => mainWindow?.webContents.send("window:fullscreen-changed", true));
+  mainWindow.on("leave-full-screen", () => mainWindow?.webContents.send("window:fullscreen-changed", false));
+  mainWindow.on("blur", () => focusSessionService?.handleWindowBlur());
+  mainWindow.on("focus", () => focusSessionService?.handleWindowFocus());
   mainWindow.on("close", event => {
     if (smokeTest || isQuitting) return;
     event.preventDefault();
@@ -1617,6 +1679,17 @@ ipcMain.handle("window:is-maximized", event => {
   if (!win || win !== mainWindow || win.isDestroyed()) return false;
   return win.isMaximized();
 });
+ipcMain.handle("window:toggle-fullscreen", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed()) return false;
+  win.setFullScreen(!win.isFullScreen());
+  return win.isFullScreen();
+});
+ipcMain.handle("window:is-fullscreen", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed()) return false;
+  return win.isFullScreen();
+});
 ipcMain.handle("window:close", event => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win !== mainWindow || win.isDestroyed()) return false;
@@ -1655,6 +1728,57 @@ ipcMain.handle("ai:personal-profile:refresh", async (_event, conversationId) => 
 ipcMain.handle("ai:personal-profile:finalize", async (_event, conversationId) => {
   queueMicrotask(() => refreshPersonalPortrait(conversationId).catch(error => console.error("Failed to refresh personal portrait:", error)));
   return { queued: true };
+});
+
+ipcMain.handle("focus:get", event => {
+  if (event.sender !== mainWindow?.webContents) return { active: null };
+  return focusSessionService?.publicSnapshot() || { active: null };
+});
+ipcMain.handle("focus:start", (event, input = {}) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("untrusted_sender");
+  return focusSessionService.start(input);
+});
+ipcMain.handle("focus:rest", (event, input = {}) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("untrusted_sender");
+  return focusSessionService.enterRest(input);
+});
+ipcMain.handle("focus:resume", (event, input = {}) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("untrusted_sender");
+  return focusSessionService.resumeFocus(input);
+});
+ipcMain.handle("focus:update", (event, input = {}) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("untrusted_sender");
+  return focusSessionService.update(input);
+});
+ipcMain.handle("focus:finish", (event, input = {}) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("untrusted_sender");
+  return focusSessionService.finish(input);
+});
+ipcMain.handle("focus:choose-scene", async event => {
+  if (event.sender !== mainWindow?.webContents) return { canceled: true };
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: nativeT("focus.scene.chooseTitle", {}, "Choose a focus scene"),
+    properties: ["openFile"],
+    filters: [
+      { name: nativeT("focus.scene.supportedFiles", {}, "Focus scenes"), extensions: ["mp4", "webm", "gif", "html", "htm"] },
+      { name: nativeT("electron.allFiles", {}, "All files"), extensions: ["*"] }
+    ]
+  });
+  const filePath = result.filePaths?.[0] || "";
+  const kind = focusSceneKind(filePath);
+  if (result.canceled || !filePath || !kind) return { canceled: true };
+  return { canceled: false, filePath, name: path.basename(filePath), kind };
+});
+ipcMain.handle("focus:validate-scene", async event => {
+  if (event.sender !== mainWindow?.webContents) return { available: false };
+  const scene = (await appStateStore.read())?.settings?.focus?.scene;
+  if (scene?.source !== "file" || !focusSceneKind(scene.path)) return { available: true, kind: "video" };
+  try {
+    const stat = await fs.stat(path.resolve(scene.path));
+    return { available: stat.isFile(), kind: focusSceneKind(scene.path) };
+  } catch {
+    return { available: false, kind: focusSceneKind(scene.path) };
+  }
 });
 ipcMain.handle("ai:personal-profile:clear-portrait", () => mutatePersonalProfile(current => clearPortrait(current)));
 ipcMain.handle("ai:initialize-assistant-profile", async (_event, legacy = {}) => {
@@ -1906,7 +2030,15 @@ ipcMain.handle("netease:open-download-directory", async () => {
 
 if (hasSingleInstanceLock) {
   app.on("second-instance", () => { focusMainWindow(); });
-app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();const initialAppState=await appStateStore.read();const initializedProfile=initializePersonalProfile(await readPersonalProfile(),initialAppState?.settings?.ai||{});if(initializedProfile.changed)await writePersonalProfile(initializedProfile.profile);musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();aiMusicController=new AiMusicController({netease:neteaseService,dispatch:dispatchMusicCommand,quality:async()=>(await appStateStore.read())?.settings?.music?.neteaseQuality||"standard"});neteaseDownloadService=new NeteaseDownloadService({neteaseService,musicLibrary,downloadDir:path.join(app.getPath("music"),"Kairos Downloads"),statePath:path.join(userData,"netease-download-state.json"),database:appDatabase,ffmpegPath:bundledFfmpegPath(),onProgress:payload=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send("netease:download-progress",payload);}});await neteaseDownloadService.initialize();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);setNativeLocale(initialAppState);await createWindow();if(!smokeTest)await createPetWindow();});
+  app.on("before-quit", event => {
+    if (focusQuitFinalized || !focusSessionService?.active) return;
+    event.preventDefault();
+    focusQuitFinalized = true;
+    void focusSessionService.finish({ status: "interrupted" }).catch(error => {
+      console.error("Failed to finalize focus session during quit:", error);
+    }).finally(() => app.quit());
+  });
+app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();await registerFocusSceneProtocol();const initialAppState=await appStateStore.read();setNativeLocale(initialAppState);focusSessionService=new FocusSessionService({store:appStateStore,onChange:(state,snapshot)=>{if(state)broadcastAppState(state);broadcastFocusState(snapshot);},onAwayReminder:()=>sendPetAction("focus-away",{title:nativeT("focus.awayReminder",{},"你还会回来吗…")})});await focusSessionService.initialize();const initializedProfile=initializePersonalProfile(await readPersonalProfile(),initialAppState?.settings?.ai||{});if(initializedProfile.changed)await writePersonalProfile(initializedProfile.profile);musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();aiMusicController=new AiMusicController({netease:neteaseService,dispatch:dispatchMusicCommand,quality:async()=>(await appStateStore.read())?.settings?.music?.neteaseQuality||"standard"});neteaseDownloadService=new NeteaseDownloadService({neteaseService,musicLibrary,downloadDir:path.join(app.getPath("music"),"Kairos Downloads"),statePath:path.join(userData,"netease-download-state.json"),database:appDatabase,ffmpegPath:bundledFfmpegPath(),onProgress:payload=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send("netease:download-progress",payload);}});await neteaseDownloadService.initialize();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);await createWindow();if(!smokeTest)await createPetWindow();});
   app.on("activate", () => { if (!focusMainWindow()) createWindow().catch(error => console.error("Failed to recreate main window:", error)); });
   app.on("window-all-closed", () => { closeWindowSafely(petWindow); if (process.platform !== "darwin") app.quit(); });
 }

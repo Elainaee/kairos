@@ -60,6 +60,13 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
       ipcRenderer.on("window:maximized-changed", listener);
       return () => ipcRenderer.removeListener("window:maximized-changed", listener);
     },
+    toggleFullScreen: () => ipcRenderer.invoke("window:toggle-fullscreen"),
+    isFullScreen: () => ipcRenderer.invoke("window:is-fullscreen"),
+    onFullScreenChanged: (handler) => {
+      const listener = (_event, fullscreen) => handler(Boolean(fullscreen));
+      ipcRenderer.on("window:fullscreen-changed", listener);
+      return () => ipcRenderer.removeListener("window:fullscreen-changed", listener);
+    },
     close: () => ipcRenderer.invoke("window:close"),
     closeAction: (action) => ipcRenderer.invoke("window:close-action", action),
     onCloseRequested: (handler) => {
@@ -88,6 +95,21 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   permissions: Object.freeze({ get:()=>ipcRenderer.invoke("ai:permissions:get"),set:(input)=>ipcRenderer.invoke("ai:permissions:set",input) }),
   tools: Object.freeze({ query:(domain,query={})=>ipcRenderer.invoke("ai:tools:query",{domain,query}),propose:(input)=>ipcRenderer.invoke("ai:tools:propose",input),decide:(input)=>ipcRenderer.invoke("ai:tools:decide",input) }),
   appState: Object.freeze({ initialize:(legacy)=>ipcRenderer.invoke("app:initialize",legacy),save:(state)=>ipcRenderer.invoke("app:save",state),get:()=>ipcRenderer.invoke("app:get"),audit:()=>ipcRenderer.invoke("app:audit"),listBackups:()=>ipcRenderer.invoke("app:list-backups"),readBackup:(name)=>ipcRenderer.invoke("app:read-backup",name),restoreBackup:(name)=>ipcRenderer.invoke("app:restore-backup",name),exportCurrent:()=>ipcRenderer.invoke("app:export-current"),importJson:()=>ipcRenderer.invoke("app:import-json"),onChanged:(handler)=>{const listener=(_event,state)=>handler(state);ipcRenderer.on("app:state-changed",listener);return()=>ipcRenderer.removeListener("app:state-changed",listener);} }),
+  focus: Object.freeze({
+    get: () => ipcRenderer.invoke("focus:get"),
+    start: (input = {}) => ipcRenderer.invoke("focus:start", input),
+    rest: (input = {}) => ipcRenderer.invoke("focus:rest", input),
+    resume: (input = {}) => ipcRenderer.invoke("focus:resume", input),
+    update: (input = {}) => ipcRenderer.invoke("focus:update", input),
+    finish: (input = {}) => ipcRenderer.invoke("focus:finish", input),
+    chooseScene: () => ipcRenderer.invoke("focus:choose-scene"),
+    validateScene: () => ipcRenderer.invoke("focus:validate-scene"),
+    onChanged: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on("focus:state-changed", listener);
+      return () => ipcRenderer.removeListener("focus:state-changed", listener);
+    }
+  }),
   calendarBackgrounds: Object.freeze({ listBuiltins:()=>ipcRenderer.invoke("calendar-background:list-builtins"),chooseImport:()=>ipcRenderer.invoke("calendar-background:choose-import"),completeImport:(input)=>ipcRenderer.invoke("calendar-background:complete-import",input),rename:(input)=>ipcRenderer.invoke("calendar-background:rename",input),remove:(id)=>ipcRenderer.invoke("calendar-background:delete",id) }),
   music: Object.freeze({
     getState: () => ipcRenderer.invoke("music:get-state"),

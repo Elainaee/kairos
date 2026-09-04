@@ -6,6 +6,7 @@
 @import "../../app/features/habits/habits-feature.css";
 @import "../../app/shell/player/music-player.css";
 @import "./styles/schedule.css";
+@import "./styles/focus.css";
 /* Keep the selected theme last: feature styles may use legacy hard-coded
    colours, while this layer is the authoritative component palette. */
 

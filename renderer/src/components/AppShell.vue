@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router";
 import { useAppStateStore } from "../stores/app-state";
 import { useMusicRuntimeStore } from "../stores/music-runtime";
+import { useFocusStore } from "../stores/focus";
 import { useToastsStore, type ToastInput } from "../stores/toasts";
 import SettingsDialog from "./SettingsDialog.vue";
 import ReminderPanel from "./ReminderPanel.vue";
@@ -16,6 +17,7 @@ const route = useRoute();
 const router = useRouter();
 const appState = useAppStateStore();
 const musicRuntime = useMusicRuntimeStore();
+const focusRuntime = useFocusStore();
 const toasts = useToastsStore();
 const settingsOpen = ref(false);
 const settingsOpener = ref<HTMLElement>();
@@ -47,9 +49,10 @@ let petVisibilityPoll: number | undefined;
 let appearanceSignature = "";
 const links = computed(() => [
   ["calendar", "calendar_today", t("nav.calendar")], ["habits", "repeat", t("nav.habits")],
-  ["schedule", "checklist", t("nav.schedule")], ["music", "queue_music", t("nav.music")]
+  ["schedule", "checklist", t("nav.schedule")], ["music", "queue_music", t("nav.music")], ["focus", "timer", t("nav.focus")]
 ] as const);
-const activePage = computed(() => String(route.params.page || route.path.slice(1) || "calendar"));
+const activePage = computed(() => route.path.startsWith("/focus") ? "focus" : String(route.params.page || route.path.slice(1) || "calendar"));
+const focusImmersive = computed(() => route.path === "/focus" && Boolean(focusRuntime.active) && focusRuntime.displayMode === "immersive");
 
 function numberInRange(value: unknown, fallback: number, minimum: number, maximum: number) {
   const number = Number(value);
@@ -324,8 +327,13 @@ function syncLegacyPlayerRoute() {
 }
 
 function syncDocumentTitle() {
+  // Route ownership lives in the Vue shell. Remove the legacy static title
+  // binding so a later locale pass cannot reset Focus to Calendar.
+  document.querySelector("title")?.removeAttribute("data-i18n");
   document.title = activePage.value === "music"
     ? t("app.title.music")
+    : activePage.value === "focus"
+      ? t("app.title.focus")
     : activePage.value === "schedule"
       ? t("app.title.schedule")
       : activePage.value === "habits"
@@ -340,6 +348,7 @@ onMounted(() => {
   document.fonts?.ready.then(placeIndicator);
   window.setTimeout(placeIndicator, 180);
   loadAppearance();
+  void focusRuntime.initialize();
   syncLegacyPlayerRoute();
   ensureMusicPlayer();
   if (nav.value) { navObserver = new ResizeObserver(placeIndicator); navObserver.observe(nav.value); }
@@ -391,7 +400,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("focus", refreshPetVisibility);
   window.removeEventListener("pageshow", refreshPetVisibility);
   document.removeEventListener("visibilitychange", handleDocumentVisibility);
-  document.body.classList.remove("kairos-secondary-view", "kairos-music-view", "kairos-vue-shell", "kairos-calendar-background-active");
+  document.body.classList.remove("kairos-secondary-view", "kairos-music-view", "kairos-vue-shell", "kairos-calendar-background-active", "kairos-focus-immersive");
   delete document.body.dataset.kairosVuePage;
 });
 watch(activePage, () => {
@@ -402,6 +411,9 @@ watch(activePage, () => {
   syncPlayerVisibility();
   settlePlayerAlignment();
 });
+watch(focusImmersive, value => {
+  document.body.classList.toggle("kairos-focus-immersive", value);
+}, { immediate: true });
 function triggerCreate() {
   // Keep the current page in place; the receiver opens the original Calendar
   // dialog over the current surface.
@@ -466,9 +478,9 @@ function ensureMusicPlayer() {
 </script>
 
 <template>
-  <div class="vue-shell">
+  <div class="vue-shell" :class="{ 'vue-shell--focus': activePage === 'focus', 'vue-shell--focus-immersive': focusImmersive }">
     <div class="kairos-wallpaper" aria-hidden="true" />
-    <header class="kairos-topbar">
+    <header v-show="!focusImmersive" class="kairos-topbar">
       <nav ref="nav" class="kairos-nav kairos-gooey-nav" :aria-label="t('nav.primary')">
         <span class="kairos-gooey-effect" :style="indicatorStyle" aria-hidden="true" />
         <RouterLink v-for="link in links" :key="link[0]" :data-page="link[0]" :class="{ active: activePage === link[0] }" :to="`/${link[0]}`" @click="navigateWithTransition($event, link[0])">
@@ -486,7 +498,7 @@ function ensureMusicPlayer() {
         </div>
       </div>
     </header>
-    <main class="vue-shell-content" :class="{ 'vue-shell-content--music': activePage === 'music' }" :data-view="activePage"><slot /></main>
+    <main class="vue-shell-content" :class="{ 'vue-shell-content--music': activePage === 'music', 'vue-shell-content--focus-immersive': focusImmersive }" :data-view="activePage"><slot /></main>
     <SettingsDialog :open="settingsOpen" :opener="settingsOpener" @close="settingsOpen = false" />
     <ReminderPanel :open="remindersOpen" @close="remindersOpen = false" />
     <ReminderRuntime />
@@ -494,7 +506,7 @@ function ensureMusicPlayer() {
     <CloseChoiceDialog :open="closeChoiceOpen" @choose="chooseCloseAction" />
     <LegacyScheduleDialogHost :page="activePage" />
     <Teleport to="body">
-      <button v-show="petHidden" class="vue-pet-restore" type="button" :aria-label="t('pet.restore')" :title="t('pet.restore')" @click="restorePet">
+      <button v-show="petHidden && activePage !== 'focus'" class="vue-pet-restore" type="button" :aria-label="t('pet.restore')" :title="t('pet.restore')" @click="restorePet">
         <span class="material-symbols-outlined" aria-hidden="true">pets</span>
       </button>
     </Teleport>

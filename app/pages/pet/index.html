@@ -317,6 +317,11 @@ function handleDesktopAction(payload={}) {
     showBubble(title ? `错过提醒：${title}` : '好像错过了一条提醒……',5200);
     return;
   }
+  if(action==='focus-away') {
+    playAnim('shake',500);
+    showBubble(title || '你还会回来吗…',5200);
+    return;
+  }
   if(action==='talk') {
     playAnim('bounce',560);
     showBubble(rand(petLines.click));

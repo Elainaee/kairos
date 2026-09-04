@@ -40,9 +40,103 @@
   "nav": {
     "calendar": "Calendar",
     "habits": "Habits",
+    "focus": "Focus",
     "music": "Music",
     "primary": "Primary navigation",
     "schedule": "Schedule"
+  },
+  "focus": {
+    "awayReminder": "Will you come back…",
+    "navigation": "Focus page navigation",
+    "tabs": { "focus": "Focus", "records": "Records" },
+    "hub": {
+      "title": "Focus space",
+      "eyebrow": "Open-ended focus with quiet company",
+      "headline": "Begin whenever you are ready.",
+      "description": "No preset duration and no forced finish. Let the scene, music, and Kairos keep you company in the moment.",
+      "activeTitle": "This focus session is still running",
+      "activeDescription": "Shrinking the scene does not stop the timer. Return to the immersive space whenever you like.",
+    "returnToScene": "Return to scene",
+    "start": "Start focus",
+      "scene": "Scene settings"
+    },
+    "dailyQuote": { "label": "Daily thought" },
+    "scene": {
+      "chooseTitle": "Choose a focus scene",
+      "supportedFiles": "Focus scenes",
+      "current": "Current scene",
+      "localHint": "Keeps the original file path and loops silently during focus.",
+      "aeroHint": "Uses the built-in Morning Coffee animated background by default.",
+      "useAero": "Restore default background"
+    },
+    "start": {
+      "eyebrow": "Before you begin",
+      "title": "Enter focus",
+      "schedule": "Related schedule (optional)",
+      "noSchedule": "No related schedule",
+      "music": "Companion music",
+      "noMusic": "Do not change music",
+      "currentMusic": "Continue current music",
+      "openEnded": "This focus session has no set duration. Rest or finish whenever you choose."
+    },
+    "session": { "focused": "Focusing" },
+    "rest": {
+      "button": "Rest",
+      "title": "Rest options",
+      "resting": "Resting",
+      "nowPlaying": "Now playing",
+      "pauseMusic": "Pause music",
+      "resumeMusic": "Resume music",
+      "focused": "Focused",
+      "rested": "Rested",
+      "continue": "Continue",
+      "end": "End"
+    },
+    "schedule": {
+      "today": "Today’s schedule",
+      "show": "Show today’s schedule",
+      "hide": "Hide today’s schedule",
+      "allDay": "All day",
+      "untitled": "Untitled schedule",
+      "empty": "Nothing scheduled today."
+    },
+    "player": {
+      "label": "Focus music player",
+      "empty": "Choose some music",
+      "ambience": "Kairos companion ambience",
+      "previous": "Previous track",
+      "next": "Next track",
+      "progress": "Playback progress",
+      "play": "Play",
+      "pause": "Pause"
+    },
+    "window": {
+      "label": "Focus window controls",
+      "shrink": "Shrink back to focus page",
+      "fullscreen": "Enter full screen",
+      "exitFullscreen": "Exit full screen"
+    },
+    "duration": {
+      "minutes": "{minutes} min",
+      "hoursMinutes": "{hours} hr {minutes} min"
+    },
+    "records": {
+      "title": "Focus records",
+      "today": "Today’s focus",
+      "week": "Last 7 days",
+      "completed": "Completed",
+      "interruptions": "Interruptions",
+      "empty": "No focus records yet",
+      "emptyHint": "Complete your first focus and its summary will be saved here by date.",
+      "untitled": "Free focus",
+      "focusRest": "Focus {focus} · rest {rest}",
+      "status": { "completed": "Completed", "interrupted": "Interrupted" }
+    },
+    "summary": {
+      "title": "Focus complete",
+      "description": "Kairos saved a summary of this focus session.",
+      "done": "Finish"
+    }
   },
   "calendar": {
     "addSlot": "Add slot",
@@ -975,6 +1069,7 @@
       "assistant": "Kairos Assistant",
       "calendar": "Kairos | Intentional Dashboard",
       "habits": "Kairos | Habits",
+      "focus": "Kairos | Focus",
       "music": "Kairos | Music",
       "schedule": "Kairos | Schedule"
     }

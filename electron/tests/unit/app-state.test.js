@@ -55,7 +55,8 @@ test("app state audit reports migration-ready counts and data issues", () => {
     tasks: 1,
     habits: 2,
     checkins: 0,
-    migrations: 1,
+    focusSessions: 0,
+    migrations: 2,
     settings: 1
   });
   assert.equal(report.issues.some(issue => issue.code === "duplicate_ids" && issue.key === "schedules" && issue.ids.includes("dup")), true);
@@ -193,7 +194,7 @@ test("app state can create a current backup before destructive imports", async (
   const backup = JSON.parse(await fs.readFile(backupPath, "utf8"));
   const state = await store.read();
 
-  assert.match(path.basename(backupPath), /^app-state-v4-.+-before-import\.json$/);
+  assert.match(path.basename(backupPath), /^app-state-v5-.+-before-import\.json$/);
   assert.equal(backups.some(item => item.path === backupPath), true);
   assert.equal(backup.schedules[0].id, "current");
   assert.equal(state.schedules[0].id, "imported");

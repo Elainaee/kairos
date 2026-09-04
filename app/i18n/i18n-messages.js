@@ -42,9 +42,113 @@ window.KairosI18nMessages = Object.freeze({
     "nav": {
       "calendar": "Calendar",
       "habits": "Habits",
+      "focus": "Focus",
       "music": "Music",
       "primary": "Primary navigation",
       "schedule": "Schedule"
+    },
+    "focus": {
+      "awayReminder": "Will you come back…",
+      "navigation": "Focus page navigation",
+      "tabs": {
+        "focus": "Focus",
+        "records": "Records"
+      },
+      "hub": {
+        "title": "Focus space",
+        "eyebrow": "Open-ended focus with quiet company",
+        "headline": "Begin whenever you are ready.",
+        "description": "No preset duration and no forced finish. Let the scene, music, and Kairos keep you company in the moment.",
+        "activeTitle": "This focus session is still running",
+        "activeDescription": "Shrinking the scene does not stop the timer. Return to the immersive space whenever you like.",
+        "returnToScene": "Return to scene",
+        "start": "Start focus",
+        "scene": "Scene settings"
+      },
+      "dailyQuote": {
+        "label": "Daily thought"
+      },
+      "scene": {
+        "chooseTitle": "Choose a focus scene",
+        "supportedFiles": "Focus scenes",
+        "current": "Current scene",
+        "localHint": "Keeps the original file path and loops silently during focus.",
+        "aeroHint": "Uses the built-in Morning Coffee animated background by default.",
+        "useAero": "Restore default background"
+      },
+      "start": {
+        "eyebrow": "Before you begin",
+        "title": "Enter focus",
+        "schedule": "Related schedule (optional)",
+        "noSchedule": "No related schedule",
+        "music": "Companion music",
+        "noMusic": "Do not change music",
+        "currentMusic": "Continue current music",
+        "openEnded": "This focus session has no set duration. Rest or finish whenever you choose."
+      },
+      "session": {
+        "focused": "Focusing"
+      },
+      "rest": {
+        "button": "Rest",
+        "title": "Rest options",
+        "resting": "Resting",
+        "nowPlaying": "Now playing",
+        "pauseMusic": "Pause music",
+        "resumeMusic": "Resume music",
+        "focused": "Focused",
+        "rested": "Rested",
+        "continue": "Continue",
+        "end": "End"
+      },
+      "schedule": {
+        "today": "Today’s schedule",
+        "show": "Show today’s schedule",
+        "hide": "Hide today’s schedule",
+        "allDay": "All day",
+        "untitled": "Untitled schedule",
+        "empty": "Nothing scheduled today."
+      },
+      "player": {
+        "label": "Focus music player",
+        "empty": "Choose some music",
+        "ambience": "Kairos companion ambience",
+        "previous": "Previous track",
+        "next": "Next track",
+        "progress": "Playback progress",
+        "play": "Play",
+        "pause": "Pause"
+      },
+      "window": {
+        "label": "Focus window controls",
+        "shrink": "Shrink back to focus page",
+        "fullscreen": "Enter full screen",
+        "exitFullscreen": "Exit full screen"
+      },
+      "duration": {
+        "minutes": "{minutes} min",
+        "hoursMinutes": "{hours} hr {minutes} min"
+      },
+      "records": {
+        "title": "Focus records",
+        "today": "Today’s focus",
+        "week": "Last 7 days",
+        "completed": "Completed",
+        "interruptions": "Interruptions",
+        "empty": "No focus records yet",
+        "emptyHint": "Complete your first focus and its summary will be saved here by date.",
+        "untitled": "Free focus",
+        "focusRest": "Focus {focus} · rest {rest}",
+        "status": {
+          "completed": "Completed",
+          "interrupted": "Interrupted"
+        }
+      },
+      "summary": {
+        "title": "Focus complete",
+        "description": "Kairos saved a summary of this focus session.",
+        "done": "Finish"
+      }
     },
     "calendar": {
       "addSlot": "Add slot",
@@ -974,6 +1078,7 @@ window.KairosI18nMessages = Object.freeze({
         "assistant": "Kairos Assistant",
         "calendar": "Kairos | Intentional Dashboard",
         "habits": "Kairos | Habits",
+        "focus": "Kairos | Focus",
         "music": "Kairos | Music",
         "schedule": "Kairos | Schedule"
       }
@@ -1021,9 +1126,113 @@ window.KairosI18nMessages = Object.freeze({
     "nav": {
       "calendar": "日历",
       "habits": "习惯",
+      "focus": "专注",
       "music": "音乐",
       "primary": "主导航",
       "schedule": "日程"
+    },
+    "focus": {
+      "awayReminder": "你还会回来吗…",
+      "navigation": "专注页面导航",
+      "tabs": {
+        "focus": "专注",
+        "records": "记录"
+      },
+      "hub": {
+        "title": "专注空间",
+        "eyebrow": "不设限的陪伴式专注",
+        "headline": "准备好，就从这里开始。",
+        "description": "不预设时长，不催促结束。让场景、音乐和 Kairos 陪你保持在当下。",
+        "activeTitle": "这次专注仍在继续",
+        "activeDescription": "缩小场景不会停止计时，随时可以回到沉浸空间。",
+        "returnToScene": "回到场景",
+        "start": "开始专注",
+        "scene": "场景配置"
+      },
+      "dailyQuote": {
+        "label": "每日一言"
+      },
+      "scene": {
+        "chooseTitle": "选择专注场景",
+        "supportedFiles": "专注场景",
+        "current": "当前场景",
+        "localHint": "保留原始文件路径，进入专注后静音循环播放。",
+        "aeroHint": "默认使用内置的清晨咖啡动态背景。",
+        "useAero": "恢复默认背景"
+      },
+      "start": {
+        "eyebrow": "开始之前",
+        "title": "进入专注",
+        "schedule": "关联日程（可选）",
+        "noSchedule": "不关联日程",
+        "music": "陪伴音乐",
+        "noMusic": "不调整音乐",
+        "currentMusic": "继续当前音乐",
+        "openEnded": "本次专注不设置时长；你可以随时休息或结束。"
+      },
+      "session": {
+        "focused": "专注中"
+      },
+      "rest": {
+        "button": "休息",
+        "title": "休息选项",
+        "resting": "休息中",
+        "nowPlaying": "正在播放",
+        "pauseMusic": "暂停音乐",
+        "resumeMusic": "继续音乐",
+        "focused": "已专注",
+        "rested": "已休息",
+        "continue": "Continue",
+        "end": "End"
+      },
+      "schedule": {
+        "today": "今日日程",
+        "show": "显示今日日程",
+        "hide": "隐藏今日日程",
+        "allDay": "全天",
+        "untitled": "未命名日程",
+        "empty": "今天没有日程。"
+      },
+      "player": {
+        "label": "专注音乐播放器",
+        "empty": "选择一首音乐",
+        "ambience": "Kairos 陪伴音景",
+        "previous": "上一首",
+        "next": "下一首",
+        "progress": "播放进度",
+        "play": "播放",
+        "pause": "暂停"
+      },
+      "window": {
+        "label": "专注窗口控制",
+        "shrink": "缩小回专注页",
+        "fullscreen": "进入全屏",
+        "exitFullscreen": "退出全屏"
+      },
+      "duration": {
+        "minutes": "{minutes} 分钟",
+        "hoursMinutes": "{hours} 小时 {minutes} 分钟"
+      },
+      "records": {
+        "title": "专注记录",
+        "today": "今日专注",
+        "week": "近 7 天专注",
+        "completed": "完成次数",
+        "interruptions": "中断次数",
+        "empty": "还没有专注记录",
+        "emptyHint": "完成第一次专注后，这里会按日期保存总结。",
+        "untitled": "自由专注",
+        "focusRest": "专注 {focus} · 休息 {rest}",
+        "status": {
+          "completed": "已完成",
+          "interrupted": "已中断"
+        }
+      },
+      "summary": {
+        "title": "这次专注完成了",
+        "description": "Kairos 已为你保存本次专注总结。",
+        "done": "Finish"
+      }
     },
     "calendar": {
       "addSlot": "添加时段",
@@ -1953,6 +2162,7 @@ window.KairosI18nMessages = Object.freeze({
         "assistant": "Kairos 助手",
         "calendar": "Kairos | 专注日历",
         "habits": "Kairos | 习惯",
+        "focus": "Kairos | 专注",
         "music": "Kairos | 音乐",
         "schedule": "Kairos | 日程"
       }
