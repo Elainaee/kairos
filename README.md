@@ -2,6 +2,26 @@
 
 Kairos 是一款面向个人学习与日常规划的 Windows 桌面应用，提供日程、习惯、提醒、音乐与 AI 助手能力。
 
+## 界面预览
+
+### 日历
+
+[![日历界面：月视图、习惯列表、当日日程与共享播放器](assets/readme/calendar.png)](assets/readme/calendar.png)
+
+### 音乐
+
+[![音乐界面：本地歌单、网易云音乐入口与播放控制](assets/readme/music.png)](assets/readme/music.png)
+
+### 专注
+
+[![专注界面：场景背景、专注入口、记录与音乐控制](assets/readme/focus.png)](assets/readme/focus.png)
+
+### AI 对话
+
+[![AI 对话窗口：会话、模型选择与消息交流](assets/readme/ai-chat.png)](assets/readme/ai-chat.png)
+
+点击截图可查看原图。
+
 ## 技术栈
 
 - Electron 36：桌面主进程、窗口与原生能力。
@@ -40,7 +60,11 @@ pnpm dev
 Kairos/
 ├── .github/workflows/           # CI 与发行流水线
 ├── assets/readme/               # README 图片
-│   └── diagram.jpg             # 架构与数据流图
+│   ├── diagram.jpg             # 架构与数据流图
+│   ├── calendar.png            # 日历截图
+│   ├── music.png               # 音乐截图
+│   ├── focus.png               # 专注截图
+│   └── ai-chat.png             # AI 对话截图
 ├── app/                        # 原生 HTML 页面、功能模块与共享资源
 │   ├── assets/                 # 背景、字体、图标、桌宠与生成样式
 │   ├── features/               # assistant、calendar、habits、reminders、settings
