@@ -154,7 +154,7 @@ test("Music migration contract: the unrouted Vue candidate starts from original 
     "candidate must map the original iframe viewport height onto its Vue host");
   assert.match(candidate, /const runtimeKey = "__kairosNativeMusicCandidateRuntime"/,
     "candidate controller DOM queries must remain scoped to the retained original root");
-  const generatedController = await source("app/pages/music/native-vue-controller.js");
+  const generatedController = (await source("app/pages/music/native-vue-controller.js")).replace(/\r\n/g, "\n");
   const originalHtml = (await source("app/pages/music/index.html")).replace(/\r\n/g, "\n");
   const originalBody = originalHtml.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] || "";
   const originalController = [...originalBody.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
