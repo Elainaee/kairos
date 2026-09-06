@@ -2,7 +2,7 @@
   <img src="app/assets/icons/kairos.ico" alt="Kairos 应用图标" width="112" height="112">
 </p>
 
-# Kairos Desktop
+# Kairos
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform: Windows x64](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://github.com/Elainaee/kairos/releases/latest)
@@ -41,8 +41,6 @@ Kairos 是一款面向个人学习与日常规划的 Windows 桌面应用，提�
 ### AI 对话
 
 [![AI 对话窗口：会话、模型选择与消息交流](assets/readme/ai-chat.png)](assets/readme/ai-chat.png)
-
-点击截图可查看原图。
 
 ## 技术栈
 
