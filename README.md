@@ -48,7 +48,7 @@ Kairos 是一款面向个人学习与日常规划的 Windows 桌面应用，提�
 
 - Electron 36：桌面主进程、窗口与原生能力。
 - Vue 3、Vite、Pinia：新的渲染层与状态管理。
-- 原生 HTML/JavaScript：遗留功能页面，逐步由 Vue 接管。
+- 原生 HTML/JavaScript：html功能页面，逐步由 Vue 接管。
 - SQLite（`node:sqlite`）：运行时业务数据的主持久化库。
 - LangChain / OpenAI：AI Agent、工具调用与记忆服务。
 
