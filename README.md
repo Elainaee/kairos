@@ -32,13 +32,78 @@ pnpm dev
 | `pnpm dist:win` | 构建 Windows 安装包与便携版 |
 | `pnpm audit:desktop-data` | 审计应用运行时数据 |
 
-## 目录导览
+## 文件结构
 
-- `app/`：html页面、功能模块、资源和样式。
-- `renderer/`：Vue 渲染端源码。
-- `electron/`：主进程、预加载脚本、服务层、数据层和测试。
-- `scripts/`：开发、构建、签名与发布校验脚本。
-- `docs/` 与 `references/`：仅在本地保存的文档和参考资料，不纳入 Git 仓库。
+以下列出项目的主要目录与入口文件：
+
+```text
+Kairos/
+├── .github/workflows/           # CI 与发行流水线
+├── assets/readme/               # README 图片
+│   └── diagram.jpg             # 架构与数据流图
+├── app/                        # 原生 HTML 页面、功能模块与共享资源
+│   ├── assets/                 # 背景、字体、图标、桌宠与生成样式
+│   ├── features/               # assistant、calendar、habits、reminders、settings
+│   ├── i18n/                   # 中英文词条与国际化运行时
+│   ├── pages/                  # ai-chat、calendar、habits、music、pet、schedule
+│   ├── shared/styles/          # 页面共享布局与兼容样式
+│   ├── shell/                  # 导航与共享音乐播放器
+│   └── themes/                 # 语义主题与主题运行时
+├── renderer/                   # Vue 3 + Vite 渲染端
+│   ├── src/
+│   │   ├── assets/focus/       # 专注场景资源
+│   │   ├── components/         # 应用外壳、设置、提醒与通用组件
+│   │   ├── composables/        # 可复用组合逻辑
+│   │   ├── data/               # 静态内容
+│   │   ├── music/              # 原生播放器适配层
+│   │   ├── router/             # 路由定义
+│   │   ├── stores/             # 应用、专注、习惯与音乐等状态
+│   │   ├── styles/             # 全局与专注样式
+│   │   ├── views/              # 页面视图与原生页面宿主
+│   │   ├── App.vue
+│   │   └── main.ts
+│   └── vite.config.ts
+├── electron/
+│   ├── main/index.js           # 生命周期、窗口、IPC 与服务编排
+│   ├── preload/index.cjs       # contextBridge API
+│   ├── data/                   # SQLite、应用状态与设置仓储
+│   ├── services/               # AI、日历、文档、专注、音乐与网页服务
+│   ├── scripts/                # 数据审计与发行验证
+│   └── tests/                  # 单元、集成与发行测试
+├── scripts/                    # 开发、构建、国际化、签名与资源准备
+├── third_party/                # 第三方资源与许可证
+├── .env.example                # 环境变量示例
+├── package.json                # 依赖、命令与打包配置
+├── pnpm-lock.yaml
+└── tailwind.config.cjs
+```
+
+`docs/` 与 `references/` 仅在本地保存，不纳入 Git 仓库。`node_modules/`、`app/vue-preview/`、`release/` 等依赖及构建产物也不纳入源码版本。
+
+## 架构与数据流
+
+Vue Shell 承载导航、设置与全局组件，部分原生页面通过嵌入方式接入；共享播放器统一管理音频。渲染进程经 `contextBridge` 调用 Electron 主进程，由领域服务与仓储处理业务并写入 SQLite 或本地文件系统。
+
+[![Kairos 架构与数据流：渲染进程、Electron 主进程、领域服务、安全边界与本地持久化](assets/readme/diagram.jpg)](assets/readme/diagram.jpg)
+
+点击图片可查看原图。
+
+## 设计参考
+
+| 网站 | 参考内容 |
+| --- | --- |
+| [TweakCN](https://tweakcn.com/) | 主题、字体与界面结构 |
+| [React Bits](https://reactbits.dev/) | 动效与交互模式 |
+| [shadcn/ui](https://ui.shadcn.com/) | 组件结构、状态与无障碍模式 |
+| [Google Stitch](https://stitch.withgoogle.com/) | 布局与原型参考 |
+| [Morphicons](https://www.morphicons.com/) | SVG 图标动效、GitHub 品牌图标与外链图标 |
+
+## 技术参考
+
+| 项目 | 参考内容 |
+| --- | --- |
+| [Netease_url](https://github.com/Suxiaoqinx/Netease_url) | 网易云音乐链接参考实现 |
+| [NeteaseCloudMusicApi](https://www.npmjs.com/package/NeteaseCloudMusicApi) | 网易云音乐 API 软件包 |
 
 ## 数据与隐私
 
