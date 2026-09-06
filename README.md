@@ -1,6 +1,28 @@
+<p align="center">
+  <img src="app/assets/icons/kairos.ico" alt="Kairos 应用图标" width="112" height="112">
+</p>
+
 # Kairos Desktop
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Platform: Windows x64](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://github.com/Elainaee/kairos/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/Elainaee/kairos)](https://github.com/Elainaee/kairos/releases/latest)
+
 Kairos 是一款面向个人学习与日常规划的 Windows 桌面应用，提供日程、习惯、提醒、音乐与 AI 助手能力。
+
+## 下载与支持平台
+
+前往 [GitHub Releases 下载最新版](https://github.com/Elainaee/kairos/releases/latest)，在 **Assets** 中选择适合的版本：
+
+| 版本 | 下载与使用 |
+| --- | --- |
+| 安装版 | 下载 `Kairos-<版本号>-win-x64-setup.exe`，运行后按向导安装。 |
+| 便携版 | 下载 `Kairos-<版本号>-win-x64-portable.exe`，直接运行，无需安装。 |
+| 校验清单 | 下载 `manifest.json`，使用其中的 SHA-256 核对安装版或便携版文件。 |
+
+目前提供 **Windows x64** 安装包，已在 Windows 11 x64 上完成发行验证。macOS、Linux、Windows ARM64 与 32 位系统暂未提供经过验证的发行包。
+
+当前 v0.1.0 未配置代码签名证书，首次运行可能出现 Windows SmartScreen 提示。请确认文件来自本项目 Release，并核对下载文件。直接使用发行包无需安装 Node.js 或 pnpm；AI 服务需要自行配置，网易云功能需要登录个人账号。
 
 ## 界面预览
 
@@ -134,4 +156,20 @@ Vue Shell 承载导航、设置与全局组件，部分原生页面通过嵌入�
 应用运行时会在 Electron 的 `userData` 目录创建 `kairos.sqlite`。其中可能含有个人日程、习惯、AI 对话、设置及音乐状态；请勿提交、公开或随意共享该目录。`.env` 文件同样不应提交。
 
 网易云功能仅面向用户已获授权账号的个人使用；不会绕过版权、会员、地区、验证、速率限制或不可播放限制。
+
+## 致谢
+
+感谢上方“设计参考”中的 TweakCN、React Bits、shadcn/ui、Google Stitch 与 Morphicons，为 Kairos 提供界面、交互和图标方面的参考；感谢 Netease_url 与 NeteaseCloudMusicApi 提供技术参考。
+
+同时感谢 Electron、Vue、Vite、Pinia、SQLite、LangChain、FFmpeg 等开源项目的维护者与贡献者，以及为本项目提供反馈和建议的使用者。第三方代码、图标、字体、图片、视频与音乐等内容的权利归各自权利人所有，使用时应遵守对应许可证和授权条件。
+
+## 许可证与免责声明
+
+项目代码采用 [MIT License](LICENSE)，完整授权条件与免责条款以仓库中的 LICENSE 文件为准。该许可证不代表对第三方素材或服务授予额外权利。
+
+- 本软件按“现状”提供，不作明示或默示担保；作者责任范围以 MIT 许可证条款及适用法律为准。重要日程、对话和设置请定期备份。
+- Kairos 是独立个人项目，与所引用的设计网站、技术项目及第三方服务不存在官方隶属或背书关系。
+- 音乐、封面、背景和其他第三方内容仅可在获得相应授权的范围内使用；请遵守服务条款，不将本项目用于未经授权的传播或其他侵权用途。截图中的内容不构成再分发授权。
+- AI 回答可能存在错误，请自行核实重要信息。启用在线模型或网页服务时，相关请求内容会发送给所配置的第三方服务，可能产生费用，并受其服务条款和隐私政策约束。
+- 若发现素材署名、授权或其他问题，请通过 [GitHub Issues](https://github.com/Elainaee/kairos/issues) 联系，并提供相关说明。
 
