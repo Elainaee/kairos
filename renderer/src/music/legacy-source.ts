@@ -8,8 +8,8 @@
 export const legacyMusicReference = Object.freeze({
   page: {
     path: "app/pages/music/index.html",
-    sha256: "849140d8f949ac22c24c204e31a534284312adbba2b64934697a9d746f3de310",
-    bytes: 271392,
+    sha256: "53ff57415f8446b3c51229378fb3725f83d57df272a3f1102c03ecea19c9f8f6",
+    bytes: 267624,
     lines: 4378,
     viewSections: 9,
     idAnchors: 49,
@@ -17,14 +17,14 @@ export const legacyMusicReference = Object.freeze({
   },
   playerScript: {
     path: "app/shell/player/music-player.js",
-    sha256: "251701ec36ad9757f91d507c0fec284009051e0e07dfc124e40bed724fb1bc7d",
-    bytes: 56393,
+    sha256: "e31016098a1c2f91cdaf66d0ad95638b971a835df002b0d02e030ac05890e743",
+    bytes: 55678,
     lines: 763
   },
   playerStyle: {
     path: "app/shell/player/music-player.css",
-    sha256: "cc55a5de624a423715208a60c35bd997d5c6cc125d3c2312386400cc7c4db512",
-    bytes: 27989,
+    sha256: "447286036e5620395a433316fe600238cb8a61eb95edfd2096f0b538c52b1b00",
+    bytes: 26978,
     lines: 1043
   }
 });

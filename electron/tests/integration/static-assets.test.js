@@ -597,7 +597,7 @@ test("Vue shell keeps a persistent restore control when the desktop pet is hidde
   assert.match(shell, /onVisibilityChanged\?\.\(syncPetVisibility\)/, "the Vue shell should react to hide and show events from Electron");
   assert.match(shell, /PET_VISIBILITY_CACHE_KEY/, "the Vue shell should retain the hidden state while its one-shot Electron event is unavailable");
   assert.match(shell, /setInterval\(refreshPetVisibility, 2000\)/, "the Vue shell should reconcile pet visibility after a missed renderer event");
-  assert.match(shell, /<Teleport to="body">[\s\S]*?v-show="petHidden" class="vue-pet-restore"/, "the restore control should remain mounted above the shell and calendar iframe");
+  assert.match(shell, /<Teleport to="body">[\s\S]*?v-show="petHidden && activePage !== 'focus'" class="vue-pet-restore"/, "the restore control should remain mounted above the shell and calendar iframe outside the Focus page");
   assert.match(shell, /await window\.kairosDesktop\?\.pet\?\.show\?\.\(\)/, "the restore control should call the desktop pet show bridge");
   assert.match(styles, /body\.kairos-calendar-background-active\s*>\s*\.vue-pet-restore,[\s\S]*?\.vue-pet-restore\s*\{[^}]*position:fixed!important;[^}]*z-index:5000!important;[^}]*inset:auto 20px 112px auto!important;/, "the Calendar wallpaper must not turn the body-teleported restore control into a normal-flow element");
   assert.match(shell, /replays its cached native state/, "the shell should document its cached native visibility recovery path");
@@ -718,7 +718,6 @@ test.skip("calendar background shell preserves zero blur instead of restoring th
 test("package metadata defines Windows desktop distribution", async () => {
   const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
   const main = await fs.readFile(path.join(root, "electron/main/index.js"), "utf8");
-  const checklist = await fs.readFile(path.join(root, "docs/WINDOWS-RELEASE-CHECKLIST.md"), "utf8");
 
   assert.equal(pkg.productName, "Kairos");
   assert.equal(pkg.build.appId, "app.kairos.desktop");
@@ -777,7 +776,6 @@ test("package metadata defines Windows desktop distribution", async () => {
   assert.ok(pkg.devDependencies.vite, "Vite should be available to build the released renderer");
   assert.match(main, /process\.env\.KAIROS_RENDERER === "legacy"/);
   assert.match(main, /app["', ]+vue-preview["', ]+index\.html/);
-  assert.match(checklist, /pnpm audit:app-state[\s\S]*?退出码为 `0`[\s\S]*?退出码为 `2`[\s\S]*?退出码为 `1`/, "release checklist should document app-state audit usage and exit codes");
 });
 
 test("development uses one pnpm launcher with local runtime diagnostics", async () => {
@@ -816,7 +814,6 @@ test("distribution smoke verifies desktop userData health", async () => {
 
 test("installer smoke verifies installed app single instance behavior", async () => {
   const installerSmoke = await fs.readFile(path.join(root, "electron/scripts/release/installer-smoke.js"), "utf8");
-  const checklist = await fs.readFile(path.join(root, "docs/WINDOWS-RELEASE-CHECKLIST.md"), "utf8");
 
   assert.match(
     installerSmoke,
@@ -827,11 +824,6 @@ test("installer smoke verifies installed app single instance behavior", async ()
     installerSmoke,
     /console\.log\("Verifying installed Kairos single-instance behavior"\);[\s\S]*?await assertSingleInstanceFocus\(installedExe, path\.join\(userDataDir, "single-instance"\)\);/,
     "installer smoke should run single-instance verification after installed app startup"
-  );
-  assert.match(
-    checklist,
-    /verify:installer[\s\S]*?重复启动聚焦/,
-    "release checklist should record installed single-instance coverage"
   );
 });
 

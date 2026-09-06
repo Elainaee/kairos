@@ -13,7 +13,7 @@ async function source(file) {
 test("Music migration contract: source reference fingerprints stay current", async () => {
   const reference = await source("renderer/src/music/legacy-source.ts");
   for (const file of ["app/pages/music/index.html", "app/shell/player/music-player.js", "app/shell/player/music-player.css"]) {
-    const bytes = await fs.readFile(path.join(root, file));
+    const bytes = Buffer.from((await fs.readFile(path.join(root, file), "utf8")).replace(/\r\n/g, "\n"), "utf8");
     const hash = crypto.createHash("sha256").update(bytes).digest("hex");
     assert.match(reference, new RegExp(`sha256: "${hash}"`), `${file} must retain an up-to-date source fingerprint`);
     assert.match(reference, new RegExp(`bytes: ${bytes.length}`), `${file} must retain an up-to-date source size`);
@@ -155,7 +155,7 @@ test("Music migration contract: the unrouted Vue candidate starts from original 
   assert.match(candidate, /const runtimeKey = "__kairosNativeMusicCandidateRuntime"/,
     "candidate controller DOM queries must remain scoped to the retained original root");
   const generatedController = await source("app/pages/music/native-vue-controller.js");
-  const originalHtml = await source("app/pages/music/index.html");
+  const originalHtml = (await source("app/pages/music/index.html")).replace(/\r\n/g, "\n");
   const originalBody = originalHtml.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] || "";
   const originalController = [...originalBody.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1])

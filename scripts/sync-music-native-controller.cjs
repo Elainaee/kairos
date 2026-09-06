@@ -4,7 +4,9 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const sourcePath = path.join(root, "app", "pages", "music", "index.html");
 const outputPath = path.join(root, "app", "pages", "music", "native-vue-controller.js");
-const source = fs.readFileSync(sourcePath, "utf8");
+// Keep generated output identical on Windows and Linux checkouts. Git stores the
+// source with LF endings, while a developer checkout may expose CRLF endings.
+const source = fs.readFileSync(sourcePath, "utf8").replace(/\r\n/g, "\n");
 const body = source.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] || "";
 const inlineScripts = [...body.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
   .map(match => match[1])
