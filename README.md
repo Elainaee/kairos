@@ -38,10 +38,7 @@ pnpm dev
 - `renderer/`：Vue 渲染端源码。
 - `electron/`：主进程、预加载脚本、服务层、数据层和测试。
 - `scripts/`：开发、构建、签名与发布校验脚本。
-- `docs/`：项目与运行环境文档。
-- `references/`：参考资料与不参与打包的遗留素材。
-
-详见 [文件结构](docs/FILE-STRUCTURE.md)、[SQLite 数据库结构](docs/KAIROS-SQLITE-SCHEMA.sql) 与 [数据流程](docs/KAIROS-DATA-FLOW.md)。
+- `docs/` 与 `references/`：仅在本地保存的文档和参考资料，不纳入 Git 仓库。
 
 ## 数据与隐私
 
@@ -49,8 +46,3 @@ pnpm dev
 
 网易云功能仅面向用户已获授权账号的个人使用；不会绕过版权、会员、地区、验证、速率限制或不可播放限制。
 
-## 相关文档
-
-- [项目文件结构](docs/FILE-STRUCTURE.md)
-- [SQLite 数据库结构](docs/KAIROS-SQLITE-SCHEMA.sql)
-- [架构与数据流](docs/KAIROS-DATA-FLOW.md)
