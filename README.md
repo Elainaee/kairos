@@ -40,7 +40,9 @@ Kairos 是一款面向个人学习与日常规划的 Windows 桌面应用，提�
 
 ### AI 对话
 
-[![AI 对话窗口：会话、模型选择与消息交流](assets/readme/ai-chat.png)](assets/readme/ai-chat.png)
+<a href="assets/readme/ai-chat.png">
+  <img src="assets/readme/ai-chat.png" alt="AI 对话窗口：会话、模型选择与消息交流" width="420">
+</a>
 
 ## 技术栈
 
