@@ -5,7 +5,6 @@
 @import "../../app/features/reminders/reminder-feature.css";
 @import "../../app/features/habits/habits-feature.css";
 @import "../../app/shell/player/music-player.css";
-@import "./styles/schedule.css";
 @import "./styles/focus.css";
 /* Keep the selected theme last: feature styles may use legacy hard-coded
    colours, while this layer is the authoritative component palette. */
@@ -29,11 +28,6 @@ body.kairos-calendar-background-active .kairos-wallpaper { display:block; }
 .vue-shell .kairos-brand { color: #111!important; text-decoration: none!important; }
 .vue-shell .kairos-brand:hover, .vue-shell .kairos-brand:focus { text-decoration: none!important; }
 body.kairos-calendar-background-active .vue-shell .kairos-topbar { background: rgb(249 247 240 / .94)!important; border-color: rgb(255 255 255 / .52)!important; box-shadow: inset 0 -1px 0 rgb(61 59 46 / .06); }
-.vue-preview-notice { display: grid; width: min(720px, calc(100% - 64px)); margin: 64px auto; gap: 12px; padding: 30px; border: 1px solid rgba(61,59,46,.1); border-radius: 18px; background: rgba(255,255,255,.62); }
-.vue-preview-notice h1 { margin: 0; color: #3d3b2e; font-size: 30px; }
-.vue-preview-notice p { margin: 0; color: #6f6a5f; line-height: 1.6; }
-.vue-preview-notice code { border-radius: 6px; background: #ebe6d6; padding: 2px 6px; }
-.vue-bridge-status { margin-top: 8px!important; color: #477054!important; font-weight: 700; }
 .vue-settings-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; background: rgba(48,49,44,.42); backdrop-filter: blur(5px); }
 .vue-settings-backdrop .kairos-settings-dialog { display: block; margin: 0; }
 .vue-settings-backdrop .kairos-settings-save-status.is-visible { opacity: 1; transform: none; }

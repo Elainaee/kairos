@@ -1105,7 +1105,7 @@ async function verifyVuePreviewRenderer(win) {
         document.querySelector('.kairos-settings-button')?.click();
         await waitFor(() => Boolean(document.querySelector('dialog.kairos-settings-dialog[open]')), 'settings dialog');
         const settings = document.querySelector('dialog.kairos-settings-dialog');
-        if (settings?.querySelectorAll('.kairos-settings-panel').length !== 1 || settings?.querySelectorAll('[data-settings-tab]').length !== 6) throw new Error('Vue settings host did not retain the original settings dialog DOM');
+        if (settings?.querySelectorAll('.kairos-settings-panel').length !== 1 || settings?.querySelectorAll('[data-settings-tab]').length !== 7) throw new Error('Vue settings host did not retain the original settings dialog DOM');
         assertNoHorizontalOverflow(document, 'Chinese Settings');
         assertRendered(settings, 'Chinese Settings dialog');
         const languageControl = settings?.querySelector('[data-setting-path="general.language"]');

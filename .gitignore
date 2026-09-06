@@ -21,13 +21,13 @@ desktop.ini
 .idea/
 
 # Build outputs
-dist/
-build/
-out/
-release/
-app/vue-preview/
-coverage/
-vendor/ffmpeg/
+/dist/
+/build/
+/out/
+/release/
+/app/vue-preview/
+/coverage/
+/vendor/ffmpeg/
 
 # Electron / app runtime data
 *.asar
@@ -40,11 +40,9 @@ ai-data.json
 .agents/
 Brainstorm/.obsidian/
 
-# Imported third-party reference source drops.
-# Keep curated project docs/assets, but avoid vendoring whole external libraries.
-references/source-libraries/
-references/design-imports/
-references/shadcn-components/
+# Local documentation and reference materials
+/docs/
+/references/
 shadcn-components/
 
 # Temporary files

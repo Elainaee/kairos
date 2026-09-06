@@ -8,6 +8,10 @@
     || document.querySelector('script[data-vue-settings-feature]')?.src
     || window.location.href;
   const featureAssetUrl = path => new URL(path, featureScriptUrl).href;
+  // Morphicons exposes this path as tabler:brand-github in its icon playground.
+  const brandGithubIcon = `<svg class="kairos-about-brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19C4.7 20.4 4.7 16.5 3 16M15 21C15 19.8333 15 18.6667 15 17.5C15 16.5 15.1 16.1 14.5 15.5C17.3 15.2 20 14.1 20 9.5C19.9988 8.305 19.5325 7.1573 18.7 6.3C19.0905 5.262 19.0545 4.1116 18.6 3.1C18.6 3.1 17.5 2.8 15.1 4.4C13.0672 3.8706 10.9328 3.8706 8.9 4.4C6.5 2.8 5.4 3.1 5.4 3.1C4.9455 4.1116 4.9095 5.262 5.3 6.3C4.4675 7.1573 4.0012 8.305 4 9.5C4 14.1 6.7 15.2 9.5 15.5C8.9 16.1 8.9 16.7 9 17.5C9 18.6667 9 19.8333 9 21"></path></svg>`;
+  // Morphicons exposes this functional icon as lucide:external-link.
+  const externalLinkIcon = `<svg class="kairos-about-external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3H21V9"></path><path d="M10 14L21 3"></path><path d="M18 13V19C18 20.1046 17.1046 21 16 21H5C3.8954 21 3 20.1046 3 19V8C3 6.8954 3.8954 6 5 6H11"></path></svg>`;
 
   const STORAGE_KEY = 'kairos-settings';
   const defaults = {
@@ -25,7 +29,8 @@
     ['reminders', 'notifications', t('settings.reminders', 'Reminders')],
     ['agent', 'smart_toy', t('settings.agent', 'Agent')],
     ['music', 'queue_music', t('settings.music', 'Music')],
-    ['data', 'database', t('settings.data', 'Data')]
+    ['data', 'database', t('settings.data', 'Data')],
+    ['about', 'info', t('settings.about', 'About')]
   ];
   let sections = buildSections();
   const buildChoices = () => ({
@@ -283,6 +288,31 @@
         </div>`)}
     `);
   };
+  const aboutLink = ({ name, url, description, icon }) => `
+    <a class="kairos-about-link${icon ? ' has-icon' : ''}" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(t('settings.openWebsite', 'Open {name}', { name }))}">
+      ${icon ? `<span class="kairos-about-link-icon" aria-hidden="true">${icon}</span>` : ''}
+      <span class="kairos-about-link-copy"><strong>${name}</strong><small>${description}</small></span>
+      <span class="kairos-about-link-arrow" aria-hidden="true">${externalLinkIcon}</span>
+    </a>`;
+  const aboutMarkup = () => {
+    const references = [
+      { name: 'TweakCN', url: 'https://tweakcn.com/', description: t('settings.referenceTweakcn', 'Theme, typography, and interface direction') },
+      { name: 'React Bits', url: 'https://reactbits.dev/', description: t('settings.referenceReactBits', 'Motion and interaction patterns') },
+      { name: 'shadcn/ui', url: 'https://ui.shadcn.com/', description: t('settings.referenceShadcn', 'Accessible component structures and states') },
+      { name: 'Google Stitch', url: 'https://stitch.withgoogle.com/', description: t('settings.referenceStitch', 'Layout and prototype references') },
+      { name: 'Morphicons', url: 'https://www.morphicons.com/', description: t('settings.referenceMorphicons', 'SVG icon motion and the GitHub brand icon') }
+    ];
+    const technicalReferences = [
+      { name: 'Netease_url', url: 'https://github.com/Suxiaoqinx/Netease_url', description: t('settings.referenceNeteaseUrl', 'NetEase Music URL reference implementation'), icon: brandGithubIcon },
+      { name: 'NeteaseCloudMusicApi', url: 'https://www.npmjs.com/package/NeteaseCloudMusicApi', description: t('settings.referenceNeteasePackage', 'NetEase Cloud Music API package') }
+    ];
+    const repository = aboutLink({ name: 'Elainaee/kairos', url: 'https://github.com/Elainaee/kairos', description: t('settings.repositoryDescription', 'Source code, releases, and project history'), icon: brandGithubIcon });
+    return sectionView('about', t('settings.about', 'About'), `
+      ${card(t('settings.projectRepository', 'Project repository'), `<div class="kairos-about-links">${repository}</div>`)}
+      ${card(t('settings.designReferences', 'Design references'), `<div class="kairos-about-links">${references.map(aboutLink).join('')}</div>`)}
+      ${card(t('settings.technicalReferences', 'Technical references'), `<div class="kairos-about-links">${technicalReferences.map(aboutLink).join('')}</div>`)}
+    `);
+  };
   const sectionView = (id, title, body) => `
     <section class="kairos-settings-section kairos-settings-panel-view" data-settings-panel="${id}" ${id === activeSection ? '' : 'hidden'}>
       <header class="kairos-settings-section-header"><h3>${title}</h3></header>${body}
@@ -333,6 +363,7 @@
           ${agentMarkup()}
           ${musicMarkup()}
           ${dataMarkup()}
+          ${aboutMarkup()}
           <output class="kairos-settings-save-status" data-save-status aria-live="polite">${t('settings.saved', 'Saved')}</output>
         </div>
       </form>

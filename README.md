@@ -41,7 +41,7 @@ pnpm dev
 - `docs/`：项目与运行环境文档。
 - `references/`：参考资料与不参与打包的遗留素材。
 
-详见 [文件结构](docs/FILE-STRUCTURE.md)、[SQLite 数据库结构](docs/SQLITE-SCHEMA.md) 与 [数据流程](docs/KAIROS-DATA-FLOW.md)。
+详见 [文件结构](docs/FILE-STRUCTURE.md)、[SQLite 数据库结构](docs/KAIROS-SQLITE-SCHEMA.sql) 与 [数据流程](docs/KAIROS-DATA-FLOW.md)。
 
 ## 数据与隐私
 
@@ -52,7 +52,5 @@ pnpm dev
 ## 相关文档
 
 - [项目文件结构](docs/FILE-STRUCTURE.md)
-- [C 盘数据概览](docs/KAIROS-C-DRIVE-FILE-STRUCTURE.md)
-- [SQLite 数据库结构](docs/SQLITE-SCHEMA.md)
+- [SQLite 数据库结构](docs/KAIROS-SQLITE-SCHEMA.sql)
 - [架构与数据流](docs/KAIROS-DATA-FLOW.md)
-- [待办与路线图](docs/TODO.md)

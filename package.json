@@ -57,6 +57,7 @@
       "!references{,/**}",
       "!Brainstorm{,/**}",
       "!node_modules/.cache{,/**}",
+      "!node_modules/**/*.test.js",
       "!node_modules/ffmpeg-static{,/**}",
       "!.env*",
       "!electron/tests{,/**}",

@@ -624,6 +624,19 @@ window.KairosI18nMessages = Object.freeze({
       "apiKeySaved": "{label} saved",
       "appData": "App Data",
       "appearance": "Appearance",
+      "about": "About",
+      "designReferences": "Design references",
+      "openWebsite": "Open {name}",
+      "projectRepository": "Project repository",
+      "referenceMorphicons": "SVG icon motion and the GitHub brand icon",
+      "referenceReactBits": "Motion and interaction patterns",
+      "referenceShadcn": "Accessible component structures and states",
+      "referenceStitch": "Layout and prototype references",
+      "referenceTweakcn": "Theme, typography, and interface direction",
+      "repositoryDescription": "Source code, releases, and project history",
+      "referenceNeteasePackage": "NetEase Cloud Music API package",
+      "referenceNeteaseUrl": "NetEase Music URL reference implementation",
+      "technicalReferences": "Technical references",
       "theme": "Theme",
       "backgroundDeleted": "Calendar background deleted",
       "backgroundDeleteDescription": "This permanently removes the image from your Kairos background library.",
@@ -1064,14 +1077,6 @@ window.KairosI18nMessages = Object.freeze({
       "syncedFromCalendar": "Synced from the main calendar",
       "toggleSidebar": "Toggle sidebar",
       "tryAgain": "Please try again."
-    },
-    "shellPreview": {
-      "bridgeReady": "Electron interface ready · read {count} state sections",
-      "browserPreview": "Browser preview mode: Electron interface is unavailable",
-      "checkBridge": "Check Electron interface",
-      "description": "The shared application shell is running in Vue. The default {command} command still starts the complete original interface.",
-      "notChecked": "Not checked yet",
-      "title": "Migration preview"
     },
     "app": {
       "title": {
@@ -1708,6 +1713,19 @@ window.KairosI18nMessages = Object.freeze({
       "apiKeySaved": "{label} 已保存",
       "appData": "应用数据",
       "appearance": "外观",
+      "about": "关于",
+      "designReferences": "设计参考",
+      "openWebsite": "打开{name}",
+      "projectRepository": "项目仓库",
+      "referenceMorphicons": "SVG 图标动效与 GitHub 品牌图标",
+      "referenceReactBits": "动效与交互模式",
+      "referenceShadcn": "无障碍组件结构与完整状态",
+      "referenceStitch": "布局与原型参考",
+      "referenceTweakcn": "主题、字体与界面方向",
+      "repositoryDescription": "源代码、发布版本与项目历史",
+      "referenceNeteasePackage": "网易云音乐 API 软件包",
+      "referenceNeteaseUrl": "网易云音乐链接参考实现",
+      "technicalReferences": "技术参考",
       "theme": "主题",
       "backgroundDeleted": "日历背景已删除",
       "backgroundDeleteDescription": "这会从你的 Kairos 背景库中永久移除该图片。",
@@ -2148,14 +2166,6 @@ window.KairosI18nMessages = Object.freeze({
       "syncedFromCalendar": "已同步主日历",
       "toggleSidebar": "切换侧边栏",
       "tryAgain": "请重试。"
-    },
-    "shellPreview": {
-      "bridgeReady": "Electron 接口正常 · 已读取 {count} 个状态域",
-      "browserPreview": "浏览器预览模式：Electron 接口不可用",
-      "checkBridge": "检查 Electron 接口",
-      "description": "共享应用外壳正在由 Vue 运行。默认 {command} 命令仍会启动完整原界面。",
-      "notChecked": "尚未检查",
-      "title": "迁移预览"
     },
     "app": {
       "title": {

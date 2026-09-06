@@ -902,7 +902,6 @@ test("settings music panel manages NetEase account and quality preferences", asy
   const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
   const playerScript = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
   const appReadme = await fs.readFile(path.join(root, "app/README.md"), "utf8");
-  const complianceDoc = await fs.readFile(path.join(root, "docs/NETEASE-COMPLIANCE.md"), "utf8");
 
   assert.match(
     settingsScript,
@@ -969,13 +968,8 @@ test("settings music panel manages NetEase account and quality preferences", asy
   );
   assert.match(
     appReadme,
-    /Netease Music integration is limited to the user's own authorized account[\s\S]*?does not redistribute music content[\s\S]*?NETEASE-COMPLIANCE\.md/,
-    "app README should point maintainers to the NetEase compliance scope"
-  );
-  assert.match(
-    complianceDoc,
-    /Personal authorization only[\s\S]*?No music content redistribution[\s\S]*?No commercial public playback[\s\S]*?No bypass of Netease rights/,
-    "NetEase compliance doc should define allowed and out-of-scope behavior"
+    /Netease Music integration is limited to the user's own authorized account[\s\S]*?does not redistribute music content[\s\S]*?commercial public playback[\s\S]*?does not bypass Netease rights/,
+    "app README should retain the NetEase compliance scope"
   );
 });
 
@@ -1914,6 +1908,29 @@ test("music controls suppress global hover backgrounds", async () => {
     /neteaseThumbnailUrl[\s\S]*?param=160y160[\s\S]*?neteaseThumbnailUrl\(secureCoverUrl\)/,
     "queue artwork should request bounded NetEase thumbnails instead of multi-megabyte originals"
   );
+});
+
+test("settings About panel lists project and design reference links", async () => {
+  const settingsScript = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
+  const settingsCss = await fs.readFile(path.join(root, "app/features/settings/settings-feature.css"), "utf8");
+
+  assert.match(settingsScript, /\['data', 'database',[\s\S]*?\['about', 'info', t\('settings\.about', 'About'\)\]/, "About should be the final settings sidebar item");
+  for (const url of ['https://github.com/Elainaee/kairos', 'https://tweakcn.com/', 'https://reactbits.dev/', 'https://ui.shadcn.com/', 'https://stitch.withgoogle.com/', 'https://www.morphicons.com/']) {
+    assert.ok(settingsScript.includes(url), `About should expose ${url}`);
+  }
+  for (const url of ['https://github.com/Suxiaoqinx/Netease_url', 'https://www.npmjs.com/package/NeteaseCloudMusicApi']) {
+    assert.ok(settingsScript.includes(url), `About should expose technical reference ${url}`);
+  }
+  assert.doesNotMatch(settingsScript, /https:\/\/www\.electronjs\.org\/|https:\/\/vuejs\.org\/|https:\/\/vite\.dev\//, "About should keep technical references limited to the two user-selected sites");
+  assert.doesNotMatch(settingsScript, /Kairos is shaped by these open design tools and reference sites\.|settings\.aboutDescription/, "About should not retain the removed introductory sentence");
+  assert.match(settingsScript, /class="kairos-about-brand-icon"[\s\S]*?M9 19C4\.7 20\.4 4\.7 16\.5 3 16/, "the GitHub destination should use Morphicons' tabler brand-github path");
+  assert.match(settingsScript, /class="kairos-about-external-icon"[\s\S]*?M15 3H21V9/, "external actions should use Morphicons' lucide external-link path");
+  assert.doesNotMatch(settingsScript, /const materialIcon =|icon: materialIcon\(/, "reference sites without a confirmed official icon should not receive a generic stand-in");
+  assert.match(settingsScript, /class="kairos-about-link\$\{icon \? ' has-icon' : ''\}"[\s\S]*?\$\{icon \? `<span class="kairos-about-link-icon"/, "links without an official icon should not reserve an empty icon slot");
+  assert.match(settingsScript, /target="_blank" rel="noopener noreferrer"/, "About links should leave the app through a protected external window");
+  assert.match(settingsCss, /\.kairos-about-link:hover\{background:transparent;color:var\(--primary\);box-shadow:none\}/, "About link hover should remain foreground-only");
+  assert.match(settingsCss, /\.kairos-about-link:focus-visible\{border-color:var\(--primary\);outline:2px solid var\(--ring\);outline-offset:2px\}/, "About links should keep a visible keyboard focus ring");
+  assert.match(settingsCss, /\.kairos-settings-nav button:hover\{background:transparent;color:var\(--primary\);box-shadow:none\}/, "settings sidebar hover should be foreground-only");
 });
 
 test("historical NetEase download state does not replay completion notifications on startup", async () => {

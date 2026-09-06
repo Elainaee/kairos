@@ -2,13 +2,14 @@
 .kairos-settings-dialog::backdrop{background:rgba(48,49,44,.42);backdrop-filter:blur(5px)}
 .kairos-settings-panel{display:grid;grid-template-columns:220px minmax(0,1fr);width:100%;height:100%;margin:0;overflow:hidden;border:1px solid rgba(61,59,46,.12);border-radius:18px;background:linear-gradient(145deg,rgba(255,255,255,.93),rgba(245,244,237,.95));box-shadow:0 28px 80px rgba(27,28,24,.24),inset 0 1px 0 rgba(255,255,255,.78);font-family:Outfit,system-ui,sans-serif}
 .kairos-settings-sidebar{display:flex;flex-direction:column;gap:16px;padding:22px 20px 26px 24px;border-right:1px solid rgba(61,59,46,.1);background:rgba(255,255,255,.34)}
-.kairos-settings-back{display:grid;width:32px;height:32px;place-items:center;margin-left:-8px;border:0;border-radius:8px;background:transparent;color:#8a877d;cursor:pointer}.kairos-settings-back:hover,.kairos-settings-back:focus-visible{background:#ebe6d6;color:#57423c;outline:none}.kairos-settings-back .material-symbols-outlined{font-size:20px}
+.kairos-settings-back{display:grid;width:32px;height:32px;place-items:center;margin-left:-8px;border:0;border-radius:8px;background:transparent;color:var(--text-muted);cursor:pointer}.kairos-settings-back:hover{background:transparent;color:var(--primary)}.kairos-settings-back:focus-visible{background:transparent;color:var(--primary);outline:2px solid var(--ring);outline-offset:2px}.kairos-settings-back .material-symbols-outlined{font-size:20px}
 .kairos-settings-kicker,.kairos-settings-content-kicker{display:block;color:#9e3d19;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
 .kairos-settings-sidebar h2{margin:0;color:#3d3b2e;font-size:30px;line-height:1.1;font-weight:760;letter-spacing:0}
 .kairos-settings-nav{display:grid;gap:5px;margin-top:2px}
-.kairos-settings-nav button{display:flex;align-items:center;gap:10px;width:100%;height:42px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#57423c;font:750 14px/1 Outfit,system-ui,sans-serif;text-align:left;cursor:pointer}
-.kairos-settings-nav button:hover,.kairos-settings-nav button:focus-visible{background:rgba(235,230,214,.72);outline:none}
-.kairos-settings-nav button.active{background:#d1633c;color:#fff;box-shadow:0 7px 18px rgba(209,99,60,.22)}
+.kairos-settings-nav button{display:flex;align-items:center;gap:10px;width:100%;height:42px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:var(--foreground);font:750 14px/1 Outfit,system-ui,sans-serif;text-align:left;cursor:pointer}
+.kairos-settings-nav button:hover{background:transparent;color:var(--primary);box-shadow:none}
+.kairos-settings-nav button:focus-visible{background:transparent;color:var(--primary);outline:2px solid var(--ring);outline-offset:2px}
+.kairos-settings-nav button.active,.kairos-settings-nav button.active:hover{background:var(--primary);color:var(--primary-foreground);box-shadow:none}
 .kairos-settings-nav .material-symbols-outlined{font-size:20px}
 .kairos-settings-content{display:flex;min-width:0;flex-direction:column;gap:20px;padding:32px;overflow:auto;scrollbar-width:none;-ms-overflow-style:none}
 .kairos-settings-content::-webkit-scrollbar,.kairos-settings-panel *::-webkit-scrollbar{display:none;width:0;height:0}
@@ -174,3 +175,21 @@
 .kairos-profile-portrait>footer button{display:inline-flex;min-height:36px;align-items:center;gap:6px;border:1px solid var(--border);border-radius:9px;background:transparent;color:var(--foreground);padding:0 10px;font:750 11px/1 Outfit,system-ui,sans-serif;cursor:pointer;box-shadow:none}
 .kairos-profile-portrait>footer button .material-symbols-outlined{font-size:17px}.kairos-profile-portrait>footer button:hover:not(:disabled){border-color:var(--primary);background:transparent;color:var(--primary);box-shadow:none}.kairos-profile-portrait>footer button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}.kairos-profile-portrait>footer button:disabled{cursor:not-allowed;opacity:.45}
 @media(max-width:760px){.kairos-profile-card>header{align-items:stretch;flex-direction:column}.kairos-profile-memory-toggle{justify-content:space-between}.kairos-profile-grid{grid-template-columns:1fr}.kairos-profile-field-wide{grid-column:auto}}
+
+/* About keeps project and reference destinations inside the existing settings
+   card language. Link feedback is foreground-only, matching Kairos buttons. */
+.kairos-settings-section[data-settings-panel="about"]{gap:14px;padding-bottom:8px}
+.kairos-about-links{display:grid}
+.kairos-about-link{display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:58px;align-items:center;gap:12px;border-bottom:1px solid var(--border);background:transparent;color:var(--foreground);padding:8px 4px;text-decoration:none;box-shadow:none}
+.kairos-about-link.has-icon{grid-template-columns:28px minmax(0,1fr) auto}
+.kairos-about-link:last-child{border-bottom:0}
+.kairos-about-link-icon{display:grid;width:28px;height:28px;place-items:center;color:var(--text-muted)}
+.kairos-about-brand-icon{width:21px;height:21px}
+.kairos-about-link-copy{display:grid;min-width:0;gap:3px}
+.kairos-about-link-copy strong{overflow:hidden;color:var(--text-strong);font-size:13px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}
+.kairos-about-link-copy small{color:var(--text-muted);font-size:11px;font-weight:600;line-height:1.4}
+.kairos-about-link-arrow{display:grid;width:28px;height:28px;place-items:center;color:var(--text-muted)}
+.kairos-about-external-icon{width:18px;height:18px}
+.kairos-about-link:hover{background:transparent;color:var(--primary);box-shadow:none}
+.kairos-about-link:hover :is(.kairos-about-link-icon,.kairos-about-link-copy strong,.kairos-about-link-arrow){color:var(--primary)}
+.kairos-about-link:focus-visible{border-color:var(--primary);outline:2px solid var(--ring);outline-offset:2px}

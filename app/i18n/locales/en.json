@@ -615,6 +615,19 @@
     "apiKeySaved": "{label} saved",
     "appData": "App Data",
     "appearance": "Appearance",
+    "about": "About",
+    "designReferences": "Design references",
+    "openWebsite": "Open {name}",
+    "projectRepository": "Project repository",
+    "referenceMorphicons": "SVG icon motion and the GitHub brand icon",
+    "referenceReactBits": "Motion and interaction patterns",
+    "referenceShadcn": "Accessible component structures and states",
+    "referenceStitch": "Layout and prototype references",
+    "referenceTweakcn": "Theme, typography, and interface direction",
+    "repositoryDescription": "Source code, releases, and project history",
+    "referenceNeteasePackage": "NetEase Cloud Music API package",
+    "referenceNeteaseUrl": "NetEase Music URL reference implementation",
+    "technicalReferences": "Technical references",
     "theme": "Theme",
     "backgroundDeleted": "Calendar background deleted",
     "backgroundDeleteDescription": "This permanently removes the image from your Kairos background library.",
@@ -1055,14 +1068,6 @@
     "syncedFromCalendar": "Synced from the main calendar",
     "toggleSidebar": "Toggle sidebar",
     "tryAgain": "Please try again."
-  },
-  "shellPreview": {
-    "bridgeReady": "Electron interface ready · read {count} state sections",
-    "browserPreview": "Browser preview mode: Electron interface is unavailable",
-    "checkBridge": "Check Electron interface",
-    "description": "The shared application shell is running in Vue. The default {command} command still starts the complete original interface.",
-    "notChecked": "Not checked yet",
-    "title": "Migration preview"
   },
   "app": {
     "title": {
