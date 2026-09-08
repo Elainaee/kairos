@@ -160,7 +160,10 @@
     "streak": "连续天数",
     "today": "今天",
     "todaySchedule": "今日的日程",
-    "workspace": "日历工作区"
+    "workspace": "日历工作区",
+    "holidays": {
+      "newYearsDay": "元旦", "valentinesDay": "情人节", "leiFengDay": "学雷锋日", "womensDay": "妇女节", "arborDay": "植树节", "consumerRightsDay": "消费者权益日", "worldSleepDay": "世界睡眠日", "aprilFoolsDay": "愚人节", "earthDay": "世界地球日", "labourDay": "劳动节", "youthDay": "青年节", "nursesDay": "护士节", "museumDay": "国际博物馆日", "childrensDay": "儿童节", "cpcFoundingDay": "建党节", "plaDay": "建军节", "victoryDay": "抗战胜利纪念日", "teachersDay": "教师节", "september18Memorial": "九一八纪念日", "nationalDay": "国庆节", "programmersDay": "程序员节", "singlesDay": "双十一", "nationalMemorialDay": "国家公祭日", "christmasEve": "平安夜", "christmasDay": "圣诞节", "springFestival": "春节", "lanternFestival": "元宵节", "dragonHeadDay": "龙抬头", "dragonBoatFestival": "端午节", "qixiFestival": "七夕", "ghostFestival": "中元节", "midAutumnFestival": "中秋节", "doubleNinthFestival": "重阳节", "winterClothesFestival": "寒衣节", "xiayuanFestival": "下元节", "labaFestival": "腊八节", "littleNewYear": "小年", "qingmingFestival": "清明节", "mothersDay": "母亲节", "fathersDay": "父亲节", "thanksgiving": "感恩节"
+    }
     ,"weekdaySun": "日"
     ,"weekdayMon": "一"
     ,"weekdayTue": "二"
@@ -616,6 +619,19 @@
     "appData": "应用数据",
     "appearance": "外观",
     "about": "关于",
+    "versionAndUpdates": "版本与更新",
+    "version": "版本",
+    "currentVersion": "当前版本",
+    "checkForUpdates": "检查更新",
+    "checkingForUpdates": "正在检查更新…",
+    "latestVersionInstalled": "当前已是最新版本（{version}）。",
+    "updateAvailable": "发现新版本 {version}。",
+    "updatePromptTitle": "将 Kairos 更新到 {version}？",
+    "updatePromptDescription": "Kairos 将下载最新版安装程序，关闭应用并开始更新。你的用户数据会保留。",
+    "updateNow": "立即更新",
+    "downloadingUpdate": "正在下载更新…",
+    "updateInstallerUnavailable": "最新版本没有提供 Windows 安装包。",
+    "updateCheckFailed": "无法检查更新。",
     "designReferences": "设计参考",
     "openWebsite": "打开{name}",
     "projectRepository": "项目仓库",

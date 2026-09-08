@@ -16,6 +16,10 @@ const displayedRate = ref(0);
 const ringProgress = ref(0);
 const progressAnimating = ref(false);
 let progressFrame = 0;
+let glowFrame = 0;
+let glowCard: HTMLElement | null = null;
+let glowPointerX = 0;
+let glowPointerY = 0;
 const icons = ["📚", "🏋️", "🧠", "🌙", "💧", "🧘", "✍️", "🥗", "🏃", "🧹"];
 const form = reactive({ name: "", description: "", icon: icons[0], allowBackfill: false });
 const today = computed(() => dateKey());
@@ -68,12 +72,28 @@ function pointerGlow(event: PointerEvent) {
     card.style.setProperty("--magic-intensity", "0");
     return;
   }
-  const rect = card.getBoundingClientRect();
-  card.style.setProperty("--magic-x", `${(event.clientX - rect.left) / rect.width * 100}%`);
-  card.style.setProperty("--magic-y", `${(event.clientY - rect.top) / rect.height * 100}%`);
-  card.style.setProperty("--magic-intensity", "1");
+  glowCard = card;
+  glowPointerX = event.clientX;
+  glowPointerY = event.clientY;
+  if (glowFrame) return;
+  glowFrame = requestAnimationFrame(() => {
+    glowFrame = 0;
+    if (!glowCard) return;
+    const rect = glowCard.getBoundingClientRect();
+    glowCard.style.setProperty("--magic-x", `${(glowPointerX - rect.left) / rect.width * 100}%`);
+    glowCard.style.setProperty("--magic-y", `${(glowPointerY - rect.top) / rect.height * 100}%`);
+    glowCard.style.setProperty("--magic-intensity", "1");
+  });
 }
-function pointerLeave(event: PointerEvent) { (event.currentTarget as HTMLElement).style.setProperty("--magic-intensity", "0"); }
+function pointerLeave(event: PointerEvent) {
+  const card = event.currentTarget as HTMLElement;
+  if (glowCard === card) {
+    cancelAnimationFrame(glowFrame);
+    glowFrame = 0;
+    glowCard = null;
+  }
+  card.style.setProperty("--magic-intensity", "0");
+}
 function startDrag(id: string, event: DragEvent) {
   draggingId.value = id;
   if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); }
@@ -104,6 +124,7 @@ async function toggleHabit(habit: Habit) {
 
 function animateProgress(target: number) {
   cancelAnimationFrame(progressFrame);
+  cancelAnimationFrame(glowFrame);
   const from = displayedRate.value;
   if (document.documentElement.classList.contains("kairos-reduce-motion") || window.matchMedia("(prefers-reduced-motion: reduce)").matches || from === target) {
     displayedRate.value = target;

@@ -12,6 +12,9 @@
   const brandGithubIcon = `<svg class="kairos-about-brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19C4.7 20.4 4.7 16.5 3 16M15 21C15 19.8333 15 18.6667 15 17.5C15 16.5 15.1 16.1 14.5 15.5C17.3 15.2 20 14.1 20 9.5C19.9988 8.305 19.5325 7.1573 18.7 6.3C19.0905 5.262 19.0545 4.1116 18.6 3.1C18.6 3.1 17.5 2.8 15.1 4.4C13.0672 3.8706 10.9328 3.8706 8.9 4.4C6.5 2.8 5.4 3.1 5.4 3.1C4.9455 4.1116 4.9095 5.262 5.3 6.3C4.4675 7.1573 4.0012 8.305 4 9.5C4 14.1 6.7 15.2 9.5 15.5C8.9 16.1 8.9 16.7 9 17.5C9 18.6667 9 19.8333 9 21"></path></svg>`;
   // Morphicons exposes this functional icon as lucide:external-link.
   const externalLinkIcon = `<svg class="kairos-about-external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3H21V9"></path><path d="M10 14L21 3"></path><path d="M18 13V19C18 20.1046 17.1046 21 16 21H5C3.8954 21 3 20.1046 3 19V8C3 6.8954 3.8954 6 5 6H11"></path></svg>`;
+  // Selected in the Morphicons playground as lucide:refresh. Keep the simple
+  // circular arrows readable at the compact Settings action-button size.
+  const refreshIcon = `<svg class="kairos-update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12C3 7.0294 7.0294 3 12 3C14.516 3.0095 16.931 3.9912 18.74 5.74C19.4933 6.4933 20.2467 7.2467 21 8M21 3C21 4.6667 21 6.3333 21 8C19.3333 8 17.6667 8 16 8M21 12C21 16.9706 16.9706 21 12 21C9.484 20.9905 7.069 20.0088 5.26 18.26C4.5067 17.5067 3.7533 16.7533 3 16M8 16C6.3333 16 4.6667 16 3 16C3 17.6667 3 19.3333 3 21"></path></svg>`;
 
   const STORAGE_KEY = 'kairos-settings';
   const defaults = {
@@ -86,6 +89,8 @@
   let providerModelScrollSnapshot;
   let neteaseStatus;
   let calendarBackgrounds = [];
+  let appVersion = '';
+  let updateStatus = '';
   let personalProfile = { memoryEnabled: true, manual: { name: '', nickname: '', age: null, occupation: '', longTermGoals: [] }, interaction: { addressMode: 'auto', customAddress: '', tonePreset: 'companion', customTone: '', relationshipPreset: 'companion', customRelationship: '' }, portrait: { text: '', status: 'empty', updatedAt: '' } };
   let statusTimer;
 
@@ -308,6 +313,7 @@
     ];
     const repository = aboutLink({ name: 'Elainaee/kairos', url: 'https://github.com/Elainaee/kairos', description: t('settings.repositoryDescription', 'Source code, releases, and project history'), icon: brandGithubIcon });
     return sectionView('about', t('settings.about', 'About'), `
+      ${card(t('settings.version', 'Version'), `<div class="kairos-update-row"><span class="kairos-setting-copy"><span class="kairos-setting-label">${t('settings.currentVersion', 'Current version')}</span><small class="kairos-update-status" data-update-status aria-live="polite">${escapeHtml(updateStatus || `Kairos ${appVersion || '—'}`)}</small></span><button class="kairos-data-action-button" type="button" data-check-updates ${window.kairosDesktop?.updates?.check ? '' : 'disabled'}>${refreshIcon}${t('settings.checkForUpdates', 'Check for updates')}</button></div>`)}
       ${card(t('settings.projectRepository', 'Project repository'), `<div class="kairos-about-links">${repository}</div>`)}
       ${card(t('settings.designReferences', 'Design references'), `<div class="kairos-about-links">${references.map(aboutLink).join('')}</div>`)}
       ${card(t('settings.technicalReferences', 'Technical references'), `<div class="kairos-about-links">${technicalReferences.map(aboutLink).join('')}</div>`)}
@@ -573,6 +579,10 @@
     });
     flashSaved(t('settings.providerModelsSaved', 'Model settings saved'));
     return providerSettings;
+  };
+  const refreshAboutData = async () => {
+    if (!window.kairosDesktop?.updates?.version) return;
+    appVersion = await window.kairosDesktop.updates.version().catch(() => '');
   };
   const syncModelPickerUi = (changedInput, scrollSnapshot = readProviderModelScroll()) => {
     const inputs = [...dialog.querySelectorAll('[data-provider-model-toggle]')];
@@ -953,6 +963,34 @@
       if (result?.canceled) return;
       flashSaved(t('settings.appDataImported', 'App data imported'));
     }}));
+    dialog.querySelector('[data-check-updates]')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const status = dialog.querySelector('[data-update-status]');
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (status) status.textContent = t('settings.checkingForUpdates', 'Checking for updates…');
+      try {
+        const result = await window.kairosDesktop.updates.check();
+        if (!result?.updateAvailable) {
+          updateStatus = t('settings.latestVersionInstalled', 'You are using the latest version ({version}).', { version: result?.currentVersion || appVersion });
+          if (status) status.textContent = updateStatus;
+          return;
+        }
+        updateStatus = t('settings.updateAvailable', 'Version {version} is available.', { version: result.latestVersion });
+        if (status) status.textContent = updateStatus;
+        confirmAction({ title: t('settings.updatePromptTitle', 'Update Kairos to {version}?', { version: result.latestVersion }), copy: t('settings.updatePromptDescription', 'Kairos will download the latest installer, close the app, and start the update. Your user data will be kept.'), action: t('settings.updateNow', 'Update now'), onConfirm: async () => {
+          if (!result.downloadUrl) throw new Error(t('settings.updateInstallerUnavailable', 'The latest release does not include a Windows installer.'));
+          updateStatus = t('settings.downloadingUpdate', 'Downloading update…');
+          await window.kairosDesktop.updates.install(result.downloadUrl);
+        }});
+      } catch (error) {
+        updateStatus = t('settings.updateCheckFailed', 'Unable to check for updates.');
+        if (status) status.textContent = updateStatus;
+        toast(updateStatus, 'error', error?.message || t('legacy.tryAgain', 'Please try again.'));
+      } finally {
+        if (button.isConnected) { button.disabled = false; button.removeAttribute('aria-busy'); }
+      }
+    });
   };
   const buildDialog = async () => {
     dialog = document.createElement('dialog');
@@ -961,12 +999,12 @@
     document.body.append(dialog);
     dialog.addEventListener('close', () => { previousFocus?.focus?.(); previousFocus = null; });
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-    await refreshProviderData();
+    await Promise.all([refreshProviderData(), refreshAboutData()]);
     render();
   };
   const open = async source => {
     activeSection = 'general';
-    if (!dialog) await buildDialog(); else { await refreshProviderData(); render(); }
+    if (!dialog) await buildDialog(); else { await Promise.all([refreshProviderData(), refreshAboutData()]); render(); }
     if (dialog.open) return;
     previousFocus = source || document.activeElement;
     dialog.showModal();

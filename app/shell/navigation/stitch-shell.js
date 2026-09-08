@@ -33,6 +33,9 @@
   window.KairosEnsureI18n = ensureI18n;
   window.KairosEnsureThemes = ensureThemes;
   const t = (key, fallback, params) => window.KairosI18n?.t?.(key, params, fallback) || fallback;
+  const applyLocalePreference = preference => {
+    if (preference != null && String(preference).trim()) window.KairosI18n?.setLocale?.(preference);
+  };
   const MOTION_CLASS = 'kairos-reduce-motion';
   const embedded = new URLSearchParams(location.search).get('embed') === '1';
   const applyMotionPreference = reduce => document.documentElement.classList.toggle(MOTION_CLASS, reduce === true);
@@ -54,7 +57,7 @@
   if (!document.getElementById('kairos-motion-preference-style')) document.head.insertAdjacentHTML('beforeend', '<style id="kairos-motion-preference-style">html.kairos-reduce-motion *,html.kairos-reduce-motion *::before,html.kairos-reduce-motion *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}</style>');
   if (!embedded) applyCalendarBackground({});
   ensureThemes();
-  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; window.KairosThemes?.applyTheme?.(settings?.appearance?.theme); window.KairosI18n?.setLocale?.(settings?.general?.language); window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat); applyMotionPreference(settings?.accessibility?.reduceMotion === true); if (!embedded) applyCalendarBackground(settings); });
+  window.addEventListener('kairos:settings-changed', event => { const settings = event.detail || {}; window.KairosThemes?.applyTheme?.(settings?.appearance?.theme); applyLocalePreference(settings?.general?.language); window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat); applyMotionPreference(settings?.accessibility?.reduceMotion === true); if (!embedded) applyCalendarBackground(settings); });
   const page = document.body.dataset.page || 'calendar';
   const ensureCalendarControllers = () => {
     if (!['calendar', 'schedule'].includes(page)) return Promise.resolve();
@@ -100,11 +103,11 @@
       if (message?.type === 'kairos:state-sync' && event.source === window.top) {
         const settings = message.state?.settings || {};
         window.KairosThemes?.applyTheme?.(settings?.appearance?.theme);
-        window.KairosI18n?.setLocale?.(settings?.general?.language);
+        applyLocalePreference(settings?.general?.language);
         window.KairosI18n?.setTimeFormat?.(settings?.general?.timeFormat);
         applyMotionPreference(settings?.accessibility?.reduceMotion === true);
       }
-      if (message?.type === 'kairos:locale-sync' && event.source === window.top) window.KairosI18n?.setLocale?.(message.preference || message.locale);
+      if (message?.type === 'kairos:locale-sync' && event.source === window.top) applyLocalePreference(message.preference || message.locale);
     });
     document.documentElement.classList.add('kairos-embedded-root');
     document.body.classList.add('kairos-embedded');
@@ -356,7 +359,7 @@
     window.addEventListener('kairos:music-content-ready', () => showSpaView(getSpaView()));
     window.addEventListener('kairos:settings-changed', event => {
       window.KairosThemes?.applyTheme?.(event.detail?.appearance?.theme);
-      window.KairosI18n?.setLocale?.(event.detail?.general?.language);
+      applyLocalePreference(event.detail?.general?.language);
       window.KairosI18n?.setTimeFormat?.(event.detail?.general?.timeFormat);
       applyMotionPreference(event.detail?.accessibility?.reduceMotion === true);
       applyCalendarBackground(event.detail);

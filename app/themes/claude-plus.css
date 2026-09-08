@@ -142,7 +142,8 @@
   border-color: var(--border) !important;
   color: var(--foreground) !important;
 }
-:root[data-kairos-theme="claude-plus"] :is(.kairos-select-wrap:hover, .kairos-data-action-button:hover, .kairos-netease-account button:hover, .kairos-netease-tools button:hover, .kairos-data-summary button:hover, .kairos-calendar-background-actions button:hover, .kairos-background-import-card:hover) { background: var(--surface-hover) !important; }
+:root[data-kairos-theme="claude-plus"] :is(.kairos-select-wrap:hover, .kairos-netease-account button:hover, .kairos-netease-tools button:hover, .kairos-data-summary button:hover, .kairos-calendar-background-actions button:hover, .kairos-background-import-card:hover) { background: var(--surface-hover) !important; }
+:root[data-kairos-theme="claude-plus"] .kairos-data-action-button:hover:not(:disabled) { background: var(--surface-raised) !important; border-color: var(--primary) !important; color: var(--primary) !important; }
 :root[data-kairos-theme="claude-plus"] :is(.kairos-switch i, .kairos-elastic-range-track, .kairos-background-card-name:hover) { background: var(--muted) !important; border-color: var(--border) !important; }
 :root[data-kairos-theme="claude-plus"] :is(.kairos-switch input:checked+i, .kairos-elastic-range-track i, .kairos-elastic-range-track::after) { background: var(--primary) !important; border-color: var(--primary) !important; }
 :root[data-kairos-theme="claude-plus"] .kairos-background-card.is-selected .kairos-background-card-image { border-color: var(--primary) !important; }

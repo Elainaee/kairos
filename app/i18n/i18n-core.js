@@ -127,7 +127,8 @@
     formatNumber, translateDom, supportedLocales: () => [...SUPPORTED_LOCALES]
   });
   window.addEventListener('message', event => {
-    if (event.data?.type === 'kairos:locale-sync') setLocale(event.data.preference || event.data.locale);
+    const syncedPreference = event.data?.preference || event.data?.locale;
+    if (event.data?.type === 'kairos:locale-sync' && syncedPreference) setLocale(syncedPreference);
   });
   applyDocumentLocale();
   translateDom();

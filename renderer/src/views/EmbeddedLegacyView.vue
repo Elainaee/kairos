@@ -4,7 +4,7 @@ import { onBeforeRouteUpdate } from "vue-router";
 import { useAppStateStore } from "../stores/app-state";
 import { useToastsStore } from "../stores/toasts";
 import { useMusicRuntimeStore } from "../stores/music-runtime";
-import { t } from "../i18n";
+import { localePreference, t } from "../i18n";
 
 const props = defineProps<{ page: "calendar" | "schedule" | "music" }>();
 const frame = ref<HTMLIFrameElement>();
@@ -61,8 +61,11 @@ async function syncFrame() {
   const target = frame.value?.contentWindow as EmbeddedLegacyWindow | null;
   target?.postMessage({ type: "kairos:state-sync", state: payload }, "*");
   target?.postMessage({ type: "kairos:motion-preference", reduce: document.documentElement.classList.contains("kairos-reduce-motion") }, "*");
-  const localePreference = String(payload.settings && typeof payload.settings === "object" && (payload.settings as any).general?.language || "en");
-  target?.postMessage({ type: "kairos:locale-sync", preference: localePreference }, "*");
+  const frameLocalePreference = String(
+    payload.settings && typeof payload.settings === "object" && (payload.settings as any).general?.language
+      || localePreference(),
+  );
+  target?.postMessage({ type: "kairos:locale-sync", preference: frameLocalePreference }, "*");
   // `file:`-backed embedded pages can miss the first postMessage while their
   // legacy controllers are being attached.  They expose this state bridge so
   // the Vue shell can deliver the same desktop snapshot once initialization is
@@ -70,7 +73,7 @@ async function syncFrame() {
   try {
     if (target) {
       target.KairosPendingState = payload;
-      target.KairosI18n?.setLocale?.(localePreference);
+      target.KairosI18n?.setLocale?.(frameLocalePreference);
       target.KairosScheduleSyncState?.(payload);
       target.dispatchEvent(
         new target.CustomEvent("kairos:state-changed", { detail: payload }),
@@ -168,9 +171,17 @@ async function handleFrameLoad() {
   setupCalendarFrame();
 }
 async function handleMessage(event: MessageEvent) {
-  if (!event.data) return;
+  if (!event.data || event.source !== frame.value?.contentWindow) return;
+  if (event.data.type === "kairos:schedule-dialog-request") {
+    window.dispatchEvent(new CustomEvent("kairos:open-schedule-dialog", {
+      detail: {
+        page: props.page,
+        id: typeof event.data.id === "string" ? event.data.id : null
+      }
+    }));
+    return;
+  }
   if (event.data.type === "kairos:calendar-dialog") {
-    frame.value?.classList.toggle("vue-legacy-dialog-open", event.data.open === true);
     window.dispatchEvent(new CustomEvent("kairos:calendar-dialog", { detail: { open: event.data.open === true } }));
     return;
   }

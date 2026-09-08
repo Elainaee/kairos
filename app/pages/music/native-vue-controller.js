@@ -115,6 +115,7 @@ const neteaseDownloadTasks = new Map();
 let neteaseDownloadTaskList = [];
 let neteaseDownloadTab = 'downloaded';
 let neteaseDownloadUnsubscribe = null;
+let neteaseDownloadRenderTimer = null;
 const getDesktopMusic = () => {
   if (window.kairosDesktop?.music) return window.kairosDesktop.music;
   try {
@@ -295,15 +296,26 @@ const showMusicView = view => {
 const attachTiltedCard = card => {
   const inner = card.querySelector('.playlist-tilted-inner');
   const amplitude = 9;
+  let frame = 0;
+  let pointerX = 0;
+  let pointerY = 0;
   card.addEventListener('pointermove', event => {
-    const rect = card.getBoundingClientRect();
-    const offsetX = event.clientX - rect.left - rect.width / 2;
-    const offsetY = event.clientY - rect.top - rect.height / 2;
-    const rotateX = (offsetY / (rect.height / 2)) * -amplitude;
-    const rotateY = (offsetX / (rect.width / 2)) * amplitude;
-    inner.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.035)`;
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const rect = card.getBoundingClientRect();
+      const offsetX = pointerX - rect.left - rect.width / 2;
+      const offsetY = pointerY - rect.top - rect.height / 2;
+      const rotateX = (offsetY / (rect.height / 2)) * -amplitude;
+      const rotateY = (offsetX / (rect.width / 2)) * amplitude;
+      inner.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.035)`;
+    });
   });
   card.addEventListener('pointerleave', () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
     inner.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1)';
   });
 };
@@ -686,7 +698,19 @@ const handleNeteaseDownloadProgress = (task, { notify = true } = {}) => {
   if (index >= 0) neteaseDownloadTaskList[index] = task;
   else neteaseDownloadTaskList.push(task);
   updateNeteaseDownloadRows();
-  if (neteaseActiveView === 'download') renderNeteaseDownloadPage();
+  const statusChanged = previousStatus !== task.status;
+  if (neteaseActiveView === 'download') {
+    if (statusChanged) {
+      clearTimeout(neteaseDownloadRenderTimer);
+      neteaseDownloadRenderTimer = null;
+      renderNeteaseDownloadPage();
+    } else if (!neteaseDownloadRenderTimer) {
+      neteaseDownloadRenderTimer = setTimeout(() => {
+        neteaseDownloadRenderTimer = null;
+        if (neteaseActiveView === 'download') renderNeteaseDownloadPage();
+      }, 250);
+    }
+  }
   if (notify && previousStatus !== task.status && task.status === 'completed') toast.success(tr('music.downloadCompleted', {}, 'Downloaded'), task.warning ? tr('music.downloadCompletedWithWarnings', {}, 'Downloaded; some song details could not be written.') : task.outputName || '');
   if (notify && previousStatus !== task.status && task.status === 'failed') toast.error(tr('music.downloadFailed', {}, 'Download failed'), neteaseDownloadFailureText(task));
 };

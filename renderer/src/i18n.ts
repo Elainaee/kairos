@@ -6,6 +6,7 @@ declare global {
       t: (key: string, params?: Record<string, string | number>) => string;
       plural: (key: string, count: number, params?: Record<string, string | number>) => string;
       setLocale: (preference?: string) => string;
+      getPreference: () => string;
       setTimeFormat: (preference?: string) => string;
       getLocale: () => string;
       getTimeFormat: () => string;
@@ -38,6 +39,10 @@ export function plural(key: string, count: number, params?: Record<string, strin
 
 export function applyLocale(preference?: string) {
   return window.KairosI18n?.setLocale(preference) || "en";
+}
+
+export function localePreference() {
+  return window.KairosI18n?.getPreference?.() || "system";
 }
 
 export function applyTimeFormat(preference?: string) {

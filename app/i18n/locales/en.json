@@ -160,7 +160,10 @@
     "streak": "Streak",
     "today": "Today",
     "todaySchedule": "Today's Schedule",
-    "workspace": "Calendar workspace"
+    "workspace": "Calendar workspace",
+    "holidays": {
+      "newYearsDay": "New Year's Day", "valentinesDay": "Valentine's Day", "leiFengDay": "Learn from Lei Feng Day", "womensDay": "International Women's Day", "arborDay": "Arbor Day", "consumerRightsDay": "World Consumer Rights Day", "worldSleepDay": "World Sleep Day", "aprilFoolsDay": "April Fools' Day", "earthDay": "Earth Day", "labourDay": "Labour Day", "youthDay": "Youth Day", "nursesDay": "International Nurses Day", "museumDay": "International Museum Day", "childrensDay": "Children's Day", "cpcFoundingDay": "CPC Founding Day", "plaDay": "PLA Day", "victoryDay": "Victory Day", "teachersDay": "Teachers' Day", "september18Memorial": "September 18 Memorial Day", "nationalDay": "National Day", "programmersDay": "Programmers' Day", "singlesDay": "Singles' Day", "nationalMemorialDay": "National Memorial Day", "christmasEve": "Christmas Eve", "christmasDay": "Christmas Day", "springFestival": "Spring Festival", "lanternFestival": "Lantern Festival", "dragonHeadDay": "Dragon Head Raising Day", "dragonBoatFestival": "Dragon Boat Festival", "qixiFestival": "Qixi Festival", "ghostFestival": "Ghost Festival", "midAutumnFestival": "Mid-Autumn Festival", "doubleNinthFestival": "Double Ninth Festival", "winterClothesFestival": "Winter Clothes Festival", "xiayuanFestival": "Xiayuan Festival", "labaFestival": "Laba Festival", "littleNewYear": "Little New Year", "qingmingFestival": "Qingming Festival", "mothersDay": "Mother's Day", "fathersDay": "Father's Day", "thanksgiving": "Thanksgiving"
+    }
     ,"weekdaySun": "Sun"
     ,"weekdayMon": "Mon"
     ,"weekdayTue": "Tue"
@@ -616,6 +619,19 @@
     "appData": "App Data",
     "appearance": "Appearance",
     "about": "About",
+    "versionAndUpdates": "Version & updates",
+    "version": "Version",
+    "currentVersion": "Current version",
+    "checkForUpdates": "Check for updates",
+    "checkingForUpdates": "Checking for updates…",
+    "latestVersionInstalled": "You are using the latest version ({version}).",
+    "updateAvailable": "Version {version} is available.",
+    "updatePromptTitle": "Update Kairos to {version}?",
+    "updatePromptDescription": "Kairos will download the latest installer, close the app, and start the update. Your user data will be kept.",
+    "updateNow": "Update now",
+    "downloadingUpdate": "Downloading update…",
+    "updateInstallerUnavailable": "The latest release does not include a Windows installer.",
+    "updateCheckFailed": "Unable to check for updates.",
     "designReferences": "Design references",
     "openWebsite": "Open {name}",
     "projectRepository": "Project repository",

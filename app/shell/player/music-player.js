@@ -6,7 +6,7 @@
 <div><div class="music-player-track"><button aria-label="Album cover" data-i18n-aria-label="player.albumCover" id="musicCoverButton" type="button" tabindex="-1"><span class="music-icon material-symbols-outlined" id="musicCoverIcon">music_note</span><img alt="Album cover" data-i18n-alt="player.albumCover" class="hidden" id="musicCover"></button><div class="min-w-0"><h3 class="music-player-title" id="musicTitle">Choose a song</h3><p class="music-player-artist" id="musicArtist">Local ambience</p></div></div>
 <div class="music-transport"><div class="music-transport-controls"><button aria-label="Add current song to liked" data-i18n-aria-label="player.addCurrentToLiked" aria-pressed="false" class="music-like-button" id="musicLike" type="button"><span class="music-icon material-symbols-outlined">favorite</span></button><button aria-label="Previous" data-i18n-aria-label="player.previous" id="musicPrevious" type="button"><svg aria-hidden="true" class="transport-skip-icon" viewBox="0 0 24 24"><path d="M5 5.5a1.2 1.2 0 0 1 2.4 0v13a1.2 1.2 0 0 1-2.4 0v-13Z" fill="currentColor"/><path d="M19.1 5.8c.82-.52 1.9.06 1.9 1.04v10.32c0 .98-1.08 1.56-1.9 1.04l-8.1-5.16a1.23 1.23 0 0 1 0-2.08l8.1-5.16Z" fill="currentColor"/></svg></button><button aria-label="Play" data-i18n-aria-label="player.play" id="musicToggle" type="button"><span class="music-icon material-symbols-outlined" id="musicToggleIcon">play_arrow</span></button><button aria-label="Next" data-i18n-aria-label="player.next" id="musicNext" type="button"><svg aria-hidden="true" class="transport-skip-icon" viewBox="0 0 24 24"><path d="M4.9 5.8C4.08 5.28 3 5.86 3 6.84v10.32c0 .98 1.08 1.56 1.9 1.04l8.1-5.16a1.23 1.23 0 0 0 0-2.08L4.9 5.8Z" fill="currentColor"/><path d="M16.6 5.5a1.2 1.2 0 0 1 2.4 0v13a1.2 1.2 0 0 1-2.4 0v-13Z" fill="currentColor"/></svg></button><button aria-label="Playback mode" data-i18n-aria-label="player.playbackMode" aria-pressed="false" class="music-shuffle" id="musicMode" title="Sequence" data-i18n-title="player.sequence" type="button"><span class="music-icon material-symbols-outlined" id="musicModeIcon">format_list_numbered</span></button></div><div class="music-timeline"><time id="musicCurrent">0:00</time><div class="elastic-progress"><div aria-label="Playback position" data-i18n-aria-label="player.position" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="elastic-progress-root" id="elasticProgressRoot" role="slider" tabindex="0"><div class="elastic-progress-track-wrap"><div class="elastic-progress-track"><i id="elasticProgressRange"></i></div></div><input class="music-range" id="musicProgress" max="100" min="0" tabindex="-1" type="range" value="0"></div></div><time id="musicDuration">0:00</time></div></div>
 <div class="music-player-right"><div class="elastic-volume" id="elasticVolume"><span class="music-icon material-symbols-outlined elastic-volume-icon" id="volumeIcon">volume_down</span><div aria-label="Volume" data-i18n-aria-label="player.volume" aria-valuemax="100" aria-valuemin="0" aria-valuenow="70" class="elastic-volume-root" id="elasticVolumeRoot" role="slider" tabindex="0"><div class="elastic-volume-track-wrap"><div class="elastic-volume-track"><i id="elasticVolumeRange"></i></div></div><input id="musicVolume" max="100" min="0" tabindex="-1" type="range" value="70"></div><span class="music-icon material-symbols-outlined elastic-volume-icon">volume_up</span><output id="elasticVolumeValue">70</output></div><button aria-label="Queue" data-i18n-aria-label="player.toggleQueue" class="music-playlist-button" id="musicPlaylistToggle" type="button"><span class="music-icon material-symbols-outlined">queue_music</span></button></div></div>
-<audio id="musicAudio"></audio>
+<audio id="musicAudio" preload="auto"></audio>
 <div class="music-playlist-panel" id="musicPlaylistPanel" hidden><header><div class="music-queue-title"><span class="music-icon material-symbols-outlined">queue_music</span><strong data-i18n="player.queue">Queue</strong></div><div><button class="music-queue-clear" data-i18n="player.clearAll" type="button" id="musicClearButton">Clear All</button><button aria-label="Close queue" data-i18n-aria-label="player.closeQueue" class="music-queue-close" id="musicPlaylistClose" type="button"><span class="music-icon material-symbols-outlined">close</span></button></div></header><div class="music-queue-scroll"><ol id="musicPlaylist"></ol></div><footer><p id="musicStatus" role="status"></p></footer></div>
 </section>`;
 
@@ -39,7 +39,7 @@
     translatePlayer();
 
     let state = { tracks: [], queueTrackIds: [], currentTrackId: null, mode: 'sequence', playing: false, volume: 70, muted: false, positions: {} };
-    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null, externalRefreshVersion = 0, lastAppliedRefreshAt = 0, playbackAttemptDepth = 0;
+    let saveTimer = null, volumeDragging = false, progressDragging = false, pendingSeek = null, suppressPausePersist = false, queueDragging = false, draggedQueueId = null, queueDragCard = null, countedPlayTrackId = null, externalRefreshVersion = 0, lastAppliedRefreshAt = 0, playbackAttemptDepth = 0, lastPersistedPositionKey = '', lastQueueStatusBucket = -1;
     const durationCache = new Map();
     const desktop = () => window.kairosDesktop?.music || null;
     const runtime = () => state.runtime ||= { lastSource:'local', neteasePlayback:null, playCounts:{} };
@@ -230,8 +230,8 @@
     const intendedPlaying = () => state.playing === true && els.audio.paused;
     const syncPlayButton = () => { const active = !els.audio.paused || intendedPlaying(); els.toggleIcon.textContent = active ? 'pause' : 'play_arrow'; els.toggle.setAttribute('aria-label', active ? tr('player.pause',{},'Pause') : tr('player.play',{},'Play')); els.toggle.classList.toggle('is-paused', active); };
     const emitState = () => {
-      const detail={...state,queueTrackIds:state.queueTrackIds||[],currentTrackId:state.currentTrackId||null,playing:state.playing===true,currentTime:els.audio.currentTime||0,at:Date.now()};
       rememberPlaybackSource();
+      const detail={...state,queueTrackIds:state.queueTrackIds||[],currentTrackId:state.currentTrackId||null,playing:state.playing===true,currentTime:els.audio.currentTime||0,at:Date.now()};
       window.dispatchEvent(new CustomEvent('kairos:music-state-changed',{detail}));
       try { if(window.parent&&window.parent!==window) window.parent.postMessage({type:'kairos:music-state-changed',detail},'*'); } catch {}
       try { document.querySelectorAll('iframe').forEach(frame=>frame.contentWindow?.postMessage({type:'kairos:music-state-changed',detail},'*')); } catch {}
@@ -404,6 +404,8 @@
       const t=currentTrack();
       if (!t) { els.audio.removeAttribute('src'); syncTrackCopy(null); els.current.textContent=els.duration.textContent='0:00'; els.progress.value=0; els.progressRange.style.width='0%'; setCover(null); syncLikeButton(); syncPlayButton(); renderQueue(); return; }
       state.currentTrackId=t.id;
+      lastPersistedPositionKey='';
+      lastQueueStatusBucket=-1;
       const sourceUrl = playableUrl(t);
       if (sourceUrl) {
         if (els.audio.src!==sourceUrl) { els.audio.src=sourceUrl; els.audio.load(); }
@@ -651,7 +653,28 @@
     els.audio.onplay=()=>{ state.playing=true; persist({playing:true}); countCurrentPlay(); syncPlayButton(); updateQueuePlaybackState(); emitState(); };
     els.audio.onpause=()=>{ if(!suppressPausePersist){ state.playing=false; persist({playing:false}); } syncPlayButton(); updateQueuePlaybackState(); emitState(); };
     els.audio.onloadedmetadata=()=>{ const t=currentTrack(); els.duration.textContent=fmt(els.audio.duration); if(t&&Number.isFinite(els.audio.duration)){ t.duration=els.audio.duration; durationCache.set(t.id, els.audio.duration); } if(pendingSeek) els.audio.currentTime=Math.min(pendingSeek,Math.max(0,els.audio.duration-2)); pendingSeek=null; };
-    els.audio.ontimeupdate=()=>{ if(progressDragging) return; if(!els.audio.paused&&state.currentTrackId) countCurrentPlay(); const p=els.audio.duration?els.audio.currentTime/els.audio.duration*100:0; els.progress.value=p; els.progressRange.style.width=`${p}%`; els.current.textContent=fmt(els.audio.currentTime); const t=currentTrack(); if(t&&Math.floor(els.audio.currentTime)%5===0){ state.positions={...(state.positions||{}),[t.id]:els.audio.currentTime}; persist({position:{trackId:t.id,seconds:els.audio.currentTime}}); } if(!els.playlistPanel.hidden&&!queueDragging) updateQueueStatus(); };
+    els.audio.ontimeupdate=()=>{
+      if(progressDragging) return;
+      if(!els.audio.paused&&state.currentTrackId) countCurrentPlay();
+      const currentTime=els.audio.currentTime||0;
+      const p=els.audio.duration?currentTime/els.audio.duration*100:0;
+      els.progress.value=p;
+      els.progressRange.style.width=`${p}%`;
+      els.progressRoot.setAttribute('aria-valuenow',String(Math.round(p)));
+      els.current.textContent=fmt(currentTime);
+      const t=currentTrack();
+      const positionKey=t?`${t.id}:${Math.floor(currentTime/5)}`:'';
+      if(t&&positionKey!==lastPersistedPositionKey){
+        lastPersistedPositionKey=positionKey;
+        state.positions={...(state.positions||{}),[t.id]:currentTime};
+        persist({position:{trackId:t.id,seconds:currentTime}});
+      }
+      const queueStatusBucket=Math.floor(currentTime/15);
+      if(!els.playlistPanel.hidden&&!queueDragging&&queueStatusBucket!==lastQueueStatusBucket){
+        lastQueueStatusBucket=queueStatusBucket;
+        updateQueueStatus();
+      }
+    };
     els.audio.onended=()=>{ playAdjacentTrack(1); };
     els.audio.onerror=async()=>{ const t=currentTrack(); reportPlaybackFailure(); if(!isNeteaseId(t?.id) || playbackAttemptDepth>0 || state.playing!==true) return; const fail=message=>{ state.playing=false; els.status.textContent=message; toast('error',message); syncPlayButton(); updateQueuePlaybackState(); emitState(); }; const refreshed=await refreshNeteaseTrackUrl(t); if(!refreshed){ fail(tr('player.refreshUrlFailed',{},'Unable to refresh NetEase URL')); return; } playLoadedAudio(false).catch(error=>fail(playbackErrorText(error))); };
     els.playlist.addEventListener('dragstart',e=>{ const item=e.target.closest('li[data-id]'); if(!item||e.target.closest('button')){ e.preventDefault(); return; } draggedQueueId=item.dataset.id; queueDragging=true; item.classList.add('is-dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',draggedQueueId); queueDragCard?.remove(); queueDragCard=makeQueueDragCard(queueTracks().find(track=>track.id===draggedQueueId)); e.dataTransfer.setDragImage(queueDragCard,24,23); });
@@ -681,10 +704,8 @@
         state.tracks = (state.tracks || []).map(track => track.id === detail.likedTrackId ? { ...track, liked: detail.liked === true } : track);
         syncLikeButton();
       }
-      if (!hasIncomingTracks) {
-        if (!hasPlaybackPatch) await refresh(false, false);
-        else if (!(state.tracks || []).length) await refresh(false, false);
-      }
+      if (!hasIncomingTracks && !hasPlaybackPatch) await refresh(false, false);
+      else if (hasPlaybackPatch && !(state.tracks || []).length) await refresh(false, false);
       if (Array.isArray(detail?.queueTrackIds)) {
         const validIds = new Set((state.tracks || []).map(track => track.id));
         state.queueTrackIds = detail.queueTrackIds.filter(id => validIds.has(id));

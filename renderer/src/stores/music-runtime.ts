@@ -32,6 +32,10 @@ export const useMusicRuntimeStore = defineStore("music-runtime", () => {
     // entry or after returning to Music.
     if (version !== loadVersion) return state.value;
     const at = snapshotAt(next);
+    // Desktop storage contains only the local library playback fields. Once
+    // the shared player has published a live snapshot, an undated storage
+    // read must not replace a NetEase queue with the previous local track.
+    if (!at && newestSnapshotAt > 0) return state.value;
     if (at && at < newestSnapshotAt) return state.value;
     if (at) newestSnapshotAt = at;
     return commit(next);

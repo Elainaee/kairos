@@ -4,6 +4,9 @@ import path from "node:path";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import dotenv from "dotenv";
 import { ProviderError, listProviderModels, resolveSelectableModels, streamProviderRequest, testProvider } from "../services/ai/providers.js";
 import { allProviderDefinitions, assertUniqueProviderName, createCustomDefinition, definitionFromSettings, normalizeCustomBaseURL, normalizeProviderEntry, normalizeProviderState } from "../services/ai/provider-settings.js";
@@ -45,6 +48,42 @@ protocol.registerSchemesAsPrivileged([{
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const appIconPath = path.join(root, "app", "assets", "icons", "kairos.ico");
+const RELEASE_METADATA_URL = "https://github.com/Elainaee/kairos/releases/latest/download/latest.yml";
+const RELEASE_DOWNLOAD_PREFIX = "https://github.com/Elainaee/kairos/releases/download/";
+const versionParts = value => String(value || "").replace(/^v/i, "").split(".").map(part => Number.parseInt(part, 10) || 0);
+const compareVersions = (left, right) => {
+  const a = versionParts(left), b = versionParts(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] || 0) - (b[index] || 0);
+    if (difference) return difference;
+  }
+  return 0;
+};
+async function checkLatestRelease() {
+  const response = await fetch(RELEASE_METADATA_URL, { headers: { "User-Agent": `Kairos/${app.getVersion()}` }, signal: AbortSignal.timeout(15_000) });
+  if (response.status === 404) return { currentVersion: app.getVersion(), latestVersion: app.getVersion(), updateAvailable: false, releaseMissing: true, releaseUrl: "https://github.com/Elainaee/kairos/releases", downloadUrl: "" };
+  if (!response.ok) throw new Error(`update_check_failed:${response.status}`);
+  const metadata = await response.text();
+  const latestVersion = metadata.match(/^version:\s*([^\s]+)\s*$/m)?.[1]?.replace(/^v/i, "") || "";
+  const installerName = metadata.match(/^path:\s*([^\r\n]+)\s*$/m)?.[1]?.trim() || "";
+  if (!latestVersion) throw new Error("update_version_missing");
+  const downloadUrl = /win-x64-setup\.exe$/i.test(installerName) ? `${RELEASE_DOWNLOAD_PREFIX}latest/download/${encodeURIComponent(installerName)}` : "";
+  return { currentVersion: app.getVersion(), latestVersion, updateAvailable: compareVersions(latestVersion, app.getVersion()) > 0, releaseUrl: "https://github.com/Elainaee/kairos/releases/latest", downloadUrl };
+}
+async function installLatestRelease(downloadUrl) {
+  const url = String(downloadUrl || "");
+  if (!url.startsWith(RELEASE_DOWNLOAD_PREFIX) || !/\.exe(?:\?|$)/i.test(url)) throw new Error("update_download_invalid");
+  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(10 * 60_000) });
+  if (!response.ok || !response.body) throw new Error(`update_download_failed:${response.status}`);
+  const directory = await fs.mkdtemp(path.join(app.getPath("temp"), "kairos-update-"));
+  const installerPath = path.join(directory, "Kairos-latest-setup.exe");
+  await pipeline(Readable.fromWeb(response.body), fsSync.createWriteStream(installerPath));
+  const stat = await fs.stat(installerPath);
+  if (stat.size < 10 * 1024 * 1024) throw new Error("update_download_incomplete");
+  spawn(installerPath, [], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+  setTimeout(() => app.quit(), 500);
+  return { ok: true };
+}
 const nativeI18nMessages = JSON.parse(fsSync.readFileSync(path.join(root, "app", "i18n", "locales", "en.json"), "utf8"));
 const nativeI18nChineseMessages = JSON.parse(fsSync.readFileSync(path.join(root, "app", "i18n", "locales", "zh-CN.json"), "utf8"));
 let nativeLocalePreference = "en";
@@ -1943,12 +1982,15 @@ ipcMain.handle("ai:permissions:set",(_event,input)=>toolRuntime.setPermissions(i
 ipcMain.handle("app:initialize",(_event,legacy)=>appStateStore.initialize(legacy));
 ipcMain.handle("app:save", async (_event, state) => { const saved = await appStateStore.write(state); broadcastAppState(saved); return saved; });
 ipcMain.handle("app:get",()=>appStateStore.read());
+ipcMain.handle("app:version",()=>app.getVersion());
+ipcMain.handle("app:check-updates",()=>checkLatestRelease());
+ipcMain.handle("app:install-update",(_event,downloadUrl)=>installLatestRelease(downloadUrl));
 ipcMain.handle("app:audit",async()=>auditAppState(await appStateStore.read()));
 ipcMain.handle("app:list-backups",()=>appStateStore.listBackups());
 ipcMain.handle("app:read-backup",(_event,name)=>appStateStore.readBackup(name));
 ipcMain.handle("app:restore-backup",async(_event,name)=>{const state=await appStateStore.restoreBackup(name);broadcastAppState(state);return state;});
 ipcMain.handle("app:export-current",async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:nativeT("electron.exportAppData",{},"Export Kairos app data"),defaultPath:`kairos-app-state-${new Date().toISOString().slice(0,10)}.json`,filters:[{name:nativeT("electron.jsonFiles",{},"JSON files"),extensions:["json"]}]});if(result.canceled||!result.filePath)return{canceled:true};const state=await appStateStore.read();await fs.writeFile(result.filePath,JSON.stringify(state,null,2),"utf8");return{canceled:false,filePath:result.filePath};});
-ipcMain.handle("app:import-json",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:nativeT("electron.importAppData",{},"Import Kairos app data"),properties:["openFile"],filters:[{name:nativeT("electron.jsonFiles",{},"JSON files"),extensions:["json"]}]});if(result.canceled||!result.filePaths[0])return{canceled:true};const raw=JSON.parse(await fs.readFile(result.filePaths[0],"utf8"));const backupPath=await appStateStore.backupCurrent("before-import");const state=await appStateStore.write({...raw,imported_from:result.filePaths[0],imported_at:new Date().toISOString(),last_import_backup:backupPath});broadcastAppState(state);return{canceled:false,state,filePath:result.filePaths[0],backupPath};});
+ipcMain.handle("app:import-json",async()=>{const result=await dialog.showOpenDialog(mainWindow,{title:nativeT("electron.importAppData",{},"Import Kairos app data"),properties:["openFile"],filters:[{name:nativeT("electron.jsonFiles",{},"JSON files"),extensions:["json"]}]});if(result.canceled||!result.filePaths[0])return{canceled:true};const raw=JSON.parse(await fs.readFile(result.filePaths[0],"utf8"));const backupPath=await appStateStore.backupCurrent("before-import");const state=await appStateStore.write({...raw,imported_from:result.filePaths[0],imported_at:new Date().toISOString(),last_import_backup:backupPath},{force:true});broadcastAppState(state);return{canceled:false,state,filePath:result.filePaths[0],backupPath};});
 ipcMain.handle("calendar-background:list-builtins", () => calendarBackgroundService().listBuiltins());
 ipcMain.handle("calendar-background:choose-import", async () => {
   const result = await dialog.showOpenDialog(mainWindow, { title: nativeT("electron.importCalendarBackground", {}, "Import calendar background"), properties: ["openFile"], filters: [{ name: nativeT("electron.images", {}, "Images"), extensions: ["jpg", "jpeg", "png", "webp"] }] });
@@ -2038,7 +2080,7 @@ if (hasSingleInstanceLock) {
       console.error("Failed to finalize focus session during quit:", error);
     }).finally(() => app.quit());
   });
-app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();await registerFocusSceneProtocol();const initialAppState=await appStateStore.read();setNativeLocale(initialAppState);focusSessionService=new FocusSessionService({store:appStateStore,onChange:(state,snapshot)=>{if(state)broadcastAppState(state);broadcastFocusState(snapshot);},onAwayReminder:()=>sendPetAction("focus-away",{title:nativeT("focus.awayReminder",{},"你还会回来吗…")})});await focusSessionService.initialize();const initializedProfile=initializePersonalProfile(await readPersonalProfile(),initialAppState?.settings?.ai||{});if(initializedProfile.changed)await writePersonalProfile(initializedProfile.profile);musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();aiMusicController=new AiMusicController({netease:neteaseService,dispatch:dispatchMusicCommand,quality:async()=>(await appStateStore.read())?.settings?.music?.neteaseQuality||"standard"});neteaseDownloadService=new NeteaseDownloadService({neteaseService,musicLibrary,downloadDir:path.join(app.getPath("music"),"Kairos Downloads"),statePath:path.join(userData,"netease-download-state.json"),database:appDatabase,ffmpegPath:bundledFfmpegPath(),onProgress:payload=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send("netease:download-progress",payload);}});await neteaseDownloadService.initialize();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);await createWindow();if(!smokeTest)await createPetWindow();});
+app.whenReady().then(async()=>{const userData=app.getPath("userData");appDatabase=new KairosAppDatabase(path.join(userData,"kairos.sqlite"));const databaseStatus=await appDatabase.initialize();if(!databaseStatus.available)throw new Error(`sqlite_unavailable:${databaseStatus.reason||"unknown"}`);await registerCalendarBackgroundProtocol();calendarBackgrounds=new CalendarBackgroundService({builtinDir:path.join(root,"app","assets","calendar-backgrounds"),legacyDir:calendarBackgroundDir(),database:appDatabase});await calendarBackgrounds.initialize();aiStore=new AiDataStore(path.join(userData,"ai-data.json"),{database:appDatabase});await aiStore.ensureStateFile();const memoryLedger=new MemoryLedger(appDatabase);const memoryViews=new MemoryViews(appDatabase,memoryLedger);agentMemoryService=new AgentMemoryService({database:appDatabase,ledger:memoryLedger,views:memoryViews,legacyStore:aiStore});aiStore.memoryService=agentMemoryService;appStateStore=new AppStateStore(path.join(userData,"app-state.json"),{database:appDatabase});await appStateStore.repairSchedules();await registerFocusSceneProtocol();const initialAppState=await appStateStore.read();setNativeLocale(initialAppState);focusSessionService=new FocusSessionService({store:appStateStore,onChange:(state,snapshot)=>{if(state)broadcastAppState(state);broadcastFocusState(snapshot);},onAwayReminder:()=>sendPetAction("focus-away",{title:nativeT("focus.awayReminder",{},"你还会回来吗…")})});await focusSessionService.initialize();const initializedProfile=initializePersonalProfile(await readPersonalProfile(),initialAppState?.settings?.ai||{});if(initializedProfile.changed)await writePersonalProfile(initializedProfile.profile);musicLibrary=new MusicLibrary({legacyPath:path.join(userData,"music-state.json"),database:appDatabase});await musicLibrary.ensureStateFile();await registerMusicMediaProtocol();neteaseService=new NeteaseApiService({statePath:path.join(userData,"netease-api-state.json"),database:appDatabase,t:nativeT});await neteaseService.initialize();await neteaseService.save();aiMusicController=new AiMusicController({netease:neteaseService,dispatch:dispatchMusicCommand,quality:async()=>(await appStateStore.read())?.settings?.music?.neteaseQuality||"standard"});neteaseDownloadService=new NeteaseDownloadService({neteaseService,musicLibrary,downloadDir:path.join(app.getPath("music"),"Kairos Downloads"),statePath:path.join(userData,"netease-download-state.json"),database:appDatabase,ffmpegPath:bundledFfmpegPath(),onProgress:payload=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send("netease:download-progress",payload);}});await neteaseDownloadService.initialize();await readSettings();attachments=new AttachmentService({tempDir:path.join(app.getPath("temp"),"kairos-ai"),store:aiStore,database:appDatabase});await attachments.migrateLegacyAttachments();toolRuntime=new ToolRuntime(aiStore);contextManager=new ContextManager(aiStore);appAdapters=createAppAdapters(appStateStore,broadcastAppState);petVisible=(await readPetState()).visible;await readWindowState();await attachments.cleanupTemporary();await cleanupMigratedLegacyData(userData);await createWindow();if(!smokeTest){ensureTray();await createPetWindow();}});
   app.on("activate", () => { if (!focusMainWindow()) createWindow().catch(error => console.error("Failed to recreate main window:", error)); });
   app.on("window-all-closed", () => { closeWindowSafely(petWindow); if (process.platform !== "darwin") app.quit(); });
 }

@@ -113,12 +113,13 @@ body > .vue-close-choice-backdrop { position: fixed!important; z-index: 6000!imp
 .music-playlist-panel .music-track-remove:focus-visible .music-icon {
   color: var(--primary) !important;
 }
-/* Modal dialogs are painted over the persistent calendar player. */
+/* Schedule dialogs own the complete viewport while open. Their modal backdrop
+   must cover the shared player as well as the page, otherwise the fixed player
+   can be composited above the bottom actions of the iframe-hosted dialog. */
 body.vue-schedule-dialog-open .vue-shell { position:relative; z-index:1200; }
 body.vue-schedule-dialog-open .vue-shell-content { position:relative; z-index:1201; overflow:visible!important; }
 body.vue-schedule-dialog-open #musicPlayer { z-index:1!important; pointer-events:none!important; }
-.vue-legacy-frame.vue-legacy-dialog-open { position:fixed!important; z-index:1202!important; inset:64px 0 0!important; width:100vw!important; height:calc(100dvh - 64px)!important; }
-.vue-legacy-schedule-dialog-host { position:fixed!important; z-index:4200!important; inset:64px 0 0!important; width:100vw!important; height:calc(100dvh - 64px)!important; border:0; visibility:hidden!important; background:transparent!important; opacity:0!important; pointer-events:none!important; }
+.vue-legacy-schedule-dialog-host { position:fixed!important; z-index:6000!important; inset:0!important; width:100vw!important; height:100dvh!important; border:0; visibility:hidden!important; background:transparent!important; opacity:0!important; pointer-events:none!important; }
 .vue-legacy-schedule-dialog-host.is-ready { visibility:visible!important; opacity:1!important; pointer-events:auto!important; }
 .vue-calendar-frame-fullscreen { position:fixed!important; z-index:3000!important; inset:0!important; width:100vw!important; height:100dvh!important; background:transparent!important; }
 body.vue-calendar-fullscreen { overflow:hidden!important; }

@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld("kairosDesktop", Object.freeze({
   permissions: Object.freeze({ get:()=>ipcRenderer.invoke("ai:permissions:get"),set:(input)=>ipcRenderer.invoke("ai:permissions:set",input) }),
   tools: Object.freeze({ query:(domain,query={})=>ipcRenderer.invoke("ai:tools:query",{domain,query}),propose:(input)=>ipcRenderer.invoke("ai:tools:propose",input),decide:(input)=>ipcRenderer.invoke("ai:tools:decide",input) }),
   appState: Object.freeze({ initialize:(legacy)=>ipcRenderer.invoke("app:initialize",legacy),save:(state)=>ipcRenderer.invoke("app:save",state),get:()=>ipcRenderer.invoke("app:get"),audit:()=>ipcRenderer.invoke("app:audit"),listBackups:()=>ipcRenderer.invoke("app:list-backups"),readBackup:(name)=>ipcRenderer.invoke("app:read-backup",name),restoreBackup:(name)=>ipcRenderer.invoke("app:restore-backup",name),exportCurrent:()=>ipcRenderer.invoke("app:export-current"),importJson:()=>ipcRenderer.invoke("app:import-json"),onChanged:(handler)=>{const listener=(_event,state)=>handler(state);ipcRenderer.on("app:state-changed",listener);return()=>ipcRenderer.removeListener("app:state-changed",listener);} }),
+  updates: Object.freeze({ version:()=>ipcRenderer.invoke("app:version"),check:()=>ipcRenderer.invoke("app:check-updates"),install:(downloadUrl)=>ipcRenderer.invoke("app:install-update",downloadUrl) }),
   focus: Object.freeze({
     get: () => ipcRenderer.invoke("focus:get"),
     start: (input = {}) => ipcRenderer.invoke("focus:start", input),

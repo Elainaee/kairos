@@ -45,7 +45,6 @@ let stopStateChanges: (() => void) | undefined;
 let stopPetVisibilityChanges: (() => void) | undefined;
 let stopWindowMaximizedChanges: (() => void) | undefined;
 let stopCloseRequested: (() => void) | undefined;
-let petVisibilityPoll: number | undefined;
 let appearanceSignature = "";
 const links = computed(() => [
   ["calendar", "calendar_today", t("nav.calendar")], ["habits", "repeat", t("nav.habits")],
@@ -60,6 +59,8 @@ function numberInRange(value: unknown, fallback: number, minimum: number, maximu
 }
 
 function applyAppearance(settings: any = {}) {
+  const requestedLanguage = settings?.general?.language;
+  const language = ["en", "zh-CN", "system"].includes(requestedLanguage) ? requestedLanguage : "en";
   const raw = settings?.appearance?.calendarBackground || {};
   const source = raw.source === "custom" ? "custom" : "builtin";
   const candidate = String(raw.id || "default.jpg").normalize("NFC");
@@ -70,7 +71,7 @@ function applyAppearance(settings: any = {}) {
   const brightness = numberInRange(raw.brightness, 95, 55, 140);
   const signature = JSON.stringify({
     theme: settings?.appearance?.theme || "",
-    language: settings?.general?.language || "",
+    language,
     timeFormat: settings?.general?.timeFormat || "",
     reduceMotion: settings?.accessibility?.reduceMotion === true,
     source, id, blur, brightness
@@ -78,7 +79,7 @@ function applyAppearance(settings: any = {}) {
   if (signature === appearanceSignature) return;
   appearanceSignature = signature;
   applyTheme(settings?.appearance?.theme);
-  applyLocale(settings?.general?.language);
+  applyLocale(language);
   applyTimeFormat(settings?.general?.timeFormat);
   const root = document.documentElement;
   const overlayRgb = brightness < 100 ? "0 0 0" : "255 255 255";
@@ -222,7 +223,6 @@ function handleCalendarFrameReady(event: Event) {
 function handleCalendarDialog(event: Event) {
   const detail = (event as CustomEvent<{ open?: boolean; host?: boolean }>).detail;
   const isOpen = Boolean(detail?.open);
-  if (!detail?.host) calendarFrame?.classList.toggle("vue-legacy-dialog-open", isOpen);
   document.body.classList.toggle("vue-schedule-dialog-open", isOpen);
   const player = document.getElementById("musicPlayer");
   if (isOpen) player?.style.setProperty("z-index", "1", "important");
@@ -318,12 +318,18 @@ function handleMusicCommand(event: Event) {
   if (detail) void musicRuntime.apply(detail);
 }
 
+function syncMusicRuntimeFromPlayer() {
+  const snapshot = (window as any).KairosMusicPlayer?.getState?.();
+  if (snapshot && typeof snapshot === "object") musicRuntime.sync({ ...snapshot, at: Date.now() });
+}
+
 function syncLegacyPlayerRoute() {
   const view = activePage.value;
   document.body.dataset.kairosVuePage = view;
   document.body.classList.toggle("kairos-secondary-view", view !== "calendar");
   document.body.classList.toggle("kairos-music-view", view === "music");
   window.dispatchEvent(new CustomEvent("kairos:player-route-layout", { detail: { view } }));
+  syncMusicRuntimeFromPlayer();
 }
 
 function syncDocumentTitle() {
@@ -369,10 +375,8 @@ onMounted(() => {
   stopCloseRequested = window.kairosDesktop?.windowControls?.onCloseRequested?.(() => { closeChoiceOpen.value = true; });
   void window.kairosDesktop?.windowControls?.isMaximized?.().then(maximized => { windowMaximized.value = maximized; });
   void refreshPetVisibility();
-  // IPC events normally update this immediately.  The small reconciliation
-  // loop covers the one edge case where a pet is hidden while Vite recreates
-  // the shell and the one-shot event is missed.
-  petVisibilityPoll = window.setInterval(refreshPetVisibility, 2000);
+  // The preload bridge replays its cached value on subscription. Focus and
+  // pageshow provide inexpensive reconciliation without a permanent IPC poll.
   stopStateChanges = (window.kairosDesktop?.appState as any)?.onChanged?.((state: any) => { appState.sync(state); applyAppearance(state?.settings || {}); });
 });
 onBeforeUnmount(() => {
@@ -387,7 +391,6 @@ onBeforeUnmount(() => {
   stopPetVisibilityChanges?.();
   stopWindowMaximizedChanges?.();
   stopCloseRequested?.();
-  if (petVisibilityPoll) window.clearInterval(petVisibilityPoll);
   window.removeEventListener("resize", placeIndicator);
   window.removeEventListener("resize", settlePlayerAlignment);
   window.removeEventListener("kairos:settings-changed", handleSettingsChanged);
@@ -458,6 +461,7 @@ function syncPlayerVisibility() {
 function ensureMusicPlayer() {
   const mountAndSync = () => {
     try { (window as any).KairosMusicPlayer?.mount?.(); } catch {}
+    syncMusicRuntimeFromPlayer();
     syncPlayerVisibility();
     settlePlayerAlignment();
   };

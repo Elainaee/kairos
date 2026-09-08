@@ -3,7 +3,8 @@ import path from "node:path";
 import { KairosAppDatabase } from "../sqlite/index.js";
 
 export const APP_STATE_SCHEMA_VERSION = 5;
-const EMPTY = { version: APP_STATE_SCHEMA_VERSION, migrations: [], schedules: [], checkins: [], habits: [], focusSessions: [], activeFocusSession: null, theme: "light" };
+const DEFAULT_SETTINGS = { general: { language: "en", timeFormat: "system" } };
+const EMPTY = { version: APP_STATE_SCHEMA_VERSION, revision: 0, migrations: [], schedules: [], checkins: [], habits: [], focusSessions: [], activeFocusSession: null, theme: "light", settings: DEFAULT_SETTINGS };
 const arrays = ["schedules", "checkins", "habits", "focusSessions"];
 const SCHEDULE_TYPES = new Set(["task", "deadline", "event", "match", "holiday", "other"]);
 const FOCUS_PHASES = new Set(["focus", "rest"]);
@@ -30,6 +31,17 @@ export function normalize(input = {}) {
   const previousVersion = Number(input?.version || 0);
   const legacyStudyPlans = Array.isArray(input?.studyPlans) ? input.studyPlans : [];
   const out = { ...structuredClone(EMPTY), ...input, version: APP_STATE_SCHEMA_VERSION };
+  out.revision = Math.max(0, Math.floor(Number(input?.revision) || 0));
+  const requestedLanguage = input?.settings?.general?.language;
+  const language = ["en", "zh-CN", "system"].includes(requestedLanguage) ? requestedLanguage : "en";
+  out.settings = {
+    ...(input?.settings || {}),
+    general: {
+      ...DEFAULT_SETTINGS.general,
+      ...(input?.settings?.general || {}),
+      language
+    }
+  };
   for (const key of arrays) if (!Array.isArray(out[key])) out[key] = [];
   out.migrations = Array.isArray(out.migrations) ? out.migrations.filter(item => item && typeof item === "object") : [];
   if (previousVersion < 2 && !out.migrations.some(item => item.id === "app-state-v2")) {
@@ -240,10 +252,9 @@ export class AppStateStore {
     const raw = await this.readBackup(name);
     const currentBackup = await this.backupCurrent("before-restore");
     const restored = normalize({ ...raw, restored_from_backup: path.basename(String(name || "")), restored_at: new Date().toISOString(), last_restore_backup: currentBackup });
-    await this.write(restored);
-    return restored;
+    return this.write(restored, { force: true });
   }
-  async write(input) { const state = normalize(input); await this.ensureDatabase(); this.queue = this.queue.catch(() => {}).then(async () => { if (!this.database?.saveAppStateSnapshot) throw new Error("sqlite_unavailable"); await this.database.saveAppStateSnapshot(state); return state; }); return this.queue; }
+  async write(input, options = {}) { const state = normalize(input); await this.ensureDatabase(); this.queue = this.queue.catch(() => {}).then(async () => { if (!this.database?.saveAppStateSnapshot) throw new Error("sqlite_unavailable"); const current = this.readDatabaseSnapshot(); if (!options.force && current && state.revision < current.revision) throw new Error("stale_app_state"); state.revision = Math.max(current?.revision || 0, state.revision) + 1; await this.database.saveAppStateSnapshot(state); return state; }); return this.queue; }
   async initialize(legacy) {
     const snapshot = this.readDatabaseSnapshot();
     if (snapshot) return snapshot;

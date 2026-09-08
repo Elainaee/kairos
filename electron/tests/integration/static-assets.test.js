@@ -67,7 +67,7 @@ test("embedded music pages rely on the shell player instance", async () => {
     "sidebar footer should use flex layout instead of a second hard-coded player offset"
   );
   assert.equal(
-    [...playerScript.matchAll(/<audio id="musicAudio"><\/audio>/g)].length,
+    [...playerScript.matchAll(/<audio id="musicAudio" preload="auto"><\/audio>/g)].length,
     1,
     "the original shell should define exactly one persistent playback audio element"
   );
@@ -323,6 +323,11 @@ test("main window restores and persists desktop bounds", async () => {
   );
   assert.match(
     main,
+    /await createWindow\(\);if\(!smokeTest\)\{ensureTray\(\);await createPetWindow\(\);\}/,
+    "the tray icon should be created when the desktop app starts"
+  );
+  assert.match(
+    main,
     /mainWindow\.on\("close", event => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?requestMainWindowClose\(\)/,
     "both native and custom window close actions should use the close-choice flow"
   );
@@ -374,8 +379,8 @@ test("main window restores and persists desktop bounds", async () => {
   );
   assert.match(
     main,
-    /await createWindow\(\);if\(!smokeTest\)await createPetWindow\(\);/,
-    "app startup should await both restored main window creation and companion renderer loading in normal desktop mode"
+    /await createWindow\(\);if\(!smokeTest\)\{ensureTray\(\);await createPetWindow\(\);\}/,
+    "app startup should create the tray and await the companion renderer in normal desktop mode"
   );
 });
 
@@ -596,7 +601,10 @@ test("Vue shell keeps a persistent restore control when the desktop pet is hidde
   assert.match(shell, /void refreshPetVisibility\(\)/, "the Vue shell should request the persisted visibility state after it mounts");
   assert.match(shell, /onVisibilityChanged\?\.\(syncPetVisibility\)/, "the Vue shell should react to hide and show events from Electron");
   assert.match(shell, /PET_VISIBILITY_CACHE_KEY/, "the Vue shell should retain the hidden state while its one-shot Electron event is unavailable");
-  assert.match(shell, /setInterval\(refreshPetVisibility, 2000\)/, "the Vue shell should reconcile pet visibility after a missed renderer event");
+  assert.match(shell, /window\.addEventListener\("focus", refreshPetVisibility\)[\s\S]*?window\.addEventListener\("pageshow", refreshPetVisibility\)[\s\S]*?onVisibilityChanged\?\.\(syncPetVisibility\)/,
+    "the Vue shell should reconcile pet visibility through replayed events and lifecycle checks");
+  assert.doesNotMatch(shell, /setInterval\(refreshPetVisibility, 2000\)/,
+    "pet visibility reconciliation should not keep a permanent IPC polling loop alive");
   assert.match(shell, /<Teleport to="body">[\s\S]*?v-show="petHidden && activePage !== 'focus'" class="vue-pet-restore"/, "the restore control should remain mounted above the shell and calendar iframe outside the Focus page");
   assert.match(shell, /await window\.kairosDesktop\?\.pet\?\.show\?\.\(\)/, "the restore control should call the desktop pet show bridge");
   assert.match(styles, /body\.kairos-calendar-background-active\s*>\s*\.vue-pet-restore,[\s\S]*?\.vue-pet-restore\s*\{[^}]*position:fixed!important;[^}]*z-index:5000!important;[^}]*inset:auto 20px 112px auto!important;/, "the Calendar wallpaper must not turn the body-teleported restore control into a normal-flow element");
@@ -977,7 +985,7 @@ test("settings data panel supports app-state import and export", async () => {
   assert.doesNotMatch(settingsScript, /App State Backups|appBackups|backupPreview|backupSummary|formatBytes|data-refresh-backups|data-preview-backup|data-restore-backup/, "Data settings should not expose backup management");
   assert.doesNotMatch(settingsScript, /Migration Audit|appAudit|data-run-app-audit|auditSummary|auditIssueList/, "Data settings should not expose migration-health audit controls");
   assert.doesNotMatch(settingsScript, /kairos-data-transfer-list|kairos-data-transfer-row/, "Data settings should not retain a separate row layout from Reminders");
-  assert.match(settingsCss, /\.kairos-select-wrap \.kairos-data-action-button\{display:inline-flex;width:100%;height:42px[\s\S]*?border-radius:999px[\s\S]*?background:#fbf9f2/, "Data action buttons should match the Reminders control styling");
+  assert.match(settingsCss, /\.kairos-data-action-button\{display:inline-flex;min-width:190px;height:42px[\s\S]*?border-radius:999px[\s\S]*?background:#fbf9f2/, "Data action buttons should match the Reminders control styling");
   assert.match(
     settingsScript,
     /data-export-app-state[\s\S]*?window\.kairosDesktop\?\.appState\?\.exportCurrent\?\.\(\)[\s\S]*?flashSaved\(t\('settings\.appDataExported', 'App data exported'\)\)/,
@@ -1012,7 +1020,7 @@ test("desktop app state exposes constrained backup management", async () => {
   );
   assert.match(
     appState,
-    /async restoreBackup\(name\) \{[\s\S]*?const raw = await this\.readBackup\(name\);[\s\S]*?const currentBackup = await this\.backupCurrent\("before-restore"\);[\s\S]*?last_restore_backup: currentBackup[\s\S]*?await this\.write\(restored\);/,
+    /async restoreBackup\(name\) \{[\s\S]*?const raw = await this\.readBackup\(name\);[\s\S]*?const currentBackup = await this\.backupCurrent\("before-restore"\);[\s\S]*?last_restore_backup: currentBackup[\s\S]*?return this\.write\(restored, \{ force: true \}\);/,
     "backup restore should preserve the current app-state before overwriting it"
   );
   assert.match(
@@ -1037,7 +1045,7 @@ test("desktop app state exposes constrained backup management", async () => {
   );
   assert.match(
     main,
-    /ipcMain\.handle\("app:import-json",async\(\)=>\{const result=await dialog\.showOpenDialog\(mainWindow,[\s\S]*?const raw=JSON\.parse\(await fs\.readFile\(result\.filePaths\[0\],"utf8"\)\);const backupPath=await appStateStore\.backupCurrent\("before-import"\);const state=await appStateStore\.write\(\{\.\.\.raw,imported_from:result\.filePaths\[0\],imported_at:new Date\(\)\.toISOString\(\),last_import_backup:backupPath\}\);[\s\S]*?return\{canceled:false,state,filePath:result\.filePaths\[0\],backupPath\};/,
+    /ipcMain\.handle\("app:import-json",async\(\)=>\{const result=await dialog\.showOpenDialog\(mainWindow,[\s\S]*?const raw=JSON\.parse\(await fs\.readFile\(result\.filePaths\[0\],"utf8"\)\);const backupPath=await appStateStore\.backupCurrent\("before-import"\);const state=await appStateStore\.write\(\{\.\.\.raw,imported_from:result\.filePaths\[0\],imported_at:new Date\(\)\.toISOString\(\),last_import_backup:backupPath\},\{force:true\}\);[\s\S]*?return\{canceled:false,state,filePath:result\.filePaths\[0\],backupPath\};/,
     "main process should back up current app-state before importing JSON and broadcast changes"
   );
 });
@@ -1045,6 +1053,8 @@ test("desktop app state exposes constrained backup management", async () => {
 test("NetEase playback stays isolated from local queue persistence", async () => {
   const playerScript = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
   const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
+  const musicRuntime = await fs.readFile(path.join(root, "renderer/src/stores/music-runtime.ts"), "utf8");
+  const appShell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
 
   assert.match(
     musicHtml,
@@ -1140,6 +1150,26 @@ test("NetEase playback stays isolated from local queue persistence", async () =>
     playerScript,
     /if\(options\.restoreLastSource\) nextState=restoreLastPlaybackSource\(nextState\);[\s\S]*?refresh\(true, true, \{ guardExternalVersion: initialRefreshVersion, restoreLastSource: true \}\)/,
     "the initial player refresh should choose the last active local, empty, or NetEase source"
+  );
+  assert.match(
+    playerScript,
+    /if \(!hasIncomingTracks && !hasPlaybackPatch\) await refresh\(false, false\);[\s\S]*?else if \(hasPlaybackPatch && !\(state\.tracks \|\| \[\]\)\.length\) await refresh\(false, false\);/,
+    "library-only refreshes should merge tracks without replacing a live NetEase queue with local playback"
+  );
+  assert.match(
+    playerScript,
+    /const emitState = \(\) => \{\s*rememberPlaybackSource\(\);\s*const detail=/,
+    "published player snapshots should include the newly selected playback source"
+  );
+  assert.match(
+    musicRuntime,
+    /if \(!at && newestSnapshotAt > 0\) return state\.value;/,
+    "an undated local storage read should not replace a newer live player snapshot"
+  );
+  assert.match(
+    appShell,
+    /function syncMusicRuntimeFromPlayer\(\)[\s\S]*?KairosMusicPlayer\?\.getState\?\.\(\)[\s\S]*?musicRuntime\.sync\(\{ \.\.\.snapshot, at: Date\.now\(\) \}\)/,
+    "route changes should re-publish the shared player's current source to Calendar, Music, and Focus"
   );
   assert.match(
     playerScript,
@@ -2526,4 +2556,86 @@ test("legacy shell localizes titles and fullscreen accessibility text without re
     /fullscreenButton\.dataset\.i18nAriaLabel = 'calendar\.fullscreen';[\s\S]*?fullscreenButton\.setAttribute\('aria-label',t\('calendar\.fullscreen','Enter calendar fullscreen'\)\)[\s\S]*?const labelKey = active \? 'calendar\.fullscreenExit' : 'calendar\.fullscreen';/,
     "calendar fullscreen accessibility text should be catalog-backed in both states"
   );
+});
+
+test("embedded views preserve the shell language when synchronized state has no locale", async () => {
+  const embeddedView = await fs.readFile(path.join(root, "renderer/src/views/EmbeddedLegacyView.vue"), "utf8");
+  const dialogHost = await fs.readFile(path.join(root, "renderer/src/components/LegacyScheduleDialogHost.vue"), "utf8");
+  const shell = await fs.readFile(path.join(root, "app/shell/navigation/stitch-shell.js"), "utf8");
+  const i18nCore = await fs.readFile(path.join(root, "app/i18n/i18n-core.js"), "utf8");
+
+  assert.match(embeddedView, /general\?\.language[\s\S]*?\|\| localePreference\(\)/,
+    "main embedded pages should inherit the active shell preference instead of falling back to English");
+  assert.match(dialogHost, /general\?\.language \|\| localePreference\(\)/,
+    "the embedded schedule dialog should inherit the active shell preference");
+  assert.match(shell, /const applyLocalePreference = preference => \{[\s\S]*?String\(preference\)\.trim\(\)[\s\S]*?setLocale/,
+    "legacy state synchronization should ignore absent locale fields");
+  assert.match(i18nCore, /type === 'kairos:locale-sync' && syncedPreference/,
+    "the shared message bridge should ignore empty locale synchronization messages");
+});
+
+test("new users default to English and calendar festivals remain localized", async () => {
+  const appState = await fs.readFile(path.join(root, "electron/data/app-state/index.js"), "utf8");
+  const appShell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
+  const calendar = await fs.readFile(path.join(root, "app/features/calendar/schedule-feature.js"), "utf8");
+  assert.match(appState, /DEFAULT_SETTINGS = \{ general: \{ language: "en", timeFormat: "system" \} \}/);
+  assert.match(appState, /\["en", "zh-CN", "system"\]\.includes\(requestedLanguage\) \? requestedLanguage : "en"/);
+  assert.match(appShell, /const language = \["en", "zh-CN", "system"\]\.includes\(requestedLanguage\) \? requestedLanguage : "en"/);
+  assert.match(calendar, /holidayKey\?tr\(`calendar\.holidays\.\$\{holidayKey\}`/);
+  assert.match(calendar, /getLocale\?\.\(\)==='zh-CN'&&day\?lunarDayName\(day\):''/);
+});
+
+test("About exposes version-aware update checks through a constrained desktop bridge", async () => {
+  const settings = await fs.readFile(path.join(root, "app/features/settings/settings-feature.js"), "utf8");
+  const main = await fs.readFile(path.join(root, "electron/main/index.js"), "utf8");
+  const preload = await fs.readFile(path.join(root, "electron/preload/index.cjs"), "utf8");
+  assert.match(settings, /data-check-updates[\s\S]*?updates\.check\(\)[\s\S]*?updatePromptTitle[\s\S]*?updates\.install\(result\.downloadUrl\)/);
+  assert.match(settings, /Selected in the Morphicons playground as lucide:refresh[\s\S]*?class="kairos-update-icon"[\s\S]*?M3 12C3 7\.0294/);
+  assert.match(settings, /card\(t\('settings\.version', 'Version'\), `<div class="kairos-update-row">/);
+  assert.doesNotMatch(settings, /data-check-updates[^\n]*system_update/);
+  assert.match(main, /RELEASE_METADATA_URL = "https:\/\/github\.com\/Elainaee\/kairos\/releases\/latest\/download\/latest\.yml"/);
+  assert.match(main, /RELEASE_DOWNLOAD_PREFIX[\s\S]*?update_download_invalid[\s\S]*?Kairos-latest-setup\.exe/);
+  assert.match(preload, /updates: Object\.freeze\(\{ version:\(\)=>ipcRenderer\.invoke\("app:version"\),check:\(\)=>ipcRenderer\.invoke\("app:check-updates"\),install:/);
+});
+
+test("schedule dialogs stay above the player without moving the calendar over the title bar", async () => {
+  const vueStyles = await fs.readFile(path.join(root, "renderer/src/styles.css"), "utf8");
+  const embeddedView = await fs.readFile(path.join(root, "renderer/src/views/EmbeddedLegacyView.vue"), "utf8");
+  const dialogHost = await fs.readFile(path.join(root, "renderer/src/components/LegacyScheduleDialogHost.vue"), "utf8");
+  const calendarFeature = await fs.readFile(path.join(root, "app/features/calendar/schedule-feature.js"), "utf8");
+
+  assert.match(vueStyles, /body\.vue-schedule-dialog-open #musicPlayer \{ z-index:1!important; pointer-events:none!important; \}/,
+    "the shared player should remain below and inactive while a schedule dialog is open");
+  assert.doesNotMatch(vueStyles, /\.vue-legacy-frame\.vue-legacy-dialog-open/,
+    "the calendar iframe should never be expanded across the title bar to host a dialog");
+  assert.match(vueStyles, /\.vue-legacy-schedule-dialog-host \{[^}]*z-index:6000!important;[^}]*inset:0!important;[^}]*height:100dvh!important;/,
+    "the dedicated schedule-dialog host should cover the complete viewport");
+  assert.match(embeddedView, /event\.source !== frame\.value\?\.contentWindow[\s\S]*?kairos:schedule-dialog-request[\s\S]*?kairos:open-schedule-dialog/,
+    "embedded calendar messages should be source-checked and route edit requests to the dialog host");
+  assert.match(dialogHost, /openScheduleDialog[\s\S]*?openRequestTimers[\s\S]*?kairos:open-schedule/,
+    "the dialog host should retry a bounded open request until its embedded controller is ready");
+  assert.match(calendarFeature, /dialogHost'\)!=='1'[\s\S]*?kairos:schedule-dialog-request/,
+    "calendar and schedule rows should delegate editing instead of opening a clipped in-frame dialog");
+});
+
+test("continuous music and pointer updates are bounded to avoid renderer stalls", async () => {
+  const player = await fs.readFile(path.join(root, "app/shell/player/music-player.js"), "utf8");
+  const musicHtml = await fs.readFile(path.join(root, "app/pages/music/index.html"), "utf8");
+  const habitsView = await fs.readFile(path.join(root, "renderer/src/views/HabitsView.vue"), "utf8");
+  const appShell = await fs.readFile(path.join(root, "renderer/src/components/AppShell.vue"), "utf8");
+
+  assert.match(player, /<audio id="musicAudio" preload="auto">/,
+    "the player should ask Chromium to buffer upcoming audio data");
+  assert.match(player, /const positionKey=t\?`\$\{t\.id\}:\$\{Math\.floor\(currentTime\/5\)\}`:'';[\s\S]*?positionKey!==lastPersistedPositionKey/,
+    "playback position should persist once per five-second bucket");
+  assert.doesNotMatch(player, /Math\.floor\(els\.audio\.currentTime\)%5===0/,
+    "timeupdate must not persist repeatedly throughout an entire second");
+  assert.match(musicHtml, /neteaseDownloadRenderTimer = setTimeout\([\s\S]*?}, 250\);/,
+    "download progress should throttle full-page refreshes");
+  assert.match(musicHtml, /card\.addEventListener\('pointermove'[\s\S]*?if \(frame\) return;[\s\S]*?requestAnimationFrame/,
+    "playlist card tilt should perform at most one layout read per frame");
+  assert.match(habitsView, /if \(glowFrame\) return;[\s\S]*?glowFrame = requestAnimationFrame/,
+    "habit card glow should perform at most one layout read per frame");
+  assert.doesNotMatch(appShell, /setInterval\(refreshPetVisibility, 2000\)/,
+    "the shell should use pet visibility events instead of permanent IPC polling");
 });

@@ -34,6 +34,14 @@ test("app state normalizes legacy documents into the current schema", () => {
   assert.equal(state.migrations.some(item => item.id === "app-state-v2"), true);
 });
 
+test("app state defaults missing and invalid language preferences to English", () => {
+  assert.equal(normalize().settings.general.language, "en");
+  assert.equal(normalize({ settings: { general: {} } }).settings.general.language, "en");
+  assert.equal(normalize({ settings: { general: { language: "" } } }).settings.general.language, "en");
+  assert.equal(normalize({ settings: { general: { language: "system" } } }).settings.general.language, "system");
+  assert.equal(normalize({ settings: { general: { language: "zh-CN" } } }).settings.general.language, "zh-CN");
+});
+
 test("app state audit reports migration-ready counts and data issues", () => {
   const report = auditAppState({
     version: 2,
@@ -189,7 +197,7 @@ test("app state can create a current backup before destructive imports", async (
   await store.write({ schedules: [{ id: "current" }], theme: "dark" });
 
   const backupPath = await store.backupCurrent("before-import");
-  await store.write({ schedules: [{ id: "imported" }], theme: "light", last_import_backup: backupPath });
+  await store.write({ schedules: [{ id: "imported" }], theme: "light", last_import_backup: backupPath }, { force: true });
   const backups = await store.listBackups();
   const backup = JSON.parse(await fs.readFile(backupPath, "utf8"));
   const state = await store.read();
@@ -318,10 +326,13 @@ test("app state repository owns collection CRUD behind adapters", async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-test("concurrent app state writes use unique temporary files", async () => {
+test("stale concurrent app state writes cannot overwrite newer data", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kairos-concurrent-app-state-"));
   const store = new AppStateStore(path.join(dir, "app.json"));
-  await Promise.all(Array.from({ length: 12 }, (_item, index) => store.write({ schedules: [{ id: `s-${index}`, title: `Schedule ${index}`, date: "2026-07-14", end_date: "2026-07-14", type: "task" }] })));
+  const base = await store.initialize({ schedules: [] });
+  const writes = await Promise.allSettled(Array.from({ length: 12 }, (_item, index) => store.write({ ...base, schedules: [{ id: `s-${index}`, title: `Schedule ${index}`, date: "2026-07-14", end_date: "2026-07-14", type: "task" }] })));
+  assert.equal(writes.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(writes.filter(result => result.status === "rejected" && result.reason?.message === "stale_app_state").length, 11);
   const files = await fs.readdir(dir);
   assert.equal(files.filter(name => name.endsWith(".tmp")).length, 0);
   const state = await store.read();

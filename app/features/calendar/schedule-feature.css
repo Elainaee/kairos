@@ -276,7 +276,7 @@ button.schedule-row-more:active{
   border-color:transparent!important;
   box-shadow:none!important;
 }
-.schedule-form-head>[data-close]{display:grid!important;width:40px!important;height:40px!important;min-width:40px;padding:0!important;place-items:center;border:1px solid var(--border)!important;border-radius:12px!important;background:color-mix(in oklch,var(--popover) 72%,transparent)!important;color:var(--muted-foreground)!important;font-size:24px!important;line-height:1!important;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .16s ease,background .16s ease}.schedule-form-head>[data-close]:hover{transform:scale(1.04);background:var(--accent)!important;color:var(--foreground)!important}.schedule-form-head>[data-close]:active{transform:scale(.96)}.schedule-form-head>[data-close]:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 26%,transparent);outline-offset:2px}
+.schedule-form-head>[data-close]{display:grid!important;width:40px!important;height:40px!important;min-width:40px;padding:0!important;place-items:center;border:1px solid var(--border)!important;border-radius:12px!important;background:color-mix(in oklch,var(--popover) 72%,transparent)!important;color:var(--muted-foreground)!important;font-size:24px!important;line-height:1!important;cursor:pointer;box-shadow:var(--shadow-sm);transition:color .16s ease,border-color .16s ease}.schedule-form-head>[data-close]:hover{transform:none;background:color-mix(in oklch,var(--popover) 72%,transparent)!important;color:var(--primary)!important;border-color:var(--primary)!important;box-shadow:var(--shadow-sm)!important}.schedule-form-head>[data-close]:active{transform:scale(.96)}.schedule-form-head>[data-close]:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 
 /* Calendar critical layout guard: this stylesheet is injected after the base shell,
    so keep the month view horizontal and prevent browser-default link/button styling. */
@@ -299,34 +299,40 @@ body[data-page="calendar"] #calendarFullscreenButton{box-shadow:none!important;b
 .schedule-field .kairos-combobox-content{position:absolute;z-index:90;top:calc(100% + 8px);left:0;box-sizing:border-box;width:100%;min-width:min(260px,calc(100vw - 48px));padding:6px;border:1px solid var(--border);border-radius:calc(var(--radius) + 2px);background:color-mix(in oklch,var(--popover) 94%,transparent);box-shadow:0 18px 45px rgb(48 44 37/.18),inset 0 1px 0 rgb(255 255 255/.75);backdrop-filter:blur(18px) saturate(1.08)}
 .schedule-field .kairos-combobox-item{display:grid!important;grid-template-columns:minmax(0,1fr) 18px;width:100%;height:36px;align-items:center;gap:8px;padding:0 9px!important;border:0!important;border-radius:calc(var(--radius) - 7px)!important;background:transparent!important;box-shadow:none!important;font-size:13px;font-weight:500;text-align:left}
 
-/* Schedule editor: keep all button hover states on the same soft surface. */
+/* Schedule editor controls keep their resting surfaces on hover. Persistent
+   selected/range states retain their fills; hover is expressed in foreground
+   and border colour, while keyboard focus uses the shared ring. */
 #scheduleFeatureDialog{
-  --schedule-editor-hover:#ebe6d6;
-  --schedule-editor-hover-foreground:#3d3b2e;
+  --schedule-editor-hover:var(--secondary);
+  --schedule-editor-hover-foreground:var(--primary);
 }
 #scheduleFeatureDialog button:hover,
-#scheduleFeatureDialog button:focus-visible,
 #scheduleFeatureDialog .schedule-range-trigger:hover,
-#scheduleFeatureDialog .schedule-range-trigger:focus-visible,
 #scheduleFeatureDialog .counter-time-trigger:hover,
-#scheduleFeatureDialog .counter-time-trigger:focus-visible,
 #scheduleFeatureDialog .kairos-combobox-input:hover,
-#scheduleFeatureDialog .kairos-combobox-input:focus-visible,
-#scheduleFeatureDialog .kairos-combobox-input[aria-expanded="true"],
 #scheduleFeatureDialog .kairos-combobox-item:hover,
-#scheduleFeatureDialog .kairos-combobox-item:focus-visible,
 #scheduleFeatureDialog .counter-time-footer button:hover,
-#scheduleFeatureDialog .counter-time-footer button:focus-visible,
-#scheduleFeatureDialog .schedule-dialog-actions button:hover,
-#scheduleFeatureDialog .schedule-dialog-actions button:focus-visible{
-  background:var(--schedule-editor-hover)!important;
-  background-color:var(--schedule-editor-hover)!important;
-  background-image:none!important;
+#scheduleFeatureDialog .schedule-dialog-actions button:hover{
   color:var(--schedule-editor-hover-foreground)!important;
-  border-color:var(--border,rgba(61,59,46,.14))!important;
-  box-shadow:var(--shadow-sm,0 1px 2px rgba(61,59,46,.05))!important;
+  border-color:var(--primary)!important;
+  box-shadow:none!important;
   transform:none!important;
-  outline:none;
+}
+#scheduleFeatureDialog .schedule-primary:hover{
+  background:var(--primary)!important;
+  color:var(--primary-foreground)!important;
+}
+#scheduleFeatureDialog .schedule-danger:hover{
+  color:var(--status-danger)!important;
+  border-color:var(--status-danger)!important;
+}
+#scheduleFeatureDialog button:focus-visible,
+#scheduleFeatureDialog .schedule-range-trigger:focus-visible,
+#scheduleFeatureDialog .counter-time-trigger:focus-visible,
+#scheduleFeatureDialog .kairos-combobox-input:focus-visible,
+#scheduleFeatureDialog .kairos-combobox-item:focus-visible{
+  outline:2px solid var(--ring)!important;
+  outline-offset:2px;
 }
 #scheduleFeatureDialog .counter-time-trigger:hover .material-symbols-outlined,
 #scheduleFeatureDialog .counter-time-trigger:focus-visible .material-symbols-outlined,
