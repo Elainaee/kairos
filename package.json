@@ -1,7 +1,7 @@
 {
   "name": "kairos-desktop",
   "productName": "Kairos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Personal learning check-in, schedule, AI companion, and music desktop app.",
   "author": "Kairos",
   "private": true,
